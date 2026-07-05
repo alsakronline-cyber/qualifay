@@ -116,7 +116,7 @@ export const instancesApi = {
 
 // ── Conversations ─────────────────────────────────────────────────────────────
 export const conversationsApi = {
-  list: (params?: { page?: number; per_page?: number; instance_name?: string; search?: string }) =>
+  list: (params?: { page?: number; per_page?: number; instance_name?: string; search?: string; lead_id?: string }) =>
     API.get('/v1/conversations', { params }),
 
   get: (id: string) => API.get(`/v1/conversations/${id}`),

@@ -64,6 +64,7 @@ async def list_conversations(
     instance_name: Optional[str] = None,
     ai_enabled: Optional[bool] = None,
     search: Optional[str] = None,
+    lead_id: Optional[str] = None,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, le=200),
     current_user: dict = Depends(get_current_user),
@@ -81,6 +82,9 @@ async def list_conversations(
 
     if instance_name:
         filters.append(Conversation.instance_name == instance_name)
+
+    if lead_id:
+        filters.append(Conversation.lead_id == lead_id)
 
     if search:
         # Search by contact name or phone/JID — powers the inbox number search.
@@ -132,7 +136,12 @@ async def get_conversation(
     conv = result.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    return _conv_dict(conv)
+    lead_stage = None
+    if conv.lead_id:
+        from app.models.models import Lead
+        row = (await db.execute(select(Lead.stage).where(Lead.id == conv.lead_id))).first()
+        lead_stage = row[0].value if row and row[0] else None
+    return _conv_dict(conv, lead_stage)
 
 
 @router.patch("/{conversation_id}")

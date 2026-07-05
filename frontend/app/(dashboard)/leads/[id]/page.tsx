@@ -18,6 +18,7 @@ import {
   XCircle,
   UserCheck,
   Save,
+  MessageCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { leadsApi } from '@/lib/api'
@@ -173,14 +174,24 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-5 max-w-6xl">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/leads" className="hover:text-white transition-colors font-cairo flex items-center gap-1">
-          <ArrowRight size={14} />
-          العملاء المحتملون
-        </Link>
-        <span>/</span>
-        <span className="text-gray-200 font-cairo">{lead.company || lead.name || id}</span>
+      {/* Breadcrumb + open-chat */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Link href="/leads" className="hover:text-white transition-colors font-cairo flex items-center gap-1">
+            <ArrowRight size={14} />
+            العملاء المحتملون
+          </Link>
+          <span>/</span>
+          <span className="text-gray-200 font-cairo">{lead.company || lead.name || id}</span>
+        </div>
+        {/* Jump to this lead's WhatsApp conversation in the inbox. */}
+        <button
+          onClick={() => router.push(`/inbox?lead=${id}`)}
+          className="flex items-center gap-1.5 text-xs bg-wa-green/10 hover:bg-wa-green/20 text-wa-green border border-wa-green/30 px-3 py-1.5 rounded-lg transition-colors font-cairo shrink-0"
+        >
+          <MessageCircle size={13} />
+          فتح محادثة واتساب
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

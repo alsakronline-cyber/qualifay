@@ -160,7 +160,29 @@ export default function InboxPage() {
   )
   const messages: Message[] = Array.isArray(msgData) ? msgData : (msgData?.items || msgData?.messages || [])
 
-  const selectedConv = conversations.find((c) => c.id === selectedId)
+  // Fallback fetch: a deep-linked conversation (from a lead profile) may not be in the
+  // recent list, so fetch it directly by id when it isn't already loaded.
+  const { data: selectedConvData } = useSWR(
+    selectedId ? `conversation/${selectedId}` : null,
+    () => conversationsApi.get(selectedId!).then((r) => r.data)
+  )
+  const selectedConv = conversations.find((c) => c.id === selectedId) || selectedConvData
+
+  // Deep link from the lead profile: /inbox?lead=<id> or /inbox?conversation=<id>.
+  // Read from window (client-only effect) to avoid the useSearchParams Suspense rule.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const convParam = params.get('conversation')
+    if (convParam) { setSelectedId(convParam); return }
+    const leadParam = params.get('lead')
+    if (!leadParam) return
+    conversationsApi.list({ lead_id: leadParam }).then((r) => {
+      const list = Array.isArray(r.data) ? r.data : (r.data?.items || r.data?.conversations || [])
+      if (list.length) setSelectedId(list[0].id)
+      else toast('لا توجد محادثة واتساب لهذا العميل')
+    }).catch(() => {})
+  }, [])
+
   // A conversation whose instance is no longer in the live list = a removed number.
   // History stays visible, but replies can't be sent through a disconnected instance.
   const selectedDisconnected = !!selectedConv?.instance_name
