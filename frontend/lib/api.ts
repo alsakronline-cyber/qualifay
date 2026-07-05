@@ -156,6 +156,9 @@ export const conversationsApi = {
   setStage: (id: string, stage: string) =>
     API.patch(`/v1/conversations/${id}/stage`, { stage }),
 
+  ensureLead: (id: string) =>
+    API.post(`/v1/conversations/${id}/lead`),
+
   markRead: (id: string) =>
     API.post(`/v1/conversations/${id}/mark-read`),
 

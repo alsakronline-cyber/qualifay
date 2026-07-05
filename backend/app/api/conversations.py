@@ -278,6 +278,48 @@ async def set_conversation_stage(
     return {"conversation_id": conversation_id, "lead_id": lead.id, "stage": stage.value}
 
 
+@router.post("/{conversation_id}/lead")
+async def ensure_conversation_lead(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the lead linked to this conversation, creating one from the WhatsApp
+    contact if none exists yet. Lets the inbox open a lead profile for any chat."""
+    from app.models.models import Lead, LeadStatus, LeadSource
+    from app.lib.phone import normalize_egyptian_phone
+
+    tenant_id = current_user["tenant_id"]
+    conv = (await db.execute(
+        select(Conversation).where(
+            and_(Conversation.id == conversation_id, Conversation.tenant_id == tenant_id)
+        )
+    )).scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    lead = None
+    if conv.lead_id:
+        lead = (await db.execute(select(Lead).where(Lead.id == conv.lead_id))).scalar_one_or_none()
+
+    created = False
+    if not lead:
+        raw_phone = conv.wa_jid.split("@")[0] if conv.wa_jid else ""
+        phone = normalize_egyptian_phone(raw_phone) or ("+" + raw_phone if raw_phone else None)
+        lead = Lead(
+            tenant_id=tenant_id, source=LeadSource.inbound_wa,
+            name=conv.contact_name, company=conv.contact_name, phone=phone,
+            status=LeadStatus.active,
+        )
+        db.add(lead)
+        await db.flush()
+        conv.lead_id = lead.id
+        created = True
+        await db.commit()
+
+    return {"lead_id": lead.id, "created": created}
+
+
 @router.get("/{conversation_id}/messages")
 async def get_messages(
     conversation_id: str,

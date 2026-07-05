@@ -5,7 +5,8 @@ import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
-import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic, UserRound } from 'lucide-react'
 import { conversationsApi, waSyncApi, instancesApi } from '@/lib/api'
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
@@ -98,6 +99,8 @@ function MediaBubble({ conversationId, message }: { conversationId: string; mess
 }
 
 export default function InboxPage() {
+  const router = useRouter()
+  const [openingLead, setOpeningLead] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [msgInput, setMsgInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -210,6 +213,25 @@ export default function InboxPage() {
       toast.error('فشل تحديث المرحلة')
     }
   }, [selectedId, mutateConvs])
+
+  // Open the lead profile for this chat — create the lead first if it doesn't exist yet.
+  const handleOpenLead = useCallback(async () => {
+    if (!selectedId || !selectedConv) return
+    if (selectedConv.lead_id) {
+      router.push(`/leads/${selectedConv.lead_id}`)
+      return
+    }
+    setOpeningLead(true)
+    try {
+      const res = await conversationsApi.ensureLead(selectedId)
+      const leadId = res.data?.lead_id
+      if (leadId) router.push(`/leads/${leadId}`)
+    } catch {
+      toast.error('تعذر فتح ملف العميل')
+    } finally {
+      setOpeningLead(false)
+    }
+  }, [selectedId, selectedConv, router])
 
   const handleAttachFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -441,9 +463,19 @@ export default function InboxPage() {
           {/* Thread header */}
           <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-white font-cairo">
+              <button
+                onClick={handleOpenLead}
+                disabled={openingLead}
+                title="فتح ملف العميل"
+                className="group flex items-center gap-1.5 font-semibold text-white font-cairo hover:text-gold-primary transition-colors"
+              >
                 {selectedConv.contact_name || selectedConv.contact_phone}
-              </h3>
+                {openingLead ? (
+                  <Loader2 size={13} className="animate-spin text-gold-primary" />
+                ) : (
+                  <UserRound size={13} className="text-gray-500 group-hover:text-gold-primary transition-colors" />
+                )}
+              </button>
               <div className="flex items-center gap-2">
                 <p className="text-xs text-gray-500">{selectedConv.contact_phone}</p>
                 {selectedConv.instance_name && (
