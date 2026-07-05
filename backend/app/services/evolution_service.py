@@ -203,6 +203,17 @@ class EvolutionService:
         except Exception as e:
             raise RuntimeError(f"Failed to send media via '{instance_name}': {e}")
 
+    async def send_audio(self, instance_name: str, jid: str, audio_b64: str) -> dict:
+        """Send a voice note (PTT). `audio_b64` must already be ogg/opus for WhatsApp
+        to render it as a proper microphone bubble."""
+        try:
+            return await self._post(f"/message/sendWhatsAppAudio/{instance_name}", {
+                "number": jid,
+                "audio": audio_b64,
+            })
+        except Exception as e:
+            raise RuntimeError(f"Failed to send audio via '{instance_name}': {e}")
+
     async def delete_message(self, instance_name: str, key: dict) -> dict:
         """Delete a message for everyone on WhatsApp (Evolution deleteMessageForEveryone).
 

@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
-import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search } from 'lucide-react'
+import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic } from 'lucide-react'
 import { conversationsApi, waSyncApi, instancesApi } from '@/lib/api'
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
@@ -111,7 +111,13 @@ export default function InboxPage() {
   const [instanceFilter, setInstanceFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [uploadingMedia, setUploadingMedia] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [recordSecs, setRecordSecs] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const cancelRecordRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const handleSyncToPipeline = useCallback(async () => {
@@ -233,6 +239,48 @@ export default function InboxPage() {
       toast.error('فشل حذف الرسالة')
     }
   }, [selectedId, mutateMsgs, mutateConvs])
+
+  const startRecording = useCallback(async () => {
+    if (!selectedId) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mr = new MediaRecorder(stream)
+      chunksRef.current = []
+      cancelRecordRef.current = false
+      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data) }
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+        setRecording(false)
+        setRecordSecs(0)
+        if (cancelRecordRef.current) return
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        if (blob.size < 800) return // ignore accidental blips
+        setUploadingMedia(true)
+        try {
+          await conversationsApi.sendVoice(selectedId, blob)
+          mutateMsgs()
+          mutateConvs()
+        } catch {
+          toast.error('فشل إرسال الرسالة الصوتية')
+        } finally {
+          setUploadingMedia(false)
+        }
+      }
+      mr.start()
+      mediaRecorderRef.current = mr
+      setRecording(true)
+      setRecordSecs(0)
+      recordTimerRef.current = setInterval(() => setRecordSecs((s) => s + 1), 1000)
+    } catch {
+      toast.error('تعذر الوصول إلى الميكروفون')
+    }
+  }, [selectedId, mutateMsgs, mutateConvs])
+
+  const stopRecording = useCallback((cancel: boolean) => {
+    cancelRecordRef.current = cancel
+    mediaRecorderRef.current?.stop()
+  }, [])
 
   // P4: Suggest reply via dedicated endpoint
   const handleSuggestReply = useCallback(async () => {
@@ -573,6 +621,20 @@ export default function InboxPage() {
             <div className="px-4 py-3 border-t border-gray-800 text-center text-xs text-gray-500 font-cairo">
               هذا الرقم غير متصل — يمكنك عرض السجل لكن لا يمكن إرسال رسائل جديدة. أعد ربط الرقم من صفحة واتساب للرد.
             </div>
+          ) : recording ? (
+            <div className="px-4 py-3 border-t border-gray-800 flex items-center gap-3">
+              <button onClick={() => stopRecording(true)} title="إلغاء" className="text-gray-400 hover:text-red-400 transition-colors">
+                <X size={18} />
+              </button>
+              <div className="flex-1 flex items-center gap-2 text-red-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-sm font-mono">{Math.floor(recordSecs / 60)}:{String(recordSecs % 60).padStart(2, '0')}</span>
+                <span className="text-xs text-gray-500 font-cairo">جارٍ التسجيل...</span>
+              </div>
+              <button onClick={() => stopRecording(false)} title="إرسال" className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-primary to-gold-dark text-gray-950 flex items-center justify-center hover:opacity-90 transition-all">
+                <Send size={16} className="rotate-180" />
+              </button>
+            </div>
           ) : (
             <div className="px-4 py-3 border-t border-gray-800 flex gap-2 items-center">
               <input type="file" ref={fileInputRef} onChange={handleAttachFile} className="hidden" />
@@ -596,17 +658,28 @@ export default function InboxPage() {
                 placeholder="اكتب رسالتك..."
                 className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
               />
-              <button
-                onClick={handleSend}
-                disabled={sending || !msgInput.trim()}
-                className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-primary to-gold-dark text-gray-950 flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all"
-              >
-                {sending ? (
-                  <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Send size={16} className="rotate-180" />
-                )}
-              </button>
+              {msgInput.trim() ? (
+                <button
+                  onClick={handleSend}
+                  disabled={sending}
+                  className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-gold-primary to-gold-dark text-gray-950 flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all"
+                >
+                  {sending ? (
+                    <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Send size={16} className="rotate-180" />
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={startRecording}
+                  disabled={uploadingMedia}
+                  title="تسجيل رسالة صوتية"
+                  className="w-10 h-10 shrink-0 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 hover:text-red-400 flex items-center justify-center disabled:opacity-40 transition-colors"
+                >
+                  <Mic size={16} />
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -133,6 +133,14 @@ export const conversationsApi = {
   deleteMessage: (conversationId: string, messageId: string) =>
     API.delete(`/v1/conversations/${conversationId}/messages/${messageId}`),
 
+  sendVoice: (id: string, blob: Blob) => {
+    const form = new FormData()
+    form.append('file', blob, 'voice.webm')
+    return API.post(`/v1/conversations/${id}/voice`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
   messages: (id: string, params?: { page?: number; per_page?: number }) =>
     API.get(`/v1/conversations/${id}/messages`, { params }),
 

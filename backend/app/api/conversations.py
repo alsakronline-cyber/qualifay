@@ -495,6 +495,74 @@ async def send_media_message(
     return {"sent": True, "mediatype": mediatype}
 
 
+@router.post("/{conversation_id}/voice")
+async def send_voice_message(
+    conversation_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record → send as a WhatsApp voice note (PTT).
+
+    Browsers record webm/opus; WhatsApp needs ogg/opus to render the mic bubble, so we
+    transcode with ffmpeg before handing it to Evolution's sendWhatsAppAudio.
+    """
+    import base64 as b64, asyncio, tempfile, os
+    from app.models.models import Message, MessageDirection
+
+    tenant_id = current_user["tenant_id"]
+    conv = (await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id, Conversation.tenant_id == tenant_id
+        )
+    )).scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty recording")
+    if len(raw) > 16 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Recording too large")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "in")
+        dst = os.path.join(tmp, "out.ogg")
+        with open(src, "wb") as f:
+            f.write(raw)
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y", "-i", src,
+            "-c:a", "libopus", "-b:a", "32k", "-ar", "48000", "-ac", "1", dst,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+        )
+        _, err = await proc.communicate()
+        if proc.returncode != 0 or not os.path.exists(dst):
+            logger.error(f"voice transcode failed: {err.decode()[:500] if err else ''}")
+            raise HTTPException(status_code=502, detail="Voice transcode failed")
+        with open(dst, "rb") as f:
+            ogg = f.read()
+
+    audio_b64 = b64.b64encode(ogg).decode()
+    evo = EvolutionService()
+    try:
+        await evo.send_audio(conv.instance_name, conv.wa_jid, audio_b64)
+    except Exception as e:
+        logger.error(f"send_voice evo error: {e}")
+        raise HTTPException(status_code=502, detail=f"WhatsApp voice send failed: {e}")
+
+    new_msg = Message(
+        conversation_id=conv.id,
+        direction=MessageDirection.outbound,
+        content="[رسالة صوتية]",
+        message_type="audio",
+    )
+    db.add(new_msg)
+    conv.last_message = "[رسالة صوتية]"
+    conv.updated_at = datetime.datetime.utcnow()
+    await db.commit()
+    return {"sent": True}
+
+
 @router.delete("/{conversation_id}/messages/{message_id}")
 async def delete_message(
     conversation_id: str,
