@@ -1,0 +1,48 @@
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{width:320px;min-height:420px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;font-size:13px}
+.popup-wrap{display:flex;flex-direction:column;min-height:420px}
+
+/* Header */
+.p-header{padding:14px 16px 12px;background:linear-gradient(135deg,#0D6EFD22,#8b5cf622);border-bottom:1px solid rgba(255,255,255,0.07)}
+.p-logo{display:flex;align-items:center;gap:10px}
+.p-logo-icon{width:36px;height:36px;background:linear-gradient(135deg,#0D6EFD,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(13,110,253,0.4)}
+.p-logo-name{font-size:15px;font-weight:800;color:#f1f5f9}
+.p-badge{font-size:9px;font-weight:700;background:#0D6EFD;color:#fff;padding:1px 6px;border-radius:20px;margin-left:4px;vertical-align:middle}
+.p-logo-sub{font-size:10px;color:#64748b;margin-top:1px}
+
+/* Stats */
+.p-stats{display:flex;align-items:center;justify-content:center;padding:14px 16px;gap:0;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.06)}
+.p-stat{flex:1;text-align:center}
+.p-stat-val{font-size:22px;font-weight:800;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.p-stat-lbl{font-size:10px;color:#64748b;margin-top:3px;font-weight:500}
+.p-stat-divider{width:1px;height:32px;background:rgba(255,255,255,0.07)}
+
+/* Status */
+.p-status-row{display:flex;align-items:center;gap:7px;padding:9px 16px;font-size:11px;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.05)}
+.p-status-dot{width:7px;height:7px;border-radius:50%;background:#64748b;flex-shrink:0}
+.p-status-dot.on-linkedin{background:#10b981;box-shadow:0 0 6px rgba(16,185,129,0.5)}
+.p-status-dot.not-linkedin{background:#ef4444}
+
+/* Actions */
+.p-actions{padding:12px 16px;display:flex;flex-direction:column;gap:7px}
+.p-btn{display:flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:9px;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .2s;width:100%}
+.p-btn.primary{background:linear-gradient(135deg,#0D6EFD,#3b82f6);color:#fff}
+.p-btn.primary:hover{box-shadow:0 4px 16px rgba(13,110,253,0.45);transform:translateY(-1px)}
+.p-btn-row{display:flex;gap:7px}
+.p-btn.secondary{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8}
+.p-btn.secondary:hover{background:rgba(13,110,253,0.1);border-color:#0D6EFD;color:#60a5fa}
+.p-btn.danger{flex:1;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);color:#f87171}
+.p-btn.danger:hover{background:rgba(239,68,68,0.15);border-color:#ef4444}
+
+/* Recent leads */
+.p-section{padding:0 16px;flex:1}
+.p-section-title{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.p-empty{text-align:center;color:#475569;font-size:11px;line-height:1.6;padding:20px 0}
+.p-lead-mini{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.p-lead-mini:last-child{border:none}
+.p-lead-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#0D6EFD,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.p-lead-name{font-size:12px;font-weight:600;color:#e2e8f0;line-height:1.2}
+.p-lead-email{font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+
+/* Footer */
+.p-footer{padding:10px 16px;font-size:10px;color:#334155;text-align:center;border-top:1px solid rgba(255,255,255,0.05);margin-top:auto}

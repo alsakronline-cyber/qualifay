@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>LeadList</title>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;font-size:14px;overflow:hidden}
+
+/* ── Layout ── */
+.app{display:flex;flex-direction:column;height:100vh;background:#0f1117}
+
+/* ── Header ── */
+.header{padding:16px 18px 12px;background:#0f1117;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,#0D6EFD,#3b82f6);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-text{font-size:16px;font-weight:800;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-badge{font-size:9px;font-weight:700;background:#0D6EFD;color:#fff;padding:2px 6px;border-radius:20px;-webkit-text-fill-color:#fff;margin-left:2px}
+.btn-close{width:28px;height:28px;border:none;background:rgba(255,255,255,0.07);border-radius:6px;cursor:pointer;color:#94a3b8;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.btn-close:hover{background:rgba(239,68,68,0.15);color:#f87171}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,0.05);border-radius:10px;padding:4px}
+.tab{flex:1;padding:7px 0;border:none;background:transparent;color:#94a3b8;font-size:12px;font-weight:600;cursor:pointer;border-radius:7px;transition:all .2s;font-family:inherit}
+.tab.active{background:#0D6EFD;color:#fff;box-shadow:0 2px 12px rgba(13,110,253,0.4)}
+
+/* ── Scrape Panel ── */
+.scrape-panel{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0}
+.page-info{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.page-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
+.page-badge.profile{background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.25)}
+.page-badge.search{background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25)}
+.page-badge.other{background:rgba(148,163,184,0.1);color:#94a3b8;border:1px solid rgba(148,163,184,0.15)}
+.page-url{font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.btn-scrape{width:100%;padding:11px;background:linear-gradient(135deg,#0D6EFD,#3b82f6);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all .25s;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-scrape:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(13,110,253,0.45)}
+.btn-scrape:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-scrape.scanning{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+
+/* ── Status bar ── */
+.status-bar{padding:10px 18px;display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.05);flex-shrink:0}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#64748b;flex-shrink:0}
+.status-dot.scanning{background:#f59e0b;animation:pulse 1.2s infinite}
+.status-dot.found{background:#10b981}
+.status-dot.error{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Lead Card (profile result) ── */
+.lead-result{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0}
+.lead-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:10px}
+.lead-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.lead-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0D6EFD,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0;overflow:hidden}
+.lead-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.lead-info h3{font-size:13px;font-weight:700;color:#f1f5f9;line-height:1.2;margin-bottom:2px}
+.lead-info p{font-size:11px;color:#94a3b8;line-height:1.3}
+.contact-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.contact-row:last-child{border-bottom:none}
+.contact-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.contact-icon.email{background:rgba(59,130,246,0.15)}
+.contact-icon.phone{background:rgba(16,185,129,0.15)}
+.contact-value{flex:1;font-size:12px;color:#e2e8f0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.contact-tag{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase}
+.contact-tag.verified{background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.2)}
+.contact-tag.found{background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.2)}
+.btn-copy-val{width:24px;height:24px;border:none;background:rgba(255,255,255,0.07);border-radius:5px;cursor:pointer;color:#94a3b8;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.btn-copy-val:hover{background:rgba(13,110,253,0.2);color:#60a5fa}
+.no-contact{text-align:center;padding:14px;color:#475569;font-size:12px}
+
+/* ── Leads List ── */
+.leads-panel{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.leads-toolbar{padding:12px 18px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.search-input{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;color:#e2e8f0;font-size:12px;font-family:inherit;outline:none;transition:border .2s}
+.search-input::placeholder{color:#475569}
+.search-input:focus{border-color:#0D6EFD}
+.btn-icon{width:32px;height:32px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer;color:#94a3b8;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.btn-icon:hover{background:rgba(13,110,253,0.15);border-color:#0D6EFD;color:#60a5fa}
+.btn-icon.danger:hover{background:rgba(239,68,68,0.12);border-color:#ef4444;color:#f87171}
+.leads-count{padding:0 18px 8px;font-size:11px;color:#475569}
+.leads-count span{color:#94a3b8;font-weight:600}
+.leads-list{flex:1;overflow-y:auto;padding:0 18px 18px}
+.leads-list::-webkit-scrollbar{width:4px}
+.leads-list::-webkit-scrollbar-track{background:transparent}
+.leads-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px}
+
+/* ── Lead Row ── */
+.lead-row{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;transition:all .2s;position:relative}
+.lead-row:hover{background:rgba(13,110,253,0.08);border-color:rgba(13,110,253,0.3);transform:translateY(-1px)}
+.lead-row-header{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.lead-row-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#0D6EFD,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;flex-shrink:0}
+.lead-row-name{font-size:13px;font-weight:600;color:#f1f5f9;line-height:1.2}
+.lead-row-sub{font-size:10px;color:#64748b;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+.lead-row-delete{position:absolute;top:10px;right:10px;width:22px;height:22px;border:none;background:transparent;cursor:pointer;color:#475569;display:flex;align-items:center;justify-content:center;border-radius:4px;transition:all .2s;opacity:0}
+.lead-row:hover .lead-row-delete{opacity:1}
+.lead-row-delete:hover{background:rgba(239,68,68,0.15);color:#f87171}
+.lead-chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:500;padding:3px 8px;border-radius:20px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.email{background:rgba(59,130,246,0.12);color:#93c5fd;border:1px solid rgba(59,130,246,0.2)}
+.chip.phone{background:rgba(16,185,129,0.12);color:#6ee7b7;border:1px solid rgba(16,185,129,0.2)}
+.chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.chip.email .chip-dot{background:#3b82f6}
+.chip.phone .chip-dot{background:#10b981}
+
+/* ── Empty state ── */
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;color:#475569}
+.empty-icon{width:64px;height:64px;background:rgba(13,110,253,0.08);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.empty-state h3{font-size:15px;font-weight:700;color:#64748b;margin-bottom:8px}
+.empty-state p{font-size:12px;color:#475569;line-height:1.6}
+
+/* ── Export bar ── */
+.export-bar{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.07);display:flex;gap:8px;flex-shrink:0;background:#0f1117}
+.btn-export{flex:1;padding:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);border-radius:9px;color:#94a3b8;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-export:hover{background:rgba(13,110,253,0.12);border-color:#0D6EFD;color:#60a5fa}
+.btn-export.primary{background:linear-gradient(135deg,#0D6EFD,#3b82f6);border:none;color:#fff}
+.btn-export.primary:hover{box-shadow:0 4px 16px rgba(13,110,253,0.4);transform:translateY(-1px)}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 18px;font-size:12px;font-weight:600;color:#e2e8f0;transition:transform .3s cubic-bezier(0.4,0,0.2,1);z-index:999;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:rgba(16,185,129,0.3);color:#34d399}
+.toast.error{border-color:rgba(239,68,68,0.3);color:#f87171}
+
+/* ── Scrollbar ── */
+body::-webkit-scrollbar{display:none}
+
+/* ── Spinner ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="14" width="5" height="8" rx="1.5" fill="white"/>
+            <rect x="9.5" y="8" width="5" height="14" rx="1.5" fill="white"/>
+            <rect x="17" y="2" width="5" height="20" rx="1.5" fill="white"/>
+            <circle cx="4.5" cy="11" r="1.8" fill="white"/>
+            <circle cx="19.5" cy="18" r="1.8" fill="white"/>
+          </svg>
+        </div>
+        <span class="logo-text">LeadList</span>
+        <span class="logo-badge">PRO</span>
+      </div>
+      <button class="btn-close" id="btnClose" title="Close">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="scrape" id="tabScrape">🔍 Scrape</button>
+      <button class="tab" data-tab="leads" id="tabLeads">📋 Leads (<span id="leadsCount">0</span>)</button>
+    </div>
+  </div>
+
+  <!-- Scrape Tab -->
+  <div id="panelScrape">
+    <div class="scrape-panel">
+      <div class="page-info">
+        <span class="page-badge other" id="pageBadge">Detecting...</span>
+        <span class="page-url" id="pageUrl">–</span>
+      </div>
+      <button class="btn-scrape" id="btnScrape">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Extract Contacts
+      </button>
+    </div>
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Ready to scan</span>
+    </div>
+    <div id="scrapeResult" style="display:none">
+      <div class="lead-result">
+        <div class="lead-card">
+          <div class="lead-header">
+            <div class="lead-avatar" id="resultAvatar">?</div>
+            <div class="lead-info">
+              <h3 id="resultName">—</h3>
+              <p id="resultTitle">—</p>
+              <p id="resultCompany" style="color:#60a5fa;font-size:10px;margin-top:2px">—</p>
+            </div>
+          </div>
+          <div id="contactList"></div>
+        </div>
+      </div>
+    </div>
+    <div id="searchResult" style="display:none;padding:14px 18px">
+      <div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:10px" id="searchResultTitle">Found 0 profiles</div>
+      <div id="searchResultList"></div>
+    </div>
+  </div>
+
+  <!-- Leads Tab -->
+  <div id="panelLeads" style="display:none;flex:1;overflow:hidden;display:none;flex-direction:column">
+    <div class="leads-toolbar">
+      <input class="search-input" id="searchInput" placeholder="Search by name, email, company…" />
+      <button class="btn-icon" id="btnExportCsv" title="Export CSV">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="btn-icon danger" id="btnClear" title="Clear all leads">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="leads-count">Showing <span id="showingCount">0</span> of <span id="totalCount">0</span> leads</div>
+    <div class="leads-list" id="leadsList"></div>
+    <div class="export-bar">
+      <button class="btn-export" id="btnJsonExport">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="2"/></svg>
+        JSON
+      </button>
+      <button class="btn-export primary" id="btnCsvExport">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-4-4m4 4l4-4" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+        Export CSV
+      </button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="sidebar.js"></script>
+</body>
+</html>

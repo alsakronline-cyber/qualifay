@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "Qualifay Lead Agent",
+  "version": "2.0.0",
+  "description": "Sources LinkedIn contacts and Facebook buyer-intent posts into Qualifay automatically, plus manual LinkedIn scraping.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://*.facebook.com/*",
+    "http://80.225.65.148/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": [
+        "utils/pacing.js",
+        "utils/extractor.js",
+        "utils/storage.js",
+        "utils/exporter.js",
+        "utils/sync.js",
+        "content.js"
+      ],
+      "css": ["sidebar/sidebar.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.facebook.com/*"],
+      "js": [
+        "utils/pacing.js",
+        "utils/extractor_facebook.js",
+        "utils/sync.js",
+        "content_facebook.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["sidebar/sidebar.html", "icons/*"],
+      "matches": ["https://*.linkedin.com/*"]
+    }
+  ]
+}

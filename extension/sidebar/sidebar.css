@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Toggle Button (injected into LinkedIn) ── */
+#ll-toggle-btn {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0D6EFD 0%, #0550c1 100%);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 11px 18px 11px 14px;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(13, 110, 253, 0.45);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+#ll-toggle-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(13, 110, 253, 0.55);
+}
+#ll-toggle-btn.ll-active {
+  background: linear-gradient(135deg, #0550c1 0%, #0D6EFD 100%);
+}
+#ll-toggle-btn span { white-space: nowrap; }
