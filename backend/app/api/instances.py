@@ -246,6 +246,53 @@ async def delete_instance(
     }
 
 
+@router.post("/{instance_id}/disconnect")
+async def disconnect_instance(
+    instance_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Log the WhatsApp number out (disconnect) without deleting the instance."""
+    instance = (await db.execute(
+        select(WaInstance).where(
+            WaInstance.id == instance_id,
+            WaInstance.tenant_id == current_user["tenant_id"],
+        )
+    )).scalar_one_or_none()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    try:
+        await evolution_service.logout_instance(instance.instance_name)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Disconnect failed: {e}")
+    instance.status = "disconnected"
+    await db.commit()
+    return {"disconnected": True, "instance_id": instance_id}
+
+
+@router.post("/{instance_id}/reconnect")
+async def reconnect_instance(
+    instance_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-initiate the WhatsApp connection; returns a QR to scan if one is needed."""
+    instance = (await db.execute(
+        select(WaInstance).where(
+            WaInstance.id == instance_id,
+            WaInstance.tenant_id == current_user["tenant_id"],
+        )
+    )).scalar_one_or_none()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    qr = None
+    try:
+        qr = await evolution_service.get_qr(instance.instance_name)
+    except Exception:
+        pass
+    return {"reconnecting": True, "instance_id": instance_id, "qr": qr}
+
+
 @router.get("/{instance_id}/warmup")
 async def get_warmup_status(
     instance_id: str,
