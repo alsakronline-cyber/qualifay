@@ -39,6 +39,10 @@ class WarmupService:
         used = instance.sent_today_wa or 0
         cap = instance.daily_wa_cap or get_cap_for_day(instance.day_of_life or 0)
 
+        # Soft pause: block sending while keeping the session connected.
+        if getattr(instance, "paused", False):
+            return False, used, cap
+
         if used >= cap:
             # Create a notification for the tenant (avoid duplicate notifications for same day)
             today_str = date.today().isoformat()

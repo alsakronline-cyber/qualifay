@@ -33,6 +33,7 @@ def _instance_dict(inst: WaInstance, state: str = None) -> dict:
         "daily_wa_cap": inst.daily_wa_cap,
         "sent_today_wa": inst.sent_today_wa,
         "warmup_complete": inst.warmup_complete,
+        "paused": bool(getattr(inst, "paused", False)),
         "created_at": inst.created_at.isoformat() if inst.created_at else None,
     }
 
@@ -397,3 +398,30 @@ async def toggle_ai_suggest(
         "instance_name": instance.instance_name,
         "ai_suggest_enabled": instance.ai_suggest_enabled,
     }
+
+
+class PauseRequest(BaseModel):
+    paused: bool
+
+
+@router.patch("/{instance_id}/pause")
+async def set_instance_paused(
+    instance_id: str,
+    req: PauseRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Pause/resume sending for an instance. Pausing stops outreach without logging the
+    WhatsApp number out — the session stays connected and inbound still arrives."""
+    instance = (await db.execute(
+        select(WaInstance).where(
+            WaInstance.id == instance_id,
+            WaInstance.tenant_id == current_user["tenant_id"],
+        )
+    )).scalar_one_or_none()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    instance.paused = req.paused
+    await db.commit()
+    return {"id": instance.id, "instance_name": instance.instance_name, "paused": instance.paused}

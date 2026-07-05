@@ -112,6 +112,9 @@ export const instancesApi = {
   sync: (id: string) => API.post(`/v1/instances/${id}/sync`),
   toggleAI: (id: string, enabled: boolean) =>
     API.patch(`/v1/instances/${id}/ai-toggle`, { ai_suggest_enabled: enabled }),
+
+  pause: (id: string, paused: boolean) =>
+    API.patch(`/v1/instances/${id}/pause`, { paused }),
 }
 
 // ── Conversations ─────────────────────────────────────────────────────────────

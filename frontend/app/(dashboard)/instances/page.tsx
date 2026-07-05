@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Plus, QrCode, RefreshCw, Wifi, WifiOff, AlertTriangle, X, Trash2, Download } from 'lucide-react'
+import { Plus, QrCode, RefreshCw, Wifi, WifiOff, AlertTriangle, X, Trash2, Download, Pause, Play } from 'lucide-react'
 import { instancesApi } from '@/lib/api'
 import type { WaInstance } from '@/lib/types'
 import WarmupIndicator from '@/components/WarmupIndicator'
@@ -194,7 +194,19 @@ export default function InstancesPage() {
     } catch { toast.error('فشل المزامنة') }
   }, [mutate])
 
+  const handlePause = useCallback(async (id: string, paused: boolean) => {
+    try {
+      await instancesApi.pause(id, paused)
+      toast.success(paused ? 'تم إيقاف الإرسال مؤقتاً' : 'تم استئناف الإرسال')
+      mutate()
+    } catch {
+      toast.error('فشل تغيير الحالة')
+    }
+  }, [mutate])
+
   const handleDisconnect = useCallback(async (id: string) => {
+    // Real logout — gated behind a confirm because it needs a QR re-scan to restore.
+    if (!confirm('قطع الاتصال يسجّل خروج الرقم من واتساب — ستحتاج إلى مسح رمز QR لإعادة الربط. للإيقاف المؤقت للإرسال دون فقد الجلسة استخدم "إيقاف مؤقت". متابعة؟')) return
     try {
       await instancesApi.disconnect(id)
       toast.success('تم قطع الاتصال')
@@ -336,13 +348,28 @@ export default function InstancesPage() {
                       <Download size={13} />مزامنة
                     </button>
                   )}
+                  {/* Pause/resume — the safe daily control: stops sending, keeps the session. */}
+                  {(inst.status === 'connected' || inst.status === 'open') && (
+                    <button
+                      onClick={() => handlePause(inst.id, !inst.paused)}
+                      className={clsx(
+                        'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo border',
+                        inst.paused
+                          ? 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/30'
+                          : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      )}
+                    >
+                      {inst.paused ? <><Play size={13} />استئناف</> : <><Pause size={13} />إيقاف مؤقت</>}
+                    </button>
+                  )}
+                  {/* Disconnect — demoted: real logout, gated behind a confirm. */}
                   {(inst.status === 'connected' || inst.status === 'open') && (
                     <button
                       onClick={() => handleDisconnect(inst.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
+                      title="تسجيل خروج الرقم (يتطلب مسح QR لإعادة الربط)"
+                      className="shrink-0 flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-gray-700 hover:border-red-500/30 rounded-lg py-2 px-2.5 text-xs font-semibold transition-colors font-cairo"
                     >
                       <WifiOff size={13} />
-                      قطع الاتصال
                     </button>
                   )}
                 </div>

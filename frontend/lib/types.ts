@@ -80,6 +80,7 @@ export interface WaInstance {
   daily_wa_cap: number
   sent_today_wa: number
   warmup_complete: boolean
+  paused?: boolean
   warmup_started_at?: string
   last_connected_at?: string
   created_at: string

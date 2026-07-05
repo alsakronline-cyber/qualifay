@@ -239,6 +239,10 @@ class WaInstance(Base):
     sent_today_email = Column(Integer, default=0)
     last_reset_at = Column(DateTime, nullable=True)
     warmup_complete = Column(Boolean, default=False)
+    # Soft pause: stop this number from sending (outreach/AI) while keeping the WhatsApp
+    # session connected. Inbound still arrives; no QR re-scan needed. Distinct from
+    # status="disconnected" (a real logout).
+    paused = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime, default=func.now())
 
     tenant = relationship("Tenant", back_populates="wa_instances")
