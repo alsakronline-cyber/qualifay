@@ -13,14 +13,20 @@ interface Column {
   label: string
   color: string
   headerColor: string
+  matchStages?: string[]  // when set, the column collects leads in any of these stages
 }
 
-const COLUMNS: Column[] = PIPELINE_STAGES.map((s) => ({
-  stage: s.value,
-  label: s.label,
-  color: s.color,
-  headerColor: s.headerColor,
-}))
+const COLUMNS: Column[] = [
+  // Incoming: leads from every source that haven't entered the sales flow yet
+  // (scraped, AI-qualified, awaiting review). Drag them right to progress them.
+  { stage: 'new', label: 'وارد', matchStages: ['new', 'pending_review', 'approved'], color: 'border-gray-500/30', headerColor: 'text-gray-300' },
+  ...PIPELINE_STAGES.map((s) => ({
+    stage: s.value,
+    label: s.label,
+    color: s.color,
+    headerColor: s.headerColor,
+  })),
+]
 
 function ScoreBadge({ score }: { score?: number }) {
   if (score === undefined) return null
@@ -128,7 +134,8 @@ export default function PipelinePage() {
     () => leadsApi.list({ per_page: 200 }).then((r) => r.data),
     { revalidateOnFocus: true }
   )
-  const leads: Lead[] = data?.items || []
+  // Backend returns { total, leads: [...] }. (Older shapes used items — keep a fallback.)
+  const leads: Lead[] = data?.leads || data?.items || []
 
   const [dragOverStage, setDragOverStage] = useState<LeadStage | null>(null)
 
@@ -155,7 +162,7 @@ export default function PipelinePage() {
     const updatedLeads = leads.map((l) =>
       l.id === leadId ? { ...l, stage: targetStage } : l
     )
-    mutate({ ...data, items: updatedLeads }, false)
+    mutate({ ...data, leads: updatedLeads }, false)
 
     try {
       await leadsApi.updateStage(leadId, targetStage)
@@ -166,8 +173,8 @@ export default function PipelinePage() {
     }
   }, [leads, data, mutate])
 
-  const getColumnLeads = (stage: LeadStage) =>
-    leads.filter((l) => l.stage === stage)
+  const getColumnLeads = (col: Column) =>
+    leads.filter((l) => col.matchStages ? col.matchStages.includes(l.stage) : l.stage === col.stage)
 
   if (isLoading) {
     return (
@@ -192,7 +199,7 @@ export default function PipelinePage() {
             <KanbanColumn
               key={col.stage}
               column={col}
-              leads={getColumnLeads(col.stage)}
+              leads={getColumnLeads(col)}
               onDragStart={handleDragStart}
               onDrop={handleDrop}
               onDragOver={(e) => { handleDragOver(e); setDragOverStage(col.stage) }}
