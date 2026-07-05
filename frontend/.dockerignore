@@ -1,0 +1,6 @@
+node_modules
+.next
+src
+vite.config.js
+index.html
+tailwind.config.js.old
