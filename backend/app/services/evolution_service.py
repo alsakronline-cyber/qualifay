@@ -180,6 +180,45 @@ class EvolutionService:
         except Exception as e:
             raise RuntimeError(f"Failed to send image via '{instance_name}': {e}")
 
+    async def send_media(
+        self,
+        instance_name: str,
+        jid: str,
+        media_b64: str,
+        mediatype: str,
+        mimetype: str,
+        filename: str,
+        caption: str = "",
+    ) -> dict:
+        """Send an uploaded file (image/video/audio/document) as base64 media."""
+        try:
+            return await self._post(f"/message/sendMedia/{instance_name}", {
+                "number": jid,
+                "mediatype": mediatype,
+                "mimetype": mimetype,
+                "media": media_b64,
+                "fileName": filename,
+                "caption": caption,
+            })
+        except Exception as e:
+            raise RuntimeError(f"Failed to send media via '{instance_name}': {e}")
+
+    async def delete_message(self, instance_name: str, key: dict) -> dict:
+        """Delete a message for everyone on WhatsApp (Evolution deleteMessageForEveryone).
+
+        `key` = {id, remoteJid, fromMe, participant?}. Only works within WhatsApp's
+        delete window and only for messages the instance is allowed to revoke.
+        """
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.request(
+                "DELETE",
+                f"{BASE}/chat/deleteMessageForEveryone/{instance_name}",
+                json=key,
+                headers=HEADERS,
+            )
+            r.raise_for_status()
+            return r.json()
+
     async def check_number(self, instance_name: str, phone: str) -> bool:
         """Check if a phone number is on WhatsApp."""
         try:

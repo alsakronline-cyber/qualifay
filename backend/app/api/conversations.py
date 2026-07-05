@@ -1,9 +1,9 @@
 """
 Conversations API — WhatsApp conversation management
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -63,6 +63,7 @@ async def list_conversations(
     status: Optional[str] = None,
     instance_name: Optional[str] = None,
     ai_enabled: Optional[bool] = None,
+    search: Optional[str] = None,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, le=200),
     current_user: dict = Depends(get_current_user),
@@ -80,6 +81,14 @@ async def list_conversations(
 
     if instance_name:
         filters.append(Conversation.instance_name == instance_name)
+
+    if search:
+        # Search by contact name or phone/JID — powers the inbox number search.
+        term = f"%{search.strip()}%"
+        filters.append(or_(
+            Conversation.contact_name.ilike(term),
+            Conversation.wa_jid.ilike(term),
+        ))
 
     if ai_enabled is not None:
         filters.append(Conversation.ai_enabled == ai_enabled)
@@ -423,6 +432,117 @@ async def send_message(
     conv.updated_at = datetime.datetime.utcnow()
     await db.commit()
     return {"sent": True}
+
+
+@router.post("/{conversation_id}/media")
+async def send_media_message(
+    conversation_id: str,
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a file and send it into the conversation as a WhatsApp media message."""
+    import base64 as b64
+    from app.models.models import Message, MessageDirection
+
+    tenant_id = current_user["tenant_id"]
+    conv = (await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id, Conversation.tenant_id == tenant_id
+        )
+    )).scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(raw) > 16 * 1024 * 1024:  # WhatsApp media cap
+        raise HTTPException(status_code=413, detail="File too large (max 16MB)")
+
+    mimetype = file.content_type or "application/octet-stream"
+    if mimetype.startswith("image/"):
+        mediatype = "image"
+    elif mimetype.startswith("video/"):
+        mediatype = "video"
+    elif mimetype.startswith("audio/"):
+        mediatype = "audio"
+    else:
+        mediatype = "document"
+
+    media_b64 = b64.b64encode(raw).decode()
+    evo = EvolutionService()
+    try:
+        await evo.send_media(
+            conv.instance_name, conv.wa_jid, media_b64,
+            mediatype, mimetype, file.filename or "file", caption,
+        )
+    except Exception as e:
+        logger.error(f"send_media evo error: {e}")
+        raise HTTPException(status_code=502, detail=f"WhatsApp media send failed: {e}")
+
+    new_msg = Message(
+        conversation_id=conv.id,
+        direction=MessageDirection.outbound,
+        content=caption or file.filename or "[ملف]",
+        message_type=mediatype,
+    )
+    db.add(new_msg)
+    conv.last_message = caption or f"[{mediatype}]"
+    conv.updated_at = datetime.datetime.utcnow()
+    await db.commit()
+    return {"sent": True, "mediatype": mediatype}
+
+
+@router.delete("/{conversation_id}/messages/{message_id}")
+async def delete_message(
+    conversation_id: str,
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a message: revoke on WhatsApp (deleteForEveryone) then remove locally.
+
+    WhatsApp revoke only works within its time window and mainly for our own outbound
+    messages; if it fails we still remove the message from the Qualifay inbox.
+    """
+    from app.models.models import Message
+
+    tenant_id = current_user["tenant_id"]
+    conv = (await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id, Conversation.tenant_id == tenant_id
+        )
+    )).scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    msg = (await db.execute(
+        select(Message).where(
+            Message.id == message_id, Message.conversation_id == conversation_id
+        )
+    )).scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    revoked = False
+    if msg.wa_message_id:
+        from_me = (msg.direction.value if hasattr(msg.direction, "value") else str(msg.direction)) == "outbound"
+        try:
+            evo = EvolutionService()
+            await evo.delete_message(conv.instance_name, {
+                "id": msg.wa_message_id,
+                "remoteJid": conv.wa_jid,
+                "fromMe": from_me,
+            })
+            revoked = True
+        except Exception as e:
+            logger.warning(f"deleteForEveryone failed (still removing locally): {e}")
+
+    await db.delete(msg)
+    await db.commit()
+    return {"deleted": True, "revoked_on_whatsapp": revoked}
 
 
 @router.post("/sync-to-pipeline", status_code=202)

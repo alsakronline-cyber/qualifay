@@ -116,10 +116,22 @@ export const instancesApi = {
 
 // ── Conversations ─────────────────────────────────────────────────────────────
 export const conversationsApi = {
-  list: (params?: { page?: number; per_page?: number; instance_name?: string }) =>
+  list: (params?: { page?: number; per_page?: number; instance_name?: string; search?: string }) =>
     API.get('/v1/conversations', { params }),
 
   get: (id: string) => API.get(`/v1/conversations/${id}`),
+
+  sendMedia: (id: string, file: File, caption = '') => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('caption', caption)
+    return API.post(`/v1/conversations/${id}/media`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  deleteMessage: (conversationId: string, messageId: string) =>
+    API.delete(`/v1/conversations/${conversationId}/messages/${messageId}`),
 
   messages: (id: string, params?: { page?: number; per_page?: number }) =>
     API.get(`/v1/conversations/${id}/messages`, { params }),

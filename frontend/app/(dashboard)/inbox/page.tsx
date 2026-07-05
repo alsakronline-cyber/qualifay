@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
-import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare } from 'lucide-react'
+import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search } from 'lucide-react'
 import { conversationsApi, waSyncApi, instancesApi } from '@/lib/api'
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
@@ -109,6 +109,9 @@ export default function InboxPage() {
   const [syncingPipeline, setSyncingPipeline] = useState(false)
   // Which WhatsApp instance to show. '' = all instances (default).
   const [instanceFilter, setInstanceFilter] = useState<string>('')
+  const [search, setSearch] = useState('')
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const handleSyncToPipeline = useCallback(async () => {
@@ -131,8 +134,11 @@ export default function InboxPage() {
   // refetches; an empty filter lists chats from every instance (the backend returns
   // all of them unless instance_name is passed).
   const { data: convData, mutate: mutateConvs } = useSWR(
-    ['conversations', instanceFilter],
-    () => conversationsApi.list(instanceFilter ? { instance_name: instanceFilter } : undefined).then((r) => r.data),
+    ['conversations', instanceFilter, search],
+    () => conversationsApi.list({
+      ...(instanceFilter ? { instance_name: instanceFilter } : {}),
+      ...(search.trim() ? { search: search.trim() } : {}),
+    }).then((r) => r.data),
     { refreshInterval: 5000 }
   )
   const conversations: Conversation[] = Array.isArray(convData) ? convData : (convData?.items || convData?.conversations || [])
@@ -199,6 +205,35 @@ export default function InboxPage() {
     }
   }, [selectedId, mutateConvs])
 
+  const handleAttachFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file
+    if (!file || !selectedId) return
+    setUploadingMedia(true)
+    try {
+      await conversationsApi.sendMedia(selectedId, file, msgInput.trim())
+      setMsgInput('')
+      mutateMsgs()
+      mutateConvs()
+    } catch {
+      toast.error('فشل إرسال الملف')
+    } finally {
+      setUploadingMedia(false)
+    }
+  }, [selectedId, msgInput, mutateMsgs, mutateConvs])
+
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    if (!selectedId) return
+    if (!confirm('حذف هذه الرسالة؟ سيتم حذفها من واتساب للطرفين إن أمكن.')) return
+    try {
+      await conversationsApi.deleteMessage(selectedId, messageId)
+      mutateMsgs()
+      mutateConvs()
+    } catch {
+      toast.error('فشل حذف الرسالة')
+    }
+  }, [selectedId, mutateMsgs, mutateConvs])
+
   // P4: Suggest reply via dedicated endpoint
   const handleSuggestReply = useCallback(async () => {
     if (!selectedId) return
@@ -254,6 +289,22 @@ export default function InboxPage() {
               {syncingPipeline ? <Loader2 size={12} className="animate-spin" /> : <KanbanSquare size={12} />}
               مزامنة للأنابيب
             </button>
+          </div>
+          {/* Search by number or contact name. */}
+          <div className="relative mt-2">
+            <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ابحث برقم أو اسم..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg pr-8 pl-2 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                <X size={13} />
+              </button>
+            )}
           </div>
           {/* Per-instance filter — only useful once more than one WhatsApp is connected. */}
           {instances.length > 1 && (
@@ -393,10 +444,18 @@ export default function InboxPage() {
               <div
                 key={msg.id}
                 className={clsx(
-                  'flex',
+                  'flex items-center gap-1.5 group',
                   msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
                 )}
               >
+                {/* Delete (revokes on WhatsApp + removes from inbox) — appears on hover. */}
+                <button
+                  onClick={() => handleDeleteMessage(msg.id)}
+                  title="حذف الرسالة"
+                  className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity shrink-0"
+                >
+                  <Trash2 size={13} />
+                </button>
                 <div
                   className={clsx(
                     'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm relative',
@@ -515,7 +574,20 @@ export default function InboxPage() {
               هذا الرقم غير متصل — يمكنك عرض السجل لكن لا يمكن إرسال رسائل جديدة. أعد ربط الرقم من صفحة واتساب للرد.
             </div>
           ) : (
-            <div className="px-4 py-3 border-t border-gray-800 flex gap-2">
+            <div className="px-4 py-3 border-t border-gray-800 flex gap-2 items-center">
+              <input type="file" ref={fileInputRef} onChange={handleAttachFile} className="hidden" />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingMedia}
+                title="إرفاق ملف"
+                className="w-10 h-10 shrink-0 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 hover:text-white flex items-center justify-center disabled:opacity-40 transition-colors"
+              >
+                {uploadingMedia ? (
+                  <span className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Paperclip size={16} />
+                )}
+              </button>
               <input
                 type="text"
                 value={msgInput}
