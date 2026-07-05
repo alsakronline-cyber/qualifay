@@ -13,6 +13,7 @@ from app.api import (
     notifications,
     scrape,
     agent,
+    activity,
 )
 
 api_router = APIRouter()
@@ -27,3 +28,4 @@ api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboar
 api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(scrape.router, prefix="/scrape", tags=["Scraping"])
 api_router.include_router(agent.router, prefix="/agent", tags=["Agent Automation"])
+api_router.include_router(activity.router, prefix="/activity", tags=["Activity"])

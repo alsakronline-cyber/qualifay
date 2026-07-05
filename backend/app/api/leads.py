@@ -405,7 +405,7 @@ async def update_lead(
                 changed_fields.append(field)
                 setattr(lead, field, value)
 
-    lead.updated_at = datetime.now(timezone.utc)
+    lead.updated_at = datetime.utcnow()  # naive UTC to match the column type
 
     # Log activity if fields changed
     if changed_fields:

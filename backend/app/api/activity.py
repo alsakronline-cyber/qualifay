@@ -28,6 +28,7 @@ def _activity_dict(entry: ActivityLog) -> dict:
     }
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_activity(
     entity_id: Optional[str] = Query(default=None),
