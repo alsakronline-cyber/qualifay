@@ -146,6 +146,10 @@ export default function InboxPage() {
   const messages: Message[] = Array.isArray(msgData) ? msgData : (msgData?.items || msgData?.messages || [])
 
   const selectedConv = conversations.find((c) => c.id === selectedId)
+  // A conversation whose instance is no longer in the live list = a removed number.
+  // History stays visible, but replies can't be sent through a disconnected instance.
+  const selectedDisconnected = !!selectedConv?.instance_name
+    && !instances.some((i) => i.instance_name === selectedConv.instance_name)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -299,11 +303,22 @@ export default function InboxPage() {
                 {conv.contact_phone && (
                   <p className="text-xs text-gray-600 truncate" dir="ltr">{conv.contact_phone}</p>
                 )}
-                {instances.length > 1 && conv.instance_name && (
-                  <span className="inline-block mt-0.5 text-[10px] bg-wa-green/15 text-wa-green border border-wa-green/25 rounded px-1.5 py-px font-cairo truncate max-w-full">
-                    {instances.find((i) => i.instance_name === conv.instance_name)?.display_name || conv.instance_name}
-                  </span>
-                )}
+                {conv.instance_name && (() => {
+                  const live = instances.find((i) => i.instance_name === conv.instance_name)
+                  // Number was removed — history kept, but flag it so no one expects replies.
+                  if (!live) return (
+                    <span className="inline-block mt-0.5 text-[10px] bg-gray-700 text-gray-400 border border-gray-600 rounded px-1.5 py-px font-cairo">
+                      رقم غير متصل
+                    </span>
+                  )
+                  // Live number — only worth showing when more than one is connected.
+                  if (instances.length > 1) return (
+                    <span className="inline-block mt-0.5 text-[10px] bg-wa-green/15 text-wa-green border border-wa-green/25 rounded px-1.5 py-px font-cairo truncate max-w-full">
+                      {live.display_name || conv.instance_name}
+                    </span>
+                  )
+                  return null
+                })()}
                 <div className="flex items-center gap-1 mt-0.5">
                   <p className="text-xs text-gray-500 truncate flex-1">{conv.last_message || '—'}</p>
                   <div className="flex items-center gap-1 shrink-0">
@@ -333,9 +348,15 @@ export default function InboxPage() {
               <div className="flex items-center gap-2">
                 <p className="text-xs text-gray-500">{selectedConv.contact_phone}</p>
                 {selectedConv.instance_name && (
-                  <span className="text-[10px] bg-wa-green/15 text-wa-green border border-wa-green/25 rounded px-1.5 py-px font-cairo">
-                    {instances.find((i) => i.instance_name === selectedConv.instance_name)?.display_name || selectedConv.instance_name}
-                  </span>
+                  selectedDisconnected ? (
+                    <span className="text-[10px] bg-gray-700 text-gray-400 border border-gray-600 rounded px-1.5 py-px font-cairo">
+                      رقم غير متصل
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-wa-green/15 text-wa-green border border-wa-green/25 rounded px-1.5 py-px font-cairo">
+                      {instances.find((i) => i.instance_name === selectedConv.instance_name)?.display_name || selectedConv.instance_name}
+                    </span>
+                  )
                 )}
               </div>
             </div>
@@ -488,28 +509,34 @@ export default function InboxPage() {
             )}
           </div>
 
-          {/* Manual input row */}
-          <div className="px-4 py-3 border-t border-gray-800 flex gap-2">
-            <input
-              type="text"
-              value={msgInput}
-              onChange={(e) => setMsgInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-              placeholder="اكتب رسالتك..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
-            />
-            <button
-              onClick={handleSend}
-              disabled={sending || !msgInput.trim()}
-              className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-primary to-gold-dark text-gray-950 flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all"
-            >
-              {sending ? (
-                <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Send size={16} className="rotate-180" />
-              )}
-            </button>
-          </div>
+          {/* Manual input row — replaced by a notice when the number is disconnected. */}
+          {selectedDisconnected ? (
+            <div className="px-4 py-3 border-t border-gray-800 text-center text-xs text-gray-500 font-cairo">
+              هذا الرقم غير متصل — يمكنك عرض السجل لكن لا يمكن إرسال رسائل جديدة. أعد ربط الرقم من صفحة واتساب للرد.
+            </div>
+          ) : (
+            <div className="px-4 py-3 border-t border-gray-800 flex gap-2">
+              <input
+                type="text"
+                value={msgInput}
+                onChange={(e) => setMsgInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                placeholder="اكتب رسالتك..."
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
+              />
+              <button
+                onClick={handleSend}
+                disabled={sending || !msgInput.trim()}
+                className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-primary to-gold-dark text-gray-950 flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all"
+              >
+                {sending ? (
+                  <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send size={16} className="rotate-180" />
+                )}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-gray-600">

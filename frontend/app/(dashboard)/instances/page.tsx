@@ -65,11 +65,12 @@ function QrModal({ instanceId, onClose }: { instanceId: string; onClose: () => v
 
 function DeleteConfirmModal({ instance, onClose, onDeleted }: { instance: WaInstance; onClose: () => void; onDeleted: () => void }) {
   const [loading, setLoading] = useState(false)
+  const [purge, setPurge] = useState(false)
   async function handleDelete() {
     setLoading(true)
     try {
-      await instancesApi.delete(instance.id)
-      toast.success('تم حذف النسخة')
+      await instancesApi.delete(instance.id, purge)
+      toast.success(purge ? 'تم فصل الرقم وحذف سجل المحادثات' : 'تم فصل الرقم — تم الاحتفاظ بالمحادثات والعملاء')
       onDeleted()
       onClose()
     } catch {
@@ -86,15 +87,25 @@ function DeleteConfirmModal({ instance, onClose, onDeleted }: { instance: WaInst
             <Trash2 size={18} className="text-red-400" />
           </div>
           <div>
-            <h3 className="font-semibold text-white font-cairo">حذف النسخة</h3>
+            <h3 className="font-semibold text-white font-cairo">فصل الرقم</h3>
             <p className="text-sm text-gray-400 font-cairo">{instance.display_name || instance.instance_name}</p>
           </div>
         </div>
-        <p className="text-sm text-gray-400 font-cairo mb-5">سيتم حذف هذه النسخة نهائياً. لا يمكن التراجع.</p>
+        {/* Clarify that this disconnects a channel, it does not erase records. */}
+        <p className="text-sm text-gray-300 font-cairo mb-2 leading-relaxed">
+          سيتم فصل رقم واتساب. يتم <span className="text-green-400">الاحتفاظ بالمحادثات والعملاء المحتملين</span> افتراضياً — تظهر المحادثات في صندوق الوارد كـ "غير متصل".
+        </p>
+        {/* Explicit, opt-in erasure — never the default. */}
+        <label className="flex items-start gap-2 mb-5 mt-3 p-2.5 rounded-lg bg-red-500/5 border border-red-500/20 cursor-pointer">
+          <input type="checkbox" checked={purge} onChange={(e) => setPurge(e.target.checked)} className="mt-0.5 accent-red-500" />
+          <span className="text-xs text-red-300 font-cairo leading-relaxed">
+            حذف سجل المحادثات أيضاً (لا يمكن التراجع). العملاء المحتملون في خط الأنابيب لا يُحذفون.
+          </span>
+        </label>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors font-cairo">إلغاء</button>
           <button onClick={handleDelete} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-semibold text-sm disabled:opacity-50 transition-all font-cairo">
-            {loading ? 'جارٍ الحذف...' : 'حذف'}
+            {loading ? 'جارٍ...' : (purge ? 'فصل وحذف السجل' : 'فصل الرقم')}
           </button>
         </div>
       </div>

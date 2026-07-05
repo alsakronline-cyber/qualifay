@@ -185,10 +185,24 @@ async def get_status(
 @router.delete("/{instance_id}")
 async def delete_instance(
     instance_id: str,
+    purge: bool = False,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Disconnect and delete a WA instance."""
+    """Disconnect and delete a WA instance.
+
+    Deleting an instance disconnects a *channel*, it does not delete *records*.
+    By default conversations/messages are kept (they're CRM history + Law 151 consent
+    data) and simply lose their live instance link — the inbox shows them as
+    "disconnected". Leads are NEVER deleted here: a lead is a business asset that lives
+    in the pipeline independently of the WhatsApp number it came from.
+
+    `purge=true` is the explicit erasure path (e.g. a Law 151 / GDPR right-to-erasure
+    request): it deletes this instance's conversations and their messages. Even then,
+    leads are kept — erase a contact's leads through the leads API, deliberately.
+    """
+    from app.models.models import Conversation
+
     result = await db.execute(
         select(WaInstance).where(
             WaInstance.id == instance_id,
@@ -199,15 +213,37 @@ async def delete_instance(
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
 
+    convs = (await db.execute(
+        select(Conversation).where(Conversation.wa_instance_id == instance.id)
+    )).scalars().all()
+    conv_count = len(convs)
+
     try:
         await evolution_service.delete_instance(instance.instance_name)
-    except Exception as e:
-        # Log but continue with DB deletion
+    except Exception:
+        # Evolution may already be gone; continue with local cleanup regardless.
         pass
 
+    if purge:
+        # Explicit erasure: drop the conversations (messages cascade). Leads untouched.
+        for c in convs:
+            await db.delete(c)
+
+    # Non-purge: SQLAlchemy nulls each conversation's wa_instance_id on this delete,
+    # so history survives and the inbox renders it as a disconnected number.
     await db.delete(instance)
     await db.commit()
-    return {"deleted": True, "instance_id": instance_id}
+    return {
+        "deleted": True,
+        "instance_id": instance_id,
+        "purged": purge,
+        "conversations_affected": conv_count,
+        "note": (
+            f"Deleted {conv_count} conversations; leads kept"
+            if purge else
+            f"Number disconnected; {conv_count} conversations kept (marked disconnected); leads kept"
+        ),
+    }
 
 
 @router.get("/{instance_id}/warmup")

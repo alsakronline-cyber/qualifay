@@ -103,7 +103,7 @@ export const settingsApi = {
 export const instancesApi = {
   list: () => API.get('/v1/instances'),
   create: (name: string) => API.post('/v1/instances', { instance_name: name }),
-  delete: (id: string) => API.delete(`/v1/instances/${id}`),
+  delete: (id: string, purge = false) => API.delete(`/v1/instances/${id}`, { params: { purge } }),
   getQr: (id: string) => API.get(`/v1/instances/${id}/qr`),
   getStatus: (id: string) => API.get(`/v1/instances/${id}/status`),
   getWarmup: (id: string) => API.get(`/v1/instances/${id}/warmup`),
