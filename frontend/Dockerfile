@@ -6,8 +6,10 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_SERVER_IP
+ARG NEXT_BASE_PATH=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 # Build — ignore standalone copy failures for route-group pages missing manifests
 RUN npm run build 2>&1 | grep -v "Failed to copy traced files" || true
 # Create any missing client-reference-manifest files so standalone copy succeeds
