@@ -55,9 +55,14 @@ class Settings(BaseSettings):
     # Qdrant
     QDRANT_URL: str = "http://127.0.0.1:6333"
 
-    # Email
+    # Email (SMTP outreach)
+    SMTP_HOST: str = "smtp.hostinger.com"
+    SMTP_PORT: int = 465
     SMTP_USER: str = ""
-    SMTP_APP_PASSWORD: str = ""
+    SMTP_PASSWORD: str = ""          # real SMTP login password (set in .env, read via celery env_file)
+    SMTP_APP_PASSWORD: str = ""      # legacy name, kept as a fallback
+    SMTP_FROM: str = ""              # from address (defaults to SMTP_USER)
+    SMTP_FROM_NAME: str = "Qualifay"
     RESEND_API_KEY: str = ""
 
     # Payments

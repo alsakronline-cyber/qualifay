@@ -63,15 +63,19 @@ async def _process_approved_lead(lead_id: str):
             logger.warning(f"Lead {lead_id} not found")
             return {"error": "lead_not_found"}
 
-        if not lead.phone:
-            logger.warning(f"Lead {lead_id} has no phone number")
-            return {"error": "no_phone"}
-
-        # Step 1a: Hard status gate — block unsubscribed/blocked/invalid leads before ANY AI call
+        # Step 1a: Hard status gate — block unsubscribed/blocked/invalid before ANY send/AI call
         from app.models.models import LeadStatus as _LS
         if lead.status in (_LS.unsubscribed, _LS.blocked, _LS.invalid):
             logger.info(f"Outreach blocked for lead {lead_id}: status={lead.status.value}")
             return {"skipped": True, "reason": f"lead_status_{lead.status.value}"}
+
+        # Channel selection: WhatsApp when there's a phone, else fall back to email
+        # (many LinkedIn leads are email-only), else there's no way to reach them.
+        if not lead.phone:
+            if lead.email:
+                return await _send_email_outreach(db, lead)
+            logger.warning(f"Lead {lead_id} has no phone or email")
+            return {"error": "no_contact"}
 
         # Step 1: Consent compliance check
         lead_dict = {
@@ -189,6 +193,87 @@ async def _process_approved_lead(lead_id: str):
         await db.commit()
         logger.info(f"Lead {lead_id} outreach sent via {instance.instance_name} to {wa_jid}")
         return {"sent": True, "lead_id": lead_id, "conversation_id": conv.id}
+
+
+async def _send_email_outreach(db, lead):
+    """Email outreach for a lead with no WhatsApp number. Same consent + AIDA copy as
+    WhatsApp, capped per-tenant per-day to protect sender reputation."""
+    from datetime import date, datetime
+    from app.models.models import LeadStage
+    from app.services.ai_service import ai_service
+    from app.services.email_service import email_service
+    from app.core.config import settings
+
+    if not email_service.is_configured():
+        logger.warning("Email outreach requested but SMTP is not configured")
+        return {"error": "smtp_not_configured"}
+
+    # Consent compliance (Law 151) — identical gate to the WhatsApp path.
+    lead_dict = {
+        "name": lead.name, "company": lead.company,
+        "source": lead.source.value if lead.source else None,
+        "consent_at": lead.consent_at.isoformat() if lead.consent_at else None,
+        "consent_method": lead.consent_method,
+    }
+    consent = await ai_service.check_consent_compliance(lead_dict, lead.consent_method or "unknown")
+    if not consent.get("compliant", False):
+        logger.warning(f"Email outreach blocked by consent for lead {lead.id}")
+        return {"error": "consent_non_compliant"}
+
+    # Conservative per-tenant daily email cap (deliverability / anti-spam).
+    r = None
+    cap_key = f"qualifay:email_sent:{lead.tenant_id}:{date.today().isoformat()}"
+    try:
+        from app.core.redis import get_redis
+        r = await get_redis()
+        used = int(await r.get(cap_key) or 0)
+        if used >= (settings.EMAIL_DAILY_CAP_DEFAULT or 50):
+            logger.info(f"Email daily cap reached for tenant {lead.tenant_id}")
+            raise process_approved_lead.retry(countdown=86400)
+    except Exception:
+        r = None  # Redis optional — never block a send on the counter
+
+    # AIDA copy (reused from the WhatsApp path), translated to Arabic if needed.
+    body = await ai_service.write_aida_message({
+        "name": lead.name, "company": lead.company, "industry": lead.industry,
+        "city": lead.city, "language": lead.language,
+    })
+    if lead.language == "ar" and body:
+        arabic = sum(1 for c in body if "؀" <= c <= "ۿ")
+        if arabic < len(body) * 0.3:
+            body = await ai_service.translate_arabic(body, direction="en_to_ar")
+    subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
+
+    try:
+        await email_service.send(lead.email, subject, body or "")
+    except Exception as e:
+        logger.error(f"Email send failed for lead {lead.id}: {e}")
+        return {"error": "email_send_failed", "detail": str(e)}
+
+    lead.stage = LeadStage.outreach
+    lead.updated_at = datetime.utcnow()
+    await db.commit()
+
+    if r is not None:
+        try:
+            await r.incr(cap_key)
+            await r.expire(cap_key, 172800)
+        except Exception:
+            pass
+
+    try:
+        from app.services.activity_service import log_activity
+        from app.models.models import ActivityType
+        await log_activity(
+            db=db, tenant_id=str(lead.tenant_id), activity_type=ActivityType.lead_updated,
+            summary=f"Email outreach sent to {lead.email}",
+            entity_type="lead", entity_id=str(lead.id),
+        )
+    except Exception as e:
+        logger.debug(f"email activity log skipped: {e}")
+
+    logger.info(f"Email outreach sent to {lead.email} for lead {lead.id}")
+    return {"sent": True, "channel": "email", "lead_id": lead.id}
 
 
 @celery_app.task(bind=True, max_retries=3, queue="outreach")
