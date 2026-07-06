@@ -12,6 +12,22 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# WhatsApp/Evolution sometimes returns a self-reference ("You" in the account's locale)
+# as a contact's pushName. That's not the contact's name — reject it.
+_SELF_LABELS = {"você", "voce", "you", "أنت", "انت", "me", "myself", "tu", "yourself"}
+
+
+def _is_real_name(name) -> bool:
+    if not name:
+        return False
+    s = str(name).strip()
+    if not s or s.lower() in _SELF_LABELS:
+        return False
+    # A bare phone number isn't a name.
+    if s.replace("+", "").replace(" ", "").isdigit():
+        return False
+    return True
+
 
 async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id: str):
     """
@@ -58,7 +74,7 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                 for c in (contacts or []):
                     cj = c.get("id") or c.get("remoteJid") or c.get("jid", "")
                     cn = c.get("pushName") or c.get("name") or c.get("verifiedName")
-                    if cj and cn and not str(cn).replace("+", "").isdigit():
+                    if cj and _is_real_name(cn):
                         contacts_map[cj] = cn
         except Exception as e:
             logger.warning(f"findContacts {instance_name} failed: {e}")
@@ -97,9 +113,9 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                 or (last_msg_obj.get("pushName") if isinstance(last_msg_obj, dict) else None)
                 or None
             )
-            # A "name" that's just the phone number isn't a real name — leave it null so the
-            # UI falls back to the number and a real pushName can fill it in later.
-            if name and str(name).replace("+", "").replace(" ", "").isdigit():
+            # Reject numbers and self-labels ("Você"/"You") so the UI falls back to the
+            # number and a real pushName can fill it in later.
+            if not _is_real_name(name):
                 name = None
             last_msg = chat.get("lastMessage", {}) or {}
             last_content = (
@@ -124,10 +140,8 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                 await db.flush()
                 synced += 1
             else:
-                # Set a real name if we have one and the stored one is missing or just a number.
-                current = conv.contact_name
-                current_is_number = bool(current) and str(current).replace("+", "").replace(" ", "").isdigit()
-                if name and (not current or current_is_number):
+                # Set a real name if we have one and the stored one is missing or not real.
+                if name and not _is_real_name(conv.contact_name):
                     conv.contact_name = name
                 if last_content:
                     conv.last_message = last_content
@@ -187,7 +201,7 @@ async def upsert_inbound_message(
                 instance_name=instance_name,
                 wa_jid=wa_jid,
                 # The sender's WhatsApp profile name (pushName), only meaningful inbound.
-                contact_name=(push_name if (push_name and not from_me) else None),
+                contact_name=(push_name if (not from_me and _is_real_name(push_name)) else None),
                 status=ConversationStatus.open,
                 ai_enabled=False,
             )
@@ -210,8 +224,8 @@ async def upsert_inbound_message(
         conv.last_message = content[:200] if content else conv.last_message
         if not from_me:
             conv.unread_count = (conv.unread_count or 0) + 1
-            # Backfill the contact's WhatsApp profile name once, if we don't have one yet.
-            if push_name and not conv.contact_name:
+            # Backfill the contact's WhatsApp profile name once, if we don't have a real one.
+            if _is_real_name(push_name) and not _is_real_name(conv.contact_name):
                 conv.contact_name = push_name
 
         # Append message if not duplicate
