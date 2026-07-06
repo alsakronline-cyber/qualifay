@@ -72,9 +72,11 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                 if isinstance(contacts, dict):
                     contacts = contacts.get("contacts", [])
                 for c in (contacts or []):
-                    cj = c.get("id") or c.get("remoteJid") or c.get("jid", "")
-                    cn = c.get("pushName") or c.get("name") or c.get("verifiedName")
-                    if cj and _is_real_name(cn):
+                    # The matching key is remoteJid (the WhatsApp JID); `id` is Evolution's
+                    # own internal id and never matches a conversation.
+                    cj = c.get("remoteJid") or c.get("jid") or ""
+                    cn = c.get("name") or c.get("pushName") or c.get("verifiedName")
+                    if cj and "@s.whatsapp.net" in cj and _is_real_name(cn):
                         contacts_map[cj] = cn
         except Exception as e:
             logger.warning(f"findContacts {instance_name} failed: {e}")
