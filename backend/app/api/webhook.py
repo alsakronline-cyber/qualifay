@@ -68,6 +68,8 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         wa_jid = key.get("remoteJid", "")
         wa_msg_id = key.get("id")
         timestamp = data.get("data", {}).get("messageTimestamp")
+        # Sender's WhatsApp profile name — so the inbox shows a name, not a bare number.
+        push_name = data.get("data", {}).get("pushName")
 
         # Persist message to inbox DB immediately (for both inbound and outbound)
         if wa_jid and not wa_jid.endswith("@g.us"):  # skip groups
@@ -91,6 +93,7 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                             from_me=from_me,
                             timestamp=timestamp,
                             message_type=message_type,
+                            push_name=push_name,
                         )
             except Exception as e:
                 logger.warning(f"upsert_inbound_message failed: {e}")

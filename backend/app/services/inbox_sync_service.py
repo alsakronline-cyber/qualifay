@@ -44,6 +44,25 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
             logger.error(f"sync_instance_chats fetchChats error: {e}")
             return
 
+        # Also fetch the contact book — this is where WhatsApp profile names (pushName)
+        # reliably live, whereas findChats often returns only the number.
+        contacts_map: dict = {}
+        try:
+            rc = await client.post(
+                f"{base_url}/chat/findContacts/{instance_name}", headers=headers, json={},
+            )
+            if rc.status_code == 200:
+                contacts = rc.json()
+                if isinstance(contacts, dict):
+                    contacts = contacts.get("contacts", [])
+                for c in (contacts or []):
+                    cj = c.get("id") or c.get("remoteJid") or c.get("jid", "")
+                    cn = c.get("pushName") or c.get("name") or c.get("verifiedName")
+                    if cj and cn and not str(cn).replace("+", "").isdigit():
+                        contacts_map[cj] = cn
+        except Exception as e:
+            logger.warning(f"findContacts {instance_name} failed: {e}")
+
     logger.info(f"Syncing {len(chats)} chats for instance {instance_name}")
 
     truncated = len(chats) > 100
@@ -71,15 +90,17 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
 
             last_msg_obj = chat.get("lastMessage") or {}
             name = (
-                chat.get("name")
+                contacts_map.get(jid)
+                or chat.get("name")
                 or chat.get("pushName")
                 or chat.get("verifiedName")
                 or (last_msg_obj.get("pushName") if isinstance(last_msg_obj, dict) else None)
                 or None
             )
-            # Fallback: extract number from JID (e.g. "201234567@s.whatsapp.net" -> "201234567")
-            if not name and jid:
-                name = jid.split("@")[0] if "@" in jid else jid
+            # A "name" that's just the phone number isn't a real name — leave it null so the
+            # UI falls back to the number and a real pushName can fill it in later.
+            if name and str(name).replace("+", "").replace(" ", "").isdigit():
+                name = None
             last_msg = chat.get("lastMessage", {}) or {}
             last_content = (
                 last_msg.get("conversation")
@@ -103,8 +124,10 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                 await db.flush()
                 synced += 1
             else:
-                # Update contact name if we now have one
-                if name and not conv.contact_name:
+                # Set a real name if we have one and the stored one is missing or just a number.
+                current = conv.contact_name
+                current_is_number = bool(current) and str(current).replace("+", "").replace(" ", "").isdigit()
+                if name and (not current or current_is_number):
                     conv.contact_name = name
                 if last_content:
                     conv.last_message = last_content
@@ -124,6 +147,7 @@ async def upsert_inbound_message(
     from_me: bool,
     timestamp: Optional[int] = None,
     message_type: str = "text",
+    push_name: Optional[str] = None,
 ):
     """
     Called by the webhook handler for every inbound/outbound message.
@@ -162,6 +186,8 @@ async def upsert_inbound_message(
                 wa_instance_id=wa_instance_id,
                 instance_name=instance_name,
                 wa_jid=wa_jid,
+                # The sender's WhatsApp profile name (pushName), only meaningful inbound.
+                contact_name=(push_name if (push_name and not from_me) else None),
                 status=ConversationStatus.open,
                 ai_enabled=False,
             )
@@ -184,6 +210,9 @@ async def upsert_inbound_message(
         conv.last_message = content[:200] if content else conv.last_message
         if not from_me:
             conv.unread_count = (conv.unread_count or 0) + 1
+            # Backfill the contact's WhatsApp profile name once, if we don't have one yet.
+            if push_name and not conv.contact_name:
+                conv.contact_name = push_name
 
         # Append message if not duplicate
         direction = MessageDirection.outbound if from_me else MessageDirection.inbound
