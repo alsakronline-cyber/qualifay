@@ -149,8 +149,19 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                     conv.last_message = last_content
                 conv.unread_count = int(chat.get("unreadCount") or 0)
 
+        # Backfill names for EVERY existing conversation from the contact book — not just
+        # the ones that appeared in the (capped) chats list. This is what actually names
+        # older conversations whose contact has a WhatsApp profile name.
+        named = 0
+        for conv in conv_map.values():
+            if not _is_real_name(conv.contact_name):
+                nm = contacts_map.get(conv.wa_jid)
+                if nm:
+                    conv.contact_name = nm
+                    named += 1
+
         await db.commit()
-        logger.info(f"Synced {synced} new conversations for {instance_name}")
+        logger.info(f"Synced {synced} new conversations for {instance_name}, named {named} from contacts")
     return synced
 
 
