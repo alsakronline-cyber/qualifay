@@ -135,7 +135,7 @@ services:
         NEXT_PUBLIC_SERVER_IP: 80.225.65.148
     platform: linux/arm64
     container_name: qualifay_frontend_dev
-    command: sh -c "PORT=3001 node server.js"
+    command: sh -c "HOSTNAME=0.0.0.0 PORT=3001 node server.js"
     restart: unless-stopped
     environment:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
@@ -143,6 +143,7 @@ services:
       NEXT_PUBLIC_API_URL: http://80.225.65.148:5001/api
       BACKEND_URL: http://127.0.0.1:5001
       PORT: 3001
+      HOSTNAME: 0.0.0.0
     network_mode: host
     deploy:
       resources:
