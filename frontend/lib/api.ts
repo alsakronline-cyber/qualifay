@@ -156,6 +156,9 @@ export const conversationsApi = {
   toggleAi: (id: string, enabled: boolean) =>
     API.patch(`/v1/conversations/${id}`, { ai_enabled: enabled }),
 
+  rename: (id: string, contactName: string) =>
+    API.patch(`/v1/conversations/${id}`, { contact_name: contactName }),
+
   setStage: (id: string, stage: string) =>
     API.patch(`/v1/conversations/${id}/stage`, { stage }),
 
