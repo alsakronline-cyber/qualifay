@@ -158,6 +158,8 @@ class Lead(Base):
     name = Column(String, nullable=True)
     phone = Column(String, nullable=True, index=True)          # E.164
     email = Column(String, nullable=True)
+    # WhatsApp reachability: NULL = not checked yet, True/False = verified via Evolution.
+    wa_reachable = Column(Boolean, nullable=True)
     company = Column(String, nullable=True)
     industry = Column(String, nullable=True)
     company_size = Column(String, nullable=True)

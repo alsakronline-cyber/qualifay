@@ -242,6 +242,32 @@ class EvolutionService:
         except Exception:
             return False
 
+    async def check_numbers(self, instance_name: str, phones: list) -> dict:
+        """Check many numbers in one call. Returns {input_number: bool_on_whatsapp}.
+
+        Evolution's whatsappNumbers accepts a list and returns one row per number;
+        we match results back to the numbers we sent (comparing digit-only forms,
+        since Evolution echoes the jid/number in varying formats).
+        """
+        if not phones:
+            return {}
+        try:
+            data = await self._post(f"/chat/whatsappNumbers/{instance_name}", {"numbers": phones})
+        except Exception as e:
+            raise RuntimeError(f"whatsappNumbers check failed on '{instance_name}': {e}")
+        if not isinstance(data, list):
+            return {}
+
+        def digits(s):
+            return "".join(ch for ch in str(s or "") if ch.isdigit())
+
+        by_digits = {}
+        for row in data:
+            num = row.get("number") or row.get("jid") or ""
+            by_digits[digits(num)] = bool(row.get("exists", False))
+        # Map back to the exact strings the caller passed in.
+        return {p: by_digits.get(digits(p), False) for p in phones}
+
     async def mark_read(self, instance_name: str, keys: list) -> dict:
         """Mark messages as read."""
         try:

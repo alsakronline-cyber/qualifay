@@ -48,6 +48,8 @@ export interface Lead {
   name?: string
   phone?: string
   email?: string
+  wa_reachable?: boolean | null
+  reach?: 'whatsapp' | 'phone' | 'phone_no_wa' | 'email' | 'none'
   company?: string
   industry?: string
   company_size?: string

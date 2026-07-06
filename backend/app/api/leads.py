@@ -40,6 +40,28 @@ class PoolSearchParams(BaseModel):
     limit: int = 20
 
 
+def _reach_of(lead: Lead) -> str:
+    """How this lead can be contacted, from what we know:
+      whatsapp    — phone confirmed on WhatsApp
+      phone_no_wa — has a phone but it's NOT on WhatsApp (e.g. a landline)
+      email       — no usable phone, but has an email
+      phone       — has a phone, WhatsApp status not checked yet
+      none        — no phone and no email (needs enrichment)
+    """
+    has_phone = bool(lead.phone)
+    has_email = bool(lead.email)
+    wa = getattr(lead, "wa_reachable", None)
+    if has_phone and wa is True:
+        return "whatsapp"
+    if has_phone and wa is False:
+        return "email" if has_email else "phone_no_wa"
+    if has_phone:
+        return "phone"          # unchecked — assume WhatsApp-capable until verified
+    if has_email:
+        return "email"
+    return "none"
+
+
 def _lead_dict(lead: Lead) -> dict:
     return {
         "id": lead.id,
@@ -48,6 +70,8 @@ def _lead_dict(lead: Lead) -> dict:
         "name": lead.name,
         "phone": lead.phone,
         "email": lead.email,
+        "wa_reachable": getattr(lead, "wa_reachable", None),
+        "reach": _reach_of(lead),
         "company": lead.company,
         "industry": lead.industry,
         "company_size": lead.company_size,
@@ -333,6 +357,63 @@ async def bulk_approve_leads(
         process_approved_lead.apply_async(args=[lead.id], queue="outreach")
 
     return {"approved": len(leads), "queued": len(leads)}
+
+
+class CheckReachabilityRequest(BaseModel):
+    ids: Optional[List[str]] = None   # omit to check all not-yet-checked phone leads
+
+
+@router.post("/check-reachability")
+async def check_reachability(
+    body: CheckReachabilityRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify which leads' phone numbers are actually on WhatsApp, so you know who's
+    reachable there (vs a landline) before approving. One Evolution call per ~50 numbers."""
+    from app.services.evolution_service import evolution_service
+    from app.models.models import WaInstance
+
+    tenant_id = current_user["tenant_id"]
+    inst = (await db.execute(
+        select(WaInstance).where(
+            WaInstance.tenant_id == tenant_id,
+            WaInstance.status.in_(["open", "connected"]),
+        ).limit(1)
+    )).scalar_one_or_none()
+    if not inst:
+        raise HTTPException(status_code=400, detail="No connected WhatsApp instance to check numbers with")
+
+    filters = [Lead.tenant_id == tenant_id, Lead.phone.isnot(None), Lead.phone != ""]
+    if body.ids:
+        filters.append(Lead.id.in_(body.ids))
+    else:
+        filters.append(Lead.wa_reachable.is_(None))
+    leads = (await db.execute(select(Lead).where(and_(*filters)).limit(500))).scalars().all()
+    if not leads:
+        return {"checked": 0, "reachable": 0, "not_reachable": 0}
+
+    phones = list({l.phone for l in leads if l.phone})
+    result_map: dict = {}
+    for i in range(0, len(phones), 50):
+        chunk = phones[i:i + 50]
+        try:
+            result_map.update(await evolution_service.check_numbers(inst.instance_name, chunk))
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"WhatsApp number check failed: {e}")
+
+    reachable = not_reachable = 0
+    for lead in leads:
+        val = result_map.get(lead.phone)
+        if val is None:
+            continue
+        lead.wa_reachable = bool(val)
+        if val:
+            reachable += 1
+        else:
+            not_reachable += 1
+    await db.commit()
+    return {"checked": reachable + not_reachable, "reachable": reachable, "not_reachable": not_reachable}
 
 
 @router.post("/{lead_id}/reject")

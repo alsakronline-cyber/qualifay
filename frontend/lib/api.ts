@@ -83,6 +83,9 @@ export const leadsApi = {
   bulkApprove: (ids: string[]) =>
     API.post('/v1/leads/bulk-approve', { ids }),
 
+  checkReachability: (ids?: string[]) =>
+    API.post('/v1/leads/check-reachability', { ids: ids || null }),
+
   poolSearch: (params: {
     industry?: string
     city?: string

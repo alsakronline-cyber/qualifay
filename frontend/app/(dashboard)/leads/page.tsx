@@ -20,6 +20,21 @@ const STAGE_LABELS: Record<string, string> = {
   lost: 'خسارة', archived: 'مؤرشف',
 }
 
+// How a lead can be reached — drives the badge in the table so you know, per lead,
+// whether it's contactable and via which channel, before approving it for outreach.
+const REACH: Record<string, { label: string; cls: string }> = {
+  whatsapp:    { label: 'واتساب ✓',      cls: 'text-wa-green bg-wa-green/10 border border-wa-green/25' },
+  phone:       { label: 'هاتف',          cls: 'text-blue-400 bg-blue-500/10 border border-blue-500/25' },
+  phone_no_wa: { label: 'ليس على واتساب', cls: 'text-amber-400 bg-amber-500/10 border border-amber-500/25' },
+  email:       { label: 'بريد',          cls: 'text-purple-400 bg-purple-500/10 border border-purple-500/25' },
+  none:        { label: 'يحتاج إثراء',    cls: 'text-gray-500 bg-gray-700/40 border border-gray-600' },
+}
+
+function ReachBadge({ reach }: { reach?: string }) {
+  const r = REACH[reach || 'none'] || REACH.none
+  return <span className={`text-[11px] px-1.5 py-0.5 rounded font-cairo whitespace-nowrap ${r.cls}`}>{r.label}</span>
+}
+
 export default function LeadsPage() {
   return (
     <Suspense fallback={<div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" /></div>}>
@@ -50,7 +65,7 @@ function LeadsContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const allLeadsKey = tab === 'all' ? ['leads/all', search, stageFilter, sourceFilter, minScore, page] : null
-  const { data: allData, isLoading: allLoading } = useSWR(
+  const { data: allData, isLoading: allLoading, mutate: mutateAll } = useSWR(
     allLeadsKey,
     () => leadsApi.list({
       search: search || undefined,
@@ -129,6 +144,23 @@ function LeadsContent() {
       setSelectedIds(new Set())
     } catch { toast.error('فشل القبول الجماعي') }
   }, [selectedIds])
+
+  const [checkingReach, setCheckingReach] = useState(false)
+  const handleCheckReachability = useCallback(async (ids?: string[]) => {
+    setCheckingReach(true)
+    try {
+      const res = await leadsApi.checkReachability(ids && ids.length ? ids : undefined)
+      const d = res.data || {}
+      toast.success(`تم الفحص: ${d.reachable ?? 0} على واتساب، ${d.not_reachable ?? 0} غير متاح`)
+      mutateAll()
+      setSelectedIds(new Set())
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      toast.error(err?.response?.data?.detail || 'فشل فحص واتساب')
+    } finally {
+      setCheckingReach(false)
+    }
+  }, [])
 
   const handlePoolClaim = useCallback(async (id: string) => {
     try {
@@ -261,6 +293,15 @@ function LeadsContent() {
               min={0} max={100}
               className="w-28 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold-primary"
             />
+            <button
+              onClick={() => handleCheckReachability()}
+              disabled={checkingReach}
+              title="التحقق من أرقام واتساب لكل العملاء غير المفحوصين"
+              className="flex items-center gap-1.5 bg-wa-green/10 hover:bg-wa-green/20 text-wa-green border border-wa-green/30 text-sm px-3 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
+            >
+              {checkingReach ? <RefreshCw size={14} className="animate-spin" /> : null}
+              فحص واتساب للكل
+            </button>
           </div>
 
           {/* Bulk action bar — appears when leads are selected. */}
@@ -273,6 +314,13 @@ function LeadsContent() {
                   className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg border border-gray-700 transition-colors font-cairo"
                 >
                   إلغاء التحديد
+                </button>
+                <button
+                  onClick={() => handleCheckReachability(Array.from(selectedIds))}
+                  disabled={checkingReach}
+                  className="flex items-center gap-1.5 bg-wa-green/10 hover:bg-wa-green/20 text-wa-green border border-wa-green/30 text-sm px-3 py-1.5 rounded-lg transition-colors font-cairo disabled:opacity-50"
+                >
+                  فحص واتساب
                 </button>
                 <button
                   onClick={handleBulkApproveSelected}
@@ -307,6 +355,7 @@ function LeadsContent() {
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">المجال</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">المدينة</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">النتيجة</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">التواصل</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">المرحلة</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">المصدر</th>
                   </tr>
@@ -341,6 +390,9 @@ function LeadsContent() {
                           </span>
                         ) : '—'}
                       </td>
+                      <td className="px-4 py-3">
+                        <ReachBadge reach={lead.reach} />
+                      </td>
                       <td className="px-4 py-3 text-gray-400 font-cairo">
                         {STAGE_LABELS[lead.stage] || lead.stage}
                       </td>
@@ -349,7 +401,7 @@ function LeadsContent() {
                   ))}
                   {allLeads.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="text-center py-10 text-gray-500 font-cairo">
+                      <td colSpan={8} className="text-center py-10 text-gray-500 font-cairo">
                         لا توجد نتائج
                       </td>
                     </tr>
