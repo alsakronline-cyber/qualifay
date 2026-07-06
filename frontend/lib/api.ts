@@ -31,12 +31,22 @@ API.interceptors.response.use(
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login: (email: string, password: string) => {
+  login: (identifier: string, password: string) => {
+    // `identifier` may be an email or a phone number — the backend tries both.
     const form = new URLSearchParams()
-    form.append('username', email)
+    form.append('username', identifier)
     form.append('password', password)
     return API.post('/v1/auth/login', form, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
   },
+  register: (data: {
+    tenant_name: string
+    tenant_slug: string
+    email: string
+    phone?: string
+    password: string
+    full_name: string
+    language?: string
+  }) => API.post('/v1/auth/register-tenant', data),
   me: () => API.get('/v1/auth/me'),
   logout: () => API.post('/v1/auth/logout'),
   refresh: () => API.post('/v1/auth/refresh'),

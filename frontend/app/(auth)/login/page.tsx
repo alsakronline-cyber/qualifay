@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authApi } from '@/lib/api'
@@ -16,7 +17,7 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!email || !password) {
-      toast.error('يرجى إدخال البريد الإلكتروني وكلمة المرور')
+      toast.error('يرجى إدخال البريد الإلكتروني أو الهاتف وكلمة المرور')
       return
     }
     setLoading(true)
@@ -60,21 +61,21 @@ export default function LoginPage() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {/* Email */}
+            {/* Email or phone */}
             <div>
               <label
                 htmlFor="email"
                 className="block text-sm font-medium text-gray-300 mb-1.5 font-cairo"
               >
-                البريد الإلكتروني / Email
+                البريد الإلكتروني أو الهاتف / Email or Phone
               </label>
               <input
                 id="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
+                placeholder="you@company.com / +2010xxxxxxxx"
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gold-primary focus:border-transparent transition-all"
                 dir="ltr"
               />
@@ -126,6 +127,13 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <p className="text-center text-sm text-gray-400 mt-6 font-cairo">
+            ليس لديك حساب؟{' '}
+            <Link href="/register" className="text-gold-primary hover:text-gold-dark font-semibold transition-colors">
+              إنشاء حساب جديد
+            </Link>
+          </p>
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-6">

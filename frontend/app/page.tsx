@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 export default function RootPage() {
   const router = useRouter()
   useEffect(() => {
-    const token = localStorage.getItem('qualifay_token')
+    const token = localStorage.getItem('auth_token')
     if (token) {
       router.replace('/leads')
     } else {

@@ -133,6 +133,8 @@ class User(Base):
     id = Column(String, primary_key=True, default=gen_uuid)
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
+    # Optional — lets a user log in with phone instead of email (E.164, normalized).
+    phone = Column(String, unique=True, nullable=True, index=True)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_admin = Column(Boolean, default=False)

@@ -28,6 +28,7 @@ class RegisterTenantRequest(BaseModel):
     tenant_name: str
     tenant_slug: str
     email: str
+    phone: Optional[str] = None
     password: str
     full_name: str
     language: str = "ar"
@@ -79,6 +80,7 @@ async def get_current_user(
         "user_id": user.id,
         "tenant_id": user.tenant_id,
         "email": user.email,
+        "phone": user.phone,
         "full_name": user.full_name,
         "is_admin": user.is_admin,
         "is_tenant_admin": user.is_tenant_admin,
@@ -110,9 +112,17 @@ async def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
-    """Login with email + password → access + refresh tokens."""
-    result = await db.execute(select(User).where(User.email == form.username))
+    """Login with email OR phone + password → access + refresh tokens."""
+    identifier = form.username.strip()
+    result = await db.execute(select(User).where(User.email == identifier))
     user = result.scalar_one_or_none()
+    if not user:
+        # Not an email match — try as a phone number (normalized to E.164).
+        from app.lib.phone import normalize_egyptian_phone
+        normalized = normalize_egyptian_phone(identifier)
+        if normalized:
+            result = await db.execute(select(User).where(User.phone == normalized))
+            user = result.scalar_one_or_none()
     if not user or not pwd_context.verify(form.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -165,6 +175,17 @@ async def register_tenant(
     if slug_result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Tenant slug already taken")
 
+    # Normalize + check phone uniqueness (optional field)
+    phone = None
+    if body.phone:
+        from app.lib.phone import normalize_egyptian_phone
+        phone = normalize_egyptian_phone(body.phone)
+        if not phone:
+            raise HTTPException(status_code=400, detail="Invalid phone number")
+        phone_result = await db.execute(select(User).where(User.phone == phone))
+        if phone_result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Phone number already registered")
+
     trial_end = datetime.utcnow() + timedelta(days=30)
 
     tenant = Tenant(
@@ -180,6 +201,7 @@ async def register_tenant(
     user = User(
         tenant_id=tenant.id,
         email=body.email,
+        phone=phone,
         full_name=body.full_name,
         hashed_password=pwd_context.hash(body.password),
         is_admin=False,
@@ -222,6 +244,7 @@ async def register_tenant(
         "user": {
             "id": user.id,
             "email": user.email,
+            "phone": user.phone,
             "full_name": user.full_name,
         },
     }
