@@ -14,22 +14,30 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className="dark">
+      <head>
+        {/* Apply the saved theme before paint to avoid a flash of the wrong theme. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{if(localStorage.getItem('theme')==='light')document.documentElement.classList.add('light')}catch(e){}",
+          }}
+        />
+      </head>
       <body className="bg-gray-950 text-gray-100 font-cairo antialiased min-h-screen">
         {children}
         <Toaster
           position="top-center"
           toastOptions={{
             style: {
-              background: '#1f2937',
-              color: '#f9fafb',
-              border: '1px solid #374151',
+              background: 'var(--toast-bg)',
+              color: 'var(--toast-fg)',
+              border: '1px solid var(--toast-border)',
               fontFamily: 'Cairo, sans-serif',
             },
             success: {
-              iconTheme: { primary: '#C9A227', secondary: '#1f2937' },
+              iconTheme: { primary: '#C9A227', secondary: 'var(--toast-bg)' },
             },
             error: {
-              iconTheme: { primary: '#ef4444', secondary: '#1f2937' },
+              iconTheme: { primary: '#ef4444', secondary: 'var(--toast-bg)' },
             },
           }}
         />

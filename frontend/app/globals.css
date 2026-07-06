@@ -8,6 +8,45 @@
   --gold-primary: #C9A227;
   --gold-dark: #A87018;
   --wa-green: #25D366;
+
+  /* Dark theme (default). Space-separated RGB so Tailwind's /opacity modifiers work. */
+  --c-white: 255 255 255;
+  --c-gray-50: 249 250 251;
+  --c-gray-100: 243 244 246;
+  --c-gray-200: 229 231 235;
+  --c-gray-300: 209 213 219;
+  --c-gray-400: 156 163 175;
+  --c-gray-500: 107 114 128;
+  --c-gray-600: 75 85 99;
+  --c-gray-700: 55 65 81;
+  --c-gray-800: 31 41 55;
+  --c-gray-900: 17 24 39;
+  --c-gray-950: 3 7 18;
+
+  --toast-bg: #1f2937;
+  --toast-fg: #f9fafb;
+  --toast-border: #374151;
+}
+
+/* Light theme — the gray ramp is mirrored so dark backgrounds become light and
+   light/white text becomes dark. Flips the whole app from one class toggle. */
+.light {
+  --c-white: 17 24 39;
+  --c-gray-50: 3 7 18;
+  --c-gray-100: 17 24 39;
+  --c-gray-200: 31 41 55;
+  --c-gray-300: 55 65 81;
+  --c-gray-400: 75 85 99;
+  --c-gray-500: 107 114 128;
+  --c-gray-600: 156 163 175;
+  --c-gray-700: 209 213 219;
+  --c-gray-800: 229 231 235;
+  --c-gray-900: 249 250 251;
+  --c-gray-950: 255 255 255;
+
+  --toast-bg: #ffffff;
+  --toast-fg: #111827;
+  --toast-border: #e5e7eb;
 }
 
 body {

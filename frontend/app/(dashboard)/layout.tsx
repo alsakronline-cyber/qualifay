@@ -24,6 +24,7 @@ import {
 import { authApi, notificationsApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
 import useSWR from 'swr'
+import ThemeToggle from '@/components/theme-toggle'
 
 interface NavItem {
   href: string
@@ -222,6 +223,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {/* Notifications */}
             <div className="relative">
               <button
