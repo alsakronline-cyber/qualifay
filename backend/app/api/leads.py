@@ -4,7 +4,7 @@ Leads API — B2B lead management with BANT scoring and pool integration
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 import re as _re
 from app.core.database import get_db
@@ -300,6 +300,38 @@ async def approve_lead(
     task = process_approved_lead.apply_async(args=[lead_id], queue="outreach")
 
     return {"approved": True, "lead_id": lead_id, "task_id": task.id}
+
+
+class BulkApproveRequest(BaseModel):
+    ids: List[str]
+
+
+@router.post("/bulk-approve")
+async def bulk_approve_leads(
+    body: BulkApproveRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve many leads at once and queue outreach for each. The warmup daily caps
+    pace the actual sends (WhatsApp or email), so over-cap leads retry the next day."""
+    from app.workers.outreach_tasks import process_approved_lead
+
+    tenant_id = current_user["tenant_id"]
+    if not body.ids:
+        return {"approved": 0, "queued": 0}
+
+    result = await db.execute(
+        select(Lead).where(and_(Lead.id.in_(body.ids), Lead.tenant_id == tenant_id))
+    )
+    leads = result.scalars().all()
+    for lead in leads:
+        lead.stage = LeadStage.approved
+    await db.commit()
+
+    for lead in leads:
+        process_approved_lead.apply_async(args=[lead.id], queue="outreach")
+
+    return {"approved": len(leads), "queued": len(leads)}
 
 
 @router.post("/{lead_id}/reject")

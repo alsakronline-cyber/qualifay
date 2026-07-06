@@ -47,6 +47,7 @@ function LeadsContent() {
   const [sourceFilter, setSourceFilter] = useState<string>('')
   const [minScore, setMinScore] = useState<string>('')
   const [page, setPage] = useState(1)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const allLeadsKey = tab === 'all' ? ['leads/all', search, stageFilter, sourceFilter, minScore, page] : null
   const { data: allData, isLoading: allLoading } = useSWR(
@@ -106,6 +107,28 @@ function LeadsContent() {
       mutateReview()
     } catch { toast.error('فشل القبول الجماعي') }
   }, [reviewLeads, mutateReview])
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => prev.size === allLeads.length ? new Set() : new Set(allLeads.map((l) => l.id)))
+  }, [allLeads])
+
+  const handleBulkApproveSelected = useCallback(async () => {
+    const ids = Array.from(selectedIds)
+    if (!ids.length) return
+    try {
+      await leadsApi.bulkApprove(ids)
+      toast.success(`تم قبول ${ids.length} عميل وبدء التواصل`)
+      setSelectedIds(new Set())
+    } catch { toast.error('فشل القبول الجماعي') }
+  }, [selectedIds])
 
   const handlePoolClaim = useCallback(async (id: string) => {
     try {
@@ -240,6 +263,28 @@ function LeadsContent() {
             />
           </div>
 
+          {/* Bulk action bar — appears when leads are selected. */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between bg-gold-primary/10 border border-gold-primary/30 rounded-lg px-4 py-2.5">
+              <span className="text-sm text-gold-primary font-cairo">تم اختيار {selectedIds.size} عميل</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg border border-gray-700 transition-colors font-cairo"
+                >
+                  إلغاء التحديد
+                </button>
+                <button
+                  onClick={handleBulkApproveSelected}
+                  className="flex items-center gap-1.5 bg-green-500/15 hover:bg-green-500/25 text-green-400 border border-green-500/30 text-sm px-3 py-1.5 rounded-lg transition-colors font-cairo font-semibold"
+                >
+                  <CheckCheck size={14} />
+                  قبول وتواصل ({selectedIds.size})
+                </button>
+              </div>
+            </div>
+          )}
+
           {allLoading ? (
             <div className="flex justify-center py-12">
               <div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" />
@@ -249,6 +294,15 @@ function LeadsContent() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
+                    <th className="px-3 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={allLeads.length > 0 && selectedIds.size === allLeads.length}
+                        onChange={toggleSelectAll}
+                        className="accent-gold-primary cursor-pointer"
+                        title="تحديد الكل"
+                      />
+                    </th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">الشركة</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">المجال</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 font-cairo">المدينة</th>
@@ -259,7 +313,15 @@ function LeadsContent() {
                 </thead>
                 <tbody className="divide-y divide-gray-800">
                   {allLeads.map((lead) => (
-                    <tr key={lead.id} className="hover:bg-gray-800/50 transition-colors">
+                    <tr key={lead.id} className={clsx('hover:bg-gray-800/50 transition-colors', selectedIds.has(lead.id) && 'bg-gold-primary/5')}>
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(lead.id)}
+                          onChange={() => toggleSelect(lead.id)}
+                          className="accent-gold-primary cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <Link href={`/leads/${lead.id}`} className="text-white font-cairo hover:text-gold-primary transition-colors underline-offset-2 hover:underline">
                           {lead.company || lead.name || '—'}
@@ -287,7 +349,7 @@ function LeadsContent() {
                   ))}
                   {allLeads.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-10 text-gray-500 font-cairo">
+                      <td colSpan={7} className="text-center py-10 text-gray-500 font-cairo">
                         لا توجد نتائج
                       </td>
                     </tr>
