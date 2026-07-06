@@ -22,6 +22,7 @@ class ContactUpdate(BaseModel):
     status: Optional[str] = None
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_contacts(
     search: Optional[str] = None,

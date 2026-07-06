@@ -177,6 +177,7 @@ async def claim_from_pool(
     return result
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_leads(
     stage: Optional[str] = None,

@@ -38,6 +38,7 @@ def _instance_dict(inst: WaInstance, state: str = None) -> dict:
     }
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_instances(
     current_user: dict = Depends(get_current_user),

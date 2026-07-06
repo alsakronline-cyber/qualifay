@@ -28,6 +28,7 @@ def _notif_dict(n: Notification) -> dict:
     }
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_notifications(
     unread_only: bool = False,
