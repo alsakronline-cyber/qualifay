@@ -7,9 +7,15 @@ ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_SERVER_IP
 ARG NEXT_BASE_PATH=""
+# next.config.js's rewrites() destination is baked in at BUILD time by Next's
+# standalone output (not re-read at container runtime), so BACKEND_URL must be a
+# build arg like the NEXT_PUBLIC_* vars — setting it only in docker-compose's
+# runtime `environment:` silently does nothing.
+ARG BACKEND_URL="http://127.0.0.1:5000"
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
+ENV BACKEND_URL=$BACKEND_URL
 # Build — ignore standalone copy failures for route-group pages missing manifests
 RUN npm run build 2>&1 | grep -v "Failed to copy traced files" || true
 # Create any missing client-reference-manifest files so standalone copy succeeds

@@ -185,6 +185,7 @@ services:
         NEXT_PUBLIC_API_URL: http://${SERVER_IP:-80.225.65.148}/api
         NEXT_PUBLIC_WS_URL: ws://${SERVER_IP:-80.225.65.148}/ws
         NEXT_PUBLIC_SERVER_IP: ${SERVER_IP:-80.225.65.148}
+        BACKEND_URL: http://127.0.0.1:5000
     platform: linux/arm64
     container_name: qualifay_frontend
     restart: unless-stopped
