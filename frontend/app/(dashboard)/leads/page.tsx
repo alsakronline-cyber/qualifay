@@ -145,6 +145,24 @@ function LeadsContent() {
     } catch { toast.error('فشل القبول الجماعي') }
   }, [selectedIds])
 
+  const [enriching, setEnriching] = useState(false)
+  const handleEnrichLinkedIn = useCallback(async () => {
+    setEnriching(true)
+    try {
+      const res = await leadsApi.enrichLinkedIn()
+      const d = res.data || {}
+      if ((d.queued ?? 0) > 0) {
+        toast.success(`تم جدولة إثراء ${d.queued} عميل — ستُملأ بيانات الاتصال عبر الإضافة`)
+      } else {
+        toast('لا يوجد عملاء LinkedIn بحاجة لإثراء', { icon: 'ℹ️' })
+      }
+    } catch {
+      toast.error('فشل جدولة الإثراء')
+    } finally {
+      setEnriching(false)
+    }
+  }, [])
+
   const [checkingReach, setCheckingReach] = useState(false)
   const handleCheckReachability = useCallback(async (ids?: string[]) => {
     setCheckingReach(true)
@@ -301,6 +319,15 @@ function LeadsContent() {
             >
               {checkingReach ? <RefreshCw size={14} className="animate-spin" /> : null}
               فحص واتساب للكل
+            </button>
+            <button
+              onClick={handleEnrichLinkedIn}
+              disabled={enriching}
+              title="فتح ملفات LinkedIn غير المكتملة عبر الإضافة لجلب الهاتف/البريد"
+              className="flex items-center gap-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm px-3 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
+            >
+              {enriching ? <RefreshCw size={14} className="animate-spin" /> : null}
+              إثراء LinkedIn
             </button>
           </div>
 

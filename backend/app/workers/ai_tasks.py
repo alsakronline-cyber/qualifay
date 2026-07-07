@@ -468,6 +468,34 @@ def ingest_agent_leads(tenant_id: str, task_id: str, platform: str, items: list)
     return run_async(_ingest_agent_leads_async(tenant_id, task_id, platform, items))
 
 
+async def _queue_profile_enrichment(db, tenant_id: str, profile_url: str):
+    """Queue a linkedin_profile_visit task so the extension enriches a lead's contact
+    info. Dedupes against tasks already waiting for the same URL so a re-scrape of the
+    same search doesn't pile up duplicate visits."""
+    from app.models.models import AgentTask, AgentPlatform
+    from sqlalchemy import select
+
+    pending = await db.execute(
+        select(AgentTask).where(
+            AgentTask.tenant_id == tenant_id,
+            AgentTask.type == "linkedin_profile_visit",
+            AgentTask.status.in_(["pending", "in_progress"]),
+        )
+    )
+    for t in pending.scalars():
+        if (t.params or {}).get("profile_url") == profile_url:
+            return  # already queued for this profile
+
+    db.add(AgentTask(
+        tenant_id=tenant_id,
+        platform=AgentPlatform.linkedin,
+        type="linkedin_profile_visit",
+        params={"profile_url": profile_url, "max_results": 1},
+        status="pending",
+    ))
+    await db.commit()
+
+
 async def _ingest_agent_leads_async(tenant_id: str, task_id: str, platform: str, items: list):
     from datetime import datetime, timedelta
     from app.core.database import AsyncSessionLocal
@@ -570,6 +598,12 @@ async def _ingest_agent_leads_async(tenant_id: str, task_id: str, platform: str,
                     # tries to load it, and a later error in this loop can't roll it back.
                     await db.commit()
                     created += 1
+                    # Auto-enrich: a LinkedIn search result has a profile URL but no phone/
+                    # email. Queue a profile-visit task so the extension opens the profile and
+                    # pulls contact info from the "Contact info" modal — turning an unreachable
+                    # lead into a contactable one without any manual step.
+                    if lead.linkedin_url and not lead.phone and not lead.email:
+                        await _queue_profile_enrichment(db, tenant_id, lead.linkedin_url)
                     try:
                         from app.workers.ai_tasks import qualify_lead
                         qualify_lead.delay(lead.id)

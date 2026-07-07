@@ -86,6 +86,9 @@ export const leadsApi = {
   checkReachability: (ids?: string[]) =>
     API.post('/v1/leads/check-reachability', { ids: ids || null }),
 
+  enrichLinkedIn: (ids?: string[]) =>
+    API.post('/v1/leads/enrich-linkedin', { ids: ids || null }),
+
   poolSearch: (params: {
     industry?: string
     city?: string

@@ -416,6 +416,57 @@ async def check_reachability(
     return {"checked": reachable + not_reachable, "reachable": reachable, "not_reachable": not_reachable}
 
 
+class EnrichLinkedInRequest(BaseModel):
+    ids: Optional[List[str]] = None   # omit to enrich all contactless leads with a LinkedIn URL
+
+
+@router.post("/enrich-linkedin")
+async def enrich_linkedin(
+    body: EnrichLinkedInRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Queue profile-visit enrichment for leads that have a LinkedIn URL but no phone/
+    email. The browser extension picks these up, opens each profile, and pulls contact
+    info from the "Contact info" modal — turning unreachable leads into contactable ones."""
+    from app.models.models import AgentTask, AgentPlatform
+
+    tenant_id = current_user["tenant_id"]
+    filters = [
+        Lead.tenant_id == tenant_id,
+        Lead.linkedin_url.isnot(None), Lead.linkedin_url != "",
+        or_(Lead.phone.is_(None), Lead.phone == ""),
+        or_(Lead.email.is_(None), Lead.email == ""),
+    ]
+    if body.ids:
+        filters.append(Lead.id.in_(body.ids))
+    leads = (await db.execute(select(Lead).where(and_(*filters)).limit(200))).scalars().all()
+
+    pend = await db.execute(
+        select(AgentTask).where(
+            AgentTask.tenant_id == tenant_id,
+            AgentTask.type == "linkedin_profile_visit",
+            AgentTask.status.in_(["pending", "in_progress"]),
+        )
+    )
+    existing_urls = {(t.params or {}).get("profile_url") for t in pend.scalars()}
+
+    queued = 0
+    for lead in leads:
+        if lead.linkedin_url in existing_urls:
+            continue
+        db.add(AgentTask(
+            tenant_id=tenant_id, platform=AgentPlatform.linkedin,
+            type="linkedin_profile_visit",
+            params={"profile_url": lead.linkedin_url, "max_results": 1},
+            status="pending",
+        ))
+        existing_urls.add(lead.linkedin_url)
+        queued += 1
+    await db.commit()
+    return {"eligible": len(leads), "queued": queued}
+
+
 @router.post("/{lead_id}/reject")
 async def reject_lead(
     lead_id: str,
