@@ -256,6 +256,33 @@ class WaInstance(Base):
     campaigns = relationship("Campaign", back_populates="wa_instance")
 
 
+# ─── Email Account ────────────────────────────────────────────
+
+class EmailAccount(Base):
+    """A sending identity (mailbox) for a tenant. Multiple accounts let outreach rotate
+    across identities and scale volume, each warming up independently."""
+    __tablename__ = "email_accounts"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    from_name = Column(String, nullable=True)
+    from_email = Column(String, nullable=False)
+    smtp_host = Column(String, nullable=False)
+    smtp_port = Column(Integer, default=465)
+    smtp_user = Column(String, nullable=False)
+    smtp_password_enc = Column(Text, nullable=False)   # Fernet-encrypted
+    imap_host = Column(String, nullable=True)
+    imap_port = Column(Integer, default=993)
+    status = Column(String, default="active")           # active | disabled
+    paused = Column(Boolean, default=False, nullable=False, server_default="false")
+    email_started_at = Column(DateTime, nullable=True)  # anchors this account's warmup
+    sent_today = Column(Integer, default=0)
+    last_reset_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    tenant = relationship("Tenant")
+
+
 # ─── Conversation ─────────────────────────────────────────────
 
 class Conversation(Base):

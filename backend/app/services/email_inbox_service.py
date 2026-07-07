@@ -72,12 +72,13 @@ def _plain_body(msg) -> str:
     return body.strip()
 
 
-def _fetch_unseen():
-    """Blocking IMAP fetch. Returns a list of dicts for UNSEEN messages, and marks them
-    Seen so they aren't re-ingested."""
-    host, port = settings.IMAP_HOST, settings.IMAP_PORT
-    user = settings.SMTP_USER
-    pwd = settings.SMTP_PASSWORD or settings.SMTP_APP_PASSWORD
+def _fetch_unseen(host=None, port=None, user=None, pwd=None):
+    """Blocking IMAP fetch for one mailbox. Returns a list of dicts for UNSEEN messages,
+    and marks them Seen so they aren't re-ingested. Defaults to the system mailbox."""
+    host = host or settings.IMAP_HOST
+    port = port or settings.IMAP_PORT
+    user = user or settings.SMTP_USER
+    pwd = pwd or settings.SMTP_PASSWORD or settings.SMTP_APP_PASSWORD
     if not (host and user and pwd):
         return []
 
@@ -118,11 +119,30 @@ async def poll_inbound_email() -> dict:
     if not settings.IMAP_POLL_ENABLED:
         return {"polled": 0, "threaded": 0, "reason": "disabled"}
 
+    # Build the list of mailboxes to poll: the system account + every tenant EmailAccount
+    # that has an IMAP host configured (so replies to any sending identity are captured).
+    from app.core.database import AsyncSessionLocal
+    from app.core.crypto import decrypt
+
+    mailboxes = [(None, None, None, None)]  # (None*) => system defaults
     try:
-        messages = await asyncio.to_thread(_fetch_unseen)
+        from app.models.models import EmailAccount
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            accts = (await db.execute(
+                select(EmailAccount).where(EmailAccount.imap_host.isnot(None))
+            )).scalars().all()
+        for a in accts:
+            mailboxes.append((a.imap_host, a.imap_port or 993, a.smtp_user, decrypt(a.smtp_password_enc)))
     except Exception as e:
-        logger.warning(f"IMAP fetch failed: {e}")
-        return {"polled": 0, "threaded": 0, "error": str(e)}
+        logger.debug(f"listing email accounts for poll failed: {e}")
+
+    messages = []
+    for host, port, user, pwd in mailboxes:
+        try:
+            messages.extend(await asyncio.to_thread(_fetch_unseen, host, port, user, pwd))
+        except Exception as e:
+            logger.warning(f"IMAP fetch failed ({host or 'system'}): {e}")
 
     if not messages:
         return {"polled": 0, "threaded": 0}

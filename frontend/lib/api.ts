@@ -285,6 +285,16 @@ export const agentApi = {
 export const emailApi = {
   status: () => API.get('/v1/email/status'),
   sendTest: (to?: string) => API.post('/v1/email/test', { to: to || null }),
+  // Multiple sending identities
+  listAccounts: () => API.get('/v1/email/accounts'),
+  createAccount: (body: {
+    from_email: string; from_name?: string;
+    smtp_host: string; smtp_port: number; smtp_user?: string; smtp_password: string;
+    imap_host?: string; imap_port?: number;
+  }) => API.post('/v1/email/accounts', body),
+  updateAccount: (id: string, body: Record<string, unknown>) => API.patch(`/v1/email/accounts/${id}`, body),
+  deleteAccount: (id: string) => API.delete(`/v1/email/accounts/${id}`),
+  testAccount: (id: string, to?: string) => API.post(`/v1/email/accounts/${id}/test`, { to: to || null }),
 }
 
 export default API

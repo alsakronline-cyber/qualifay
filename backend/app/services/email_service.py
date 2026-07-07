@@ -53,5 +53,34 @@ class EmailService:
             raise RuntimeError("SMTP is not configured")
         await asyncio.to_thread(self._send_sync, to, subject, body_text)
 
+    def _send_via_sync(self, host, port, user, pwd, from_name, from_email,
+                       to, subject, body_text) -> None:
+        msg = MIMEMultipart()
+        msg["From"] = formataddr((from_name or "", from_email or user))
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body_text, "plain", "utf-8"))
+        ctx = ssl.create_default_context()
+        if int(port) == 465:
+            with smtplib.SMTP_SSL(host, int(port), context=ctx, timeout=25) as s:
+                s.login(user, pwd)
+                s.send_message(msg)
+        else:
+            with smtplib.SMTP(host, int(port), timeout=25) as s:
+                s.ehlo()
+                s.starttls(context=ctx)
+                s.login(user, pwd)
+                s.send_message(msg)
+
+    async def send_via_account(self, account, to: str, subject: str, body_text: str) -> None:
+        """Send using a specific EmailAccount's SMTP credentials."""
+        from app.core.crypto import decrypt
+        pwd = decrypt(account.smtp_password_enc)
+        await asyncio.to_thread(
+            self._send_via_sync,
+            account.smtp_host, account.smtp_port, account.smtp_user, pwd,
+            account.from_name, account.from_email, to, subject, body_text,
+        )
+
 
 email_service = EmailService()

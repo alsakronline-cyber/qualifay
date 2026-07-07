@@ -220,12 +220,16 @@ async def _send_email_outreach(db, lead):
         logger.warning(f"Email outreach blocked by consent for lead {lead.id}")
         return {"error": "consent_non_compliant"}
 
-    # Ramped, bounce-aware daily cap (warmup schedule + bounce pause).
+    # Pick a sending identity: a tenant email account (rotated, own warmup) if any,
+    # else the system-level account with its tenant-level ramped/bounce-aware cap.
     from app.services.warmup_service import warmup_service
-    allowed, used, cap = await warmup_service.check_email_limit(lead.tenant_id, db)
-    if not allowed:
-        logger.info(f"Email cap/pause hit for tenant {lead.tenant_id} ({used}/{cap})")
-        raise process_approved_lead.retry(countdown=86400)
+    from app.services.email_account_service import pick_account, record_account_send
+    account = await pick_account(lead.tenant_id, db)
+    if not account:
+        allowed, used, cap = await warmup_service.check_email_limit(lead.tenant_id, db)
+        if not allowed:
+            logger.info(f"Email cap/pause hit for tenant {lead.tenant_id} ({used}/{cap})")
+            raise process_approved_lead.retry(countdown=86400)
 
     # AIDA copy (reused from the WhatsApp path), translated to Arabic if needed.
     body = await ai_service.write_aida_message({
@@ -239,7 +243,10 @@ async def _send_email_outreach(db, lead):
     subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
 
     try:
-        await email_service.send(lead.email, subject, body or "")
+        if account:
+            await email_service.send_via_account(account, lead.email, subject, body or "")
+        else:
+            await email_service.send(lead.email, subject, body or "")
     except Exception as e:
         logger.error(f"Email send failed for lead {lead.id}: {e}")
         return {"error": "email_send_failed", "detail": str(e)}
@@ -248,9 +255,12 @@ async def _send_email_outreach(db, lead):
     lead.updated_at = datetime.utcnow()
     await db.commit()
 
-    # Count the send + anchor the warmup ramp on the tenant's first email.
-    await warmup_service.increment_email_sent(lead.tenant_id)
-    await warmup_service.mark_email_started(lead.tenant_id, db)
+    # Count the send against the account used (per-account warmup), or the tenant fallback.
+    if account:
+        await record_account_send(account, db)
+    else:
+        await warmup_service.increment_email_sent(lead.tenant_id)
+        await warmup_service.mark_email_started(lead.tenant_id, db)
 
     try:
         from app.services.activity_service import log_activity
@@ -548,6 +558,8 @@ async def _reset_daily_limits():
 
     async with AsyncSessionLocal() as db:
         await warmup_service.reset_all_daily_counts(db)
+        from app.services.email_account_service import reset_all_accounts
+        await reset_all_accounts(db)
     return {"done": True}
 
 
