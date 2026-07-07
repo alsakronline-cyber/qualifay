@@ -268,6 +268,9 @@ class Conversation(Base):
     wa_instance_id = Column(String, ForeignKey("wa_instances.id"), nullable=True)
     instance_name = Column(String, nullable=False)
     wa_jid = Column(String, nullable=False, index=True)
+    # "whatsapp" (wa_jid = phone JID) or "email" (instance_name='email', wa_jid = the
+    # contact's email address). Lets the WhatsApp and email threads share one inbox.
+    channel = Column(String, default="whatsapp", nullable=False, server_default="whatsapp")
     contact_name = Column(String, nullable=True)
     status = Column(SAEnum(ConversationStatus), default=ConversationStatus.open)
     ai_enabled = Column(Boolean, default=False)

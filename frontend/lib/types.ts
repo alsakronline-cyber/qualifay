@@ -94,6 +94,7 @@ export interface Conversation {
   instance_id: string
   instance_name?: string
   stage?: LeadStage
+  channel?: 'whatsapp' | 'email'
   contact_phone: string
   contact_name?: string
   lead_id?: string

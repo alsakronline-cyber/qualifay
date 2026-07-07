@@ -185,9 +185,11 @@ export default function InboxPage() {
     }).catch(() => {})
   }, [])
 
-  // A conversation whose instance is no longer in the live list = a removed number.
-  // History stays visible, but replies can't be sent through a disconnected instance.
-  const selectedDisconnected = !!selectedConv?.instance_name
+  const selectedIsEmail = selectedConv?.channel === 'email'
+  // A WhatsApp conversation whose instance is no longer in the live list = a removed
+  // number. Email conversations aren't tied to an instance, so never "disconnected".
+  const selectedDisconnected = !selectedIsEmail
+    && !!selectedConv?.instance_name
     && !instances.some((i) => i.instance_name === selectedConv.instance_name)
 
   useEffect(() => {
@@ -465,7 +467,11 @@ export default function InboxPage() {
                 {conv.contact_phone && (
                   <p className="text-xs text-gray-600 truncate" dir="ltr">{conv.contact_phone}</p>
                 )}
-                {conv.instance_name && (() => {
+                {conv.channel === 'email' ? (
+                  <span className="inline-block mt-0.5 text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/25 rounded px-1.5 py-px font-cairo">
+                    ✉ بريد إلكتروني
+                  </span>
+                ) : conv.instance_name && (() => {
                   const live = instances.find((i) => i.instance_name === conv.instance_name)
                   // Number was removed — history kept, but flag it so no one expects replies.
                   if (!live) return (
@@ -539,7 +545,11 @@ export default function InboxPage() {
               )}
               <div className="flex items-center gap-2">
                 <p className="text-xs text-gray-500">{selectedConv.contact_phone}</p>
-                {selectedConv.instance_name && (
+                {selectedIsEmail ? (
+                  <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/25 rounded px-1.5 py-px font-cairo">
+                    ✉ بريد إلكتروني
+                  </span>
+                ) : selectedConv.instance_name && (
                   selectedDisconnected ? (
                     <span className="text-[10px] bg-gray-700 text-gray-400 border border-gray-600 rounded px-1.5 py-px font-cairo">
                       رقم غير متصل
@@ -730,31 +740,34 @@ export default function InboxPage() {
             </div>
           ) : (
             <div className="px-4 py-3 border-t border-gray-800 flex gap-2 items-center">
-              <input type="file" ref={fileInputRef} onChange={handleAttachFile} className="hidden" />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingMedia}
-                title="إرفاق ملف"
-                className="w-10 h-10 shrink-0 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 hover:text-white flex items-center justify-center disabled:opacity-40 transition-colors"
-              >
-                {uploadingMedia ? (
-                  <span className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Paperclip size={16} />
-                )}
-              </button>
+              {/* Attachments/voice are WhatsApp-only for now. */}
+              {!selectedIsEmail && <>
+                <input type="file" ref={fileInputRef} onChange={handleAttachFile} className="hidden" />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingMedia}
+                  title="إرفاق ملف"
+                  className="w-10 h-10 shrink-0 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 hover:text-white flex items-center justify-center disabled:opacity-40 transition-colors"
+                >
+                  {uploadingMedia ? (
+                    <span className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Paperclip size={16} />
+                  )}
+                </button>
+              </>}
               <input
                 type="text"
                 value={msgInput}
                 onChange={(e) => setMsgInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                placeholder="اكتب رسالتك..."
+                placeholder={selectedIsEmail ? 'اكتب ردك بالبريد...' : 'اكتب رسالتك...'}
                 className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
               />
-              {msgInput.trim() ? (
+              {(msgInput.trim() || selectedIsEmail) ? (
                 <button
                   onClick={handleSend}
-                  disabled={sending}
+                  disabled={sending || !msgInput.trim()}
                   className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-gold-primary to-gold-dark text-gray-950 flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all"
                 >
                   {sending ? (

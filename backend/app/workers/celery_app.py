@@ -9,6 +9,7 @@ celery_app = Celery(
         "app.workers.ai_tasks",
         "app.workers.outreach_tasks",
         "app.workers.scrape_tasks",
+        "app.workers.email_tasks",
     ],
 )
 
@@ -46,6 +47,10 @@ celery_app.conf.update(
         "run-due-scrape-schedules": {
             "task": "run_due_scrape_schedules",
             "schedule": 3600.0,  # hourly — launches daily searches at their chosen Cairo hour
+        },
+        "poll-inbound-email": {
+            "task": "poll_inbound_email",
+            "schedule": 180.0,  # every 3 min — fetch email replies into the inbox
         },
     },
 )

@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     SMTP_APP_PASSWORD: str = ""      # legacy name, kept as a fallback
     SMTP_FROM: str = ""              # from address (defaults to SMTP_USER)
     SMTP_FROM_NAME: str = "Qualifay"
+    # IMAP — for receiving replies. Defaults to the Hostinger mailbox matching SMTP.
+    IMAP_HOST: str = "imap.hostinger.com"
+    IMAP_PORT: int = 993
+    IMAP_POLL_ENABLED: bool = True
     RESEND_API_KEY: str = ""
 
     # Payments

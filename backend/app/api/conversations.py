@@ -30,10 +30,15 @@ class AssignRequest(BaseModel):
 
 
 def _conv_dict(c: Conversation, lead_stage: Optional[str] = None) -> dict:
-    # Derive phone from JID (format: 201234567890@s.whatsapp.net)
-    contact_phone = c.wa_jid.split("@")[0] if c.wa_jid else ""
-    if contact_phone and not contact_phone.startswith("+"):
-        contact_phone = "+" + contact_phone
+    channel = getattr(c, "channel", None) or "whatsapp"
+    if channel == "email":
+        # For email, wa_jid holds the address — show it as the contact identifier.
+        contact_phone = c.wa_jid or ""
+    else:
+        # Derive phone from JID (format: 201234567890@s.whatsapp.net)
+        contact_phone = c.wa_jid.split("@")[0] if c.wa_jid else ""
+        if contact_phone and not contact_phone.startswith("+"):
+            contact_phone = "+" + contact_phone
     # last_message_at = updated_at when last_message is set
     last_msg_at = c.updated_at or c.created_at
     return {
@@ -41,6 +46,7 @@ def _conv_dict(c: Conversation, lead_stage: Optional[str] = None) -> dict:
         "tenant_id": c.tenant_id,
         "lead_id": c.lead_id,
         "stage": lead_stage,
+        "channel": channel,
         "wa_instance_id": c.wa_instance_id,
         "instance_name": c.instance_name,
         "wa_jid": c.wa_jid,
@@ -465,18 +471,33 @@ async def send_message(
 
     from app.models.models import Message, MessageDirection
 
-    evo = EvolutionService()
-    try:
-        await evo.send_text(conv.instance_name, conv.wa_jid, body.content)
-    except Exception as e:
-        logger.error(f"send_message evo error: {e}")
-        raise HTTPException(status_code=502, detail=f"WhatsApp send failed: {e}")
+    channel = getattr(conv, "channel", None) or "whatsapp"
+    if channel == "email":
+        # Reply by email — wa_jid holds the address.
+        from app.services.email_service import email_service
+        if not email_service.is_configured():
+            raise HTTPException(status_code=502, detail="SMTP not configured")
+        subject = f"رد: {(conv.contact_name or conv.wa_jid)}"
+        try:
+            await email_service.send(conv.wa_jid, subject, body.content)
+        except Exception as e:
+            logger.error(f"send_message email error: {e}")
+            raise HTTPException(status_code=502, detail=f"Email send failed: {e}")
+        msg_type = "email"
+    else:
+        evo = EvolutionService()
+        try:
+            await evo.send_text(conv.instance_name, conv.wa_jid, body.content)
+        except Exception as e:
+            logger.error(f"send_message evo error: {e}")
+            raise HTTPException(status_code=502, detail=f"WhatsApp send failed: {e}")
+        msg_type = "text"
 
     new_msg = Message(
         conversation_id=conv.id,
         direction=MessageDirection.outbound,
         content=body.content,
-        message_type="text",
+        message_type=msg_type,
     )
     db.add(new_msg)
     conv.last_message = body.content
