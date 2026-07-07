@@ -134,11 +134,19 @@ async def poll_inbound_email() -> dict:
     from sqlalchemy import select, and_
 
     threaded = 0
+    bounced = 0
     async with AsyncSessionLocal() as db:
         for m in messages:
             addr = m["from_addr"]
             if not addr:
                 continue
+
+            # Bounce / delivery-failure notice? Suppress the dead address and count it,
+            # so the warmup cap pauses sending if bounces spike.
+            if _is_bounce(addr, m["subject"]):
+                bounced += await _handle_bounce(db, m)
+                continue
+
             # Match to a lead by email (most recent wins if several tenants share it).
             lead = (await db.execute(
                 select(Lead).where(Lead.email.ilike(addr)).order_by(Lead.created_at.desc())
@@ -184,5 +192,48 @@ async def poll_inbound_email() -> dict:
             threaded += 1
         await db.commit()
 
-    logger.info(f"poll_inbound_email: {len(messages)} fetched, {threaded} threaded")
-    return {"polled": len(messages), "threaded": threaded}
+    logger.info(f"poll_inbound_email: {len(messages)} fetched, {threaded} threaded, {bounced} bounced")
+    return {"polled": len(messages), "threaded": threaded, "bounced": bounced}
+
+
+_BOUNCE_SENDERS = ("mailer-daemon", "postmaster", "mail delivery")
+_BOUNCE_SUBJECT = re.compile(
+    r"delivery status|undeliver|delivery has failed|returned mail|mail delivery failed|failure notice",
+    re.I,
+)
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+
+
+def _is_bounce(from_addr: str, subject: str) -> bool:
+    fa = (from_addr or "").lower()
+    if any(s in fa for s in _BOUNCE_SENDERS):
+        return True
+    return bool(_BOUNCE_SUBJECT.search(subject or ""))
+
+
+async def _handle_bounce(db, m: dict) -> int:
+    """Find the failed recipient in the bounce body, suppress it on the matching lead,
+    and record the bounce against that lead's tenant. Returns 1 if handled, else 0."""
+    from app.models.models import Lead
+    from app.services.warmup_service import warmup_service
+    from sqlalchemy import select
+
+    # Candidate addresses in the bounce body, minus the bounce-sender itself.
+    addrs = [a.lower() for a in _EMAIL_RE.findall(m.get("body", ""))]
+    addrs = [a for a in addrs if not any(s in a for s in _BOUNCE_SENDERS)]
+    if not addrs:
+        return 0
+
+    handled = 0
+    for a in dict.fromkeys(addrs):  # de-dupe, keep order
+        leads = (await db.execute(
+            select(Lead).where(Lead.email.ilike(a))
+        )).scalars().all()
+        for lead in leads:
+            lead.raw_data = {**(lead.raw_data or {}), "bounced_email": lead.email}
+            lead.email = None  # stop re-emailing a dead address (kept in raw_data)
+            await warmup_service.record_email_bounce(str(lead.tenant_id))
+            handled = 1
+    if handled:
+        await db.commit()
+    return handled

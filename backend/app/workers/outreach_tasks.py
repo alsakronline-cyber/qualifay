@@ -220,18 +220,12 @@ async def _send_email_outreach(db, lead):
         logger.warning(f"Email outreach blocked by consent for lead {lead.id}")
         return {"error": "consent_non_compliant"}
 
-    # Conservative per-tenant daily email cap (deliverability / anti-spam).
-    r = None
-    cap_key = f"qualifay:email_sent:{lead.tenant_id}:{date.today().isoformat()}"
-    try:
-        from app.core.redis import get_redis
-        r = await get_redis()
-        used = int(await r.get(cap_key) or 0)
-        if used >= (settings.EMAIL_DAILY_CAP_DEFAULT or 50):
-            logger.info(f"Email daily cap reached for tenant {lead.tenant_id}")
-            raise process_approved_lead.retry(countdown=86400)
-    except Exception:
-        r = None  # Redis optional — never block a send on the counter
+    # Ramped, bounce-aware daily cap (warmup schedule + bounce pause).
+    from app.services.warmup_service import warmup_service
+    allowed, used, cap = await warmup_service.check_email_limit(lead.tenant_id, db)
+    if not allowed:
+        logger.info(f"Email cap/pause hit for tenant {lead.tenant_id} ({used}/{cap})")
+        raise process_approved_lead.retry(countdown=86400)
 
     # AIDA copy (reused from the WhatsApp path), translated to Arabic if needed.
     body = await ai_service.write_aida_message({
@@ -254,12 +248,9 @@ async def _send_email_outreach(db, lead):
     lead.updated_at = datetime.utcnow()
     await db.commit()
 
-    if r is not None:
-        try:
-            await r.incr(cap_key)
-            await r.expire(cap_key, 172800)
-        except Exception:
-            pass
+    # Count the send + anchor the warmup ramp on the tenant's first email.
+    await warmup_service.increment_email_sent(lead.tenant_id)
+    await warmup_service.mark_email_started(lead.tenant_id, db)
 
     try:
         from app.services.activity_service import log_activity

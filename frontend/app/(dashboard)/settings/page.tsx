@@ -266,6 +266,17 @@ function EmailPanel() {
         <Row label="الاسم الظاهر" value={data?.from_name} />
         <Row label="خادم الإرسال (SMTP)" value={data ? `${data.smtp_host}:${data.smtp_port}` : undefined} />
         <Row label="استقبال الردود (IMAP)" value={data ? (data.imap_poll_enabled ? `${data.imap_host} · مفعّل` : 'متوقف') : undefined} />
+        {data?.warmup && (
+          <Row
+            label="التسخين اليومي"
+            value={
+              <span dir="rtl">
+                اليوم {data.warmup.day} · {data.warmup.sent_today}/{data.warmup.daily_cap}
+                {!data.warmup.sending_allowed && <span className="text-amber-400 mr-1">· متوقف</span>}
+              </span>
+            }
+          />
+        )}
       </div>
 
       <div className="pt-2 border-t border-gray-800">

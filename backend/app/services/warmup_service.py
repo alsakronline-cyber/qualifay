@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 # Warmup schedule: (day_threshold, daily_cap)
 WARMUP_SCHEDULE = [(7, 10), (14, 30), (21, 75), (30, 150), (999, 200)]
 
+# Email ramps more gently than WhatsApp — cold email reputation is fragile.
+EMAIL_WARMUP_SCHEDULE = [(7, 20), (14, 40), (21, 75), (30, 150), (999, 250)]
+
 
 def get_cap_for_day(day: int) -> int:
     """Return the daily WA message cap for a given day_of_life."""
@@ -19,6 +22,14 @@ def get_cap_for_day(day: int) -> int:
         if day <= threshold:
             return cap
     return 200
+
+
+def email_cap_for_day(day: int) -> int:
+    """Return the daily email cap for a given email day_of_life."""
+    for threshold, cap in EMAIL_WARMUP_SCHEDULE:
+        if day <= threshold:
+            return cap
+    return 250
 
 
 class WarmupService:
@@ -78,28 +89,65 @@ class WarmupService:
             instance.sent_today_wa = (instance.sent_today_wa or 0) + 1
             await db.commit()
 
+    async def email_day_of_life(self, tenant_id: str, db: AsyncSession) -> int:
+        """Days since this tenant first sent email (1 on the first day)."""
+        from app.models.models import Tenant
+        t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+        started = getattr(t, "email_started_at", None) if t else None
+        if not started:
+            return 1
+        return (date.today() - started.date()).days + 1
+
+    async def mark_email_started(self, tenant_id: str, db: AsyncSession) -> None:
+        """Stamp email_started_at on the tenant's first-ever send (anchors the ramp)."""
+        from app.models.models import Tenant
+        t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+        if t and not getattr(t, "email_started_at", None):
+            t.email_started_at = datetime.utcnow()
+            await db.commit()
+
     async def check_email_limit(self, tenant_id: str, db: AsyncSession) -> Tuple[bool, int, int]:
-        """
-        Check email daily limit using Redis counter.
-        Returns (allowed, used, cap).
-        """
+        """Ramped, bounce-aware email daily limit. Returns (allowed, used, cap).
+
+        The cap ramps with the tenant's email day_of_life, and sending is paused for the
+        day once bounces exceed the threshold (bad addresses / reputation trouble)."""
         from app.core.config import settings
         import redis.asyncio as aioredis
 
-        cap = settings.EMAIL_DAILY_CAP_DEFAULT
+        day = await self.email_day_of_life(tenant_id, db)
+        cap = email_cap_for_day(day)
         today_str = date.today().isoformat()
-        redis_key = f"{settings.REDIS_KEY_PREFIX}email_daily:{tenant_id}:{today_str}"
+        used_key = f"{settings.REDIS_KEY_PREFIX}email_daily:{tenant_id}:{today_str}"
+        bounce_key = f"{settings.REDIS_KEY_PREFIX}email_bounces:{tenant_id}:{today_str}"
 
         try:
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-            used_raw = await r.get(redis_key)
-            used = int(used_raw) if used_raw else 0
+            used = int(await r.get(used_key) or 0)
+            bounces = int(await r.get(bounce_key) or 0)
             await r.aclose()
-            allowed = used < cap
-            return allowed, used, cap
+            if bounces >= (settings.EMAIL_BOUNCE_PAUSE_THRESHOLD or 10):
+                logger.warning(f"Email paused for tenant {tenant_id}: {bounces} bounces today")
+                return False, used, cap
+            return used < cap, used, cap
         except Exception as e:
             logger.warning(f"Redis email limit check failed for tenant {tenant_id}: {e}")
             return True, 0, cap
+
+    async def record_email_bounce(self, tenant_id: str) -> int:
+        """Increment today's bounce counter for a tenant; returns the new total."""
+        from app.core.config import settings
+        import redis.asyncio as aioredis
+        today_str = date.today().isoformat()
+        key = f"{settings.REDIS_KEY_PREFIX}email_bounces:{tenant_id}:{today_str}"
+        try:
+            r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            n = await r.incr(key)
+            await r.expire(key, 86400 * 2)
+            await r.aclose()
+            return int(n)
+        except Exception as e:
+            logger.warning(f"Redis bounce increment failed for tenant {tenant_id}: {e}")
+            return 0
 
     async def increment_email_sent(self, tenant_id: str) -> None:
         """Increment email daily counter in Redis."""

@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     IMAP_HOST: str = "imap.hostinger.com"
     IMAP_PORT: int = 993
     IMAP_POLL_ENABLED: bool = True
+    # Pause a tenant's email sending for the day once this many bounces are seen — a
+    # spike means bad addresses / reputation trouble, so stop before it gets worse.
+    EMAIL_BOUNCE_PAUSE_THRESHOLD: int = 10
     RESEND_API_KEY: str = ""
 
     # Payments

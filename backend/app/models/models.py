@@ -106,6 +106,8 @@ class Tenant(Base):
     auto_approve = Column(Boolean, default=False)
     min_bant_score = Column(Integer, default=50)
     contribute_to_pool = Column(Boolean, default=True)
+    # When this tenant first sent an outreach email — anchors the email warmup ramp.
+    email_started_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
