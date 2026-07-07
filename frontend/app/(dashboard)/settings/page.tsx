@@ -4,8 +4,8 @@ import { useState, useCallback } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Save, Copy, RefreshCw, Trash2, Bot } from 'lucide-react'
-import { authApi, agentApi } from '@/lib/api'
+import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send } from 'lucide-react'
+import { authApi, agentApi, emailApi } from '@/lib/api'
 import type { AuthUser } from '@/lib/types'
 
 interface AgentTask {
@@ -223,6 +223,68 @@ function AutomationPanel() {
   )
 }
 
+function EmailPanel() {
+  const { data } = useSWR('email/status', () => emailApi.status().then((r) => r.data))
+  const [testing, setTesting] = useState(false)
+
+  const sendTest = useCallback(async () => {
+    setTesting(true)
+    try {
+      const r = await emailApi.sendTest()
+      toast.success(`تم إرسال رسالة اختبار إلى ${r.data?.to || 'بريدك'}`)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      toast.error(err?.response?.data?.detail || 'فشل إرسال رسالة الاختبار')
+    } finally {
+      setTesting(false)
+    }
+  }, [])
+
+  const configured = data?.configured
+  const Row = ({ label, value }: { label: string; value?: React.ReactNode }) => (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-400 font-cairo">{label}</span>
+      <span className="text-gray-200" dir="ltr">{value ?? '—'}</span>
+    </div>
+  )
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Mail size={18} className="text-purple-400" />
+        <h2 className="text-base font-semibold text-white font-cairo">نظام البريد الإلكتروني</h2>
+        <span className={clsx(
+          'text-[11px] px-2 py-0.5 rounded-full font-cairo border',
+          configured ? 'text-green-400 bg-green-500/10 border-green-500/30' : 'text-red-400 bg-red-500/10 border-red-500/30'
+        )}>
+          {configured ? 'مفعّل' : 'غير مُهيّأ'}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <Row label="عنوان الإرسال" value={data?.from_address} />
+        <Row label="الاسم الظاهر" value={data?.from_name} />
+        <Row label="خادم الإرسال (SMTP)" value={data ? `${data.smtp_host}:${data.smtp_port}` : undefined} />
+        <Row label="استقبال الردود (IMAP)" value={data ? (data.imap_poll_enabled ? `${data.imap_host} · مفعّل` : 'متوقف') : undefined} />
+      </div>
+
+      <div className="pt-2 border-t border-gray-800">
+        <button
+          onClick={sendTest}
+          disabled={testing || !configured}
+          className="flex items-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm px-4 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
+        >
+          {testing ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+          إرسال رسالة اختبار لنفسك
+        </button>
+        <p className="text-xs text-gray-600 font-cairo mt-2">
+          الإعدادات حالياً على مستوى النظام. إدارة حسابات بريد متعددة قادمة قريباً.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const { data: user } = useSWR<AuthUser>(
     'auth/me',
@@ -302,6 +364,8 @@ export default function SettingsPage() {
           ترقية الخطة ←
         </a>
       </div>
+
+      <EmailPanel />
 
       <AutomationPanel />
     </div>

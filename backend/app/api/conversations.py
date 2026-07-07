@@ -68,6 +68,7 @@ def _conv_dict(c: Conversation, lead_stage: Optional[str] = None) -> dict:
 async def list_conversations(
     status: Optional[str] = None,
     instance_name: Optional[str] = None,
+    channel: Optional[str] = None,
     ai_enabled: Optional[bool] = None,
     search: Optional[str] = None,
     lead_id: Optional[str] = None,
@@ -85,6 +86,9 @@ async def list_conversations(
             filters.append(Conversation.status == ConversationStatus(status))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    if channel in ("whatsapp", "email"):
+        filters.append(Conversation.channel == channel)
 
     if instance_name:
         filters.append(Conversation.instance_name == instance_name)

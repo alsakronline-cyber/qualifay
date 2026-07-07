@@ -114,6 +114,8 @@ export default function InboxPage() {
   const [syncingPipeline, setSyncingPipeline] = useState(false)
   // Which WhatsApp instance to show. '' = all instances (default).
   const [instanceFilter, setInstanceFilter] = useState<string>('')
+  // Channel filter: '' = all, 'whatsapp', or 'email'.
+  const [channelFilter, setChannelFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [uploadingMedia, setUploadingMedia] = useState(false)
   const [recording, setRecording] = useState(false)
@@ -145,9 +147,10 @@ export default function InboxPage() {
   // refetches; an empty filter lists chats from every instance (the backend returns
   // all of them unless instance_name is passed).
   const { data: convData, mutate: mutateConvs } = useSWR(
-    ['conversations', instanceFilter, search],
+    ['conversations', instanceFilter, channelFilter, search],
     () => conversationsApi.list({
       ...(instanceFilter ? { instance_name: instanceFilter } : {}),
+      ...(channelFilter ? { channel: channelFilter } : {}),
       ...(search.trim() ? { search: search.trim() } : {}),
     }).then((r) => r.data),
     { refreshInterval: 5000 }
@@ -402,6 +405,25 @@ export default function InboxPage() {
               {syncingPipeline ? <Loader2 size={12} className="animate-spin" /> : <KanbanSquare size={12} />}
               مزامنة للأنابيب
             </button>
+          </div>
+          {/* Channel filter — الكل / واتساب / بريد */}
+          <div className="mt-2 flex gap-1 bg-gray-800 border border-gray-700 rounded-lg p-0.5">
+            {([
+              { key: '', label: 'الكل' },
+              { key: 'whatsapp', label: 'واتساب' },
+              { key: 'email', label: 'بريد' },
+            ] as { key: string; label: string }[]).map((c) => (
+              <button
+                key={c.key}
+                onClick={() => setChannelFilter(c.key)}
+                className={clsx(
+                  'flex-1 text-[11px] py-1 rounded-md font-cairo transition-colors',
+                  channelFilter === c.key ? 'bg-gold-primary text-gray-950 font-semibold' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                {c.label}
+              </button>
+            ))}
           </div>
           {/* Search by number or contact name. */}
           <div className="relative mt-2">

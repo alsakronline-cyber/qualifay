@@ -135,7 +135,7 @@ export const instancesApi = {
 
 // ── Conversations ─────────────────────────────────────────────────────────────
 export const conversationsApi = {
-  list: (params?: { page?: number; per_page?: number; instance_name?: string; search?: string; lead_id?: string }) =>
+  list: (params?: { page?: number; per_page?: number; instance_name?: string; channel?: string; search?: string; lead_id?: string }) =>
     API.get('/v1/conversations', { params }),
 
   get: (id: string) => API.get(`/v1/conversations/${id}`),
@@ -279,6 +279,12 @@ export const agentApi = {
     interval_minutes?: number
   }) => API.post('/v1/agent/tasks', body),
   deleteTask: (id: string) => API.delete(`/v1/agent/tasks/${id}`),
+}
+
+// ── Email system ──────────────────────────────────────────────────────────────
+export const emailApi = {
+  status: () => API.get('/v1/email/status'),
+  sendTest: (to?: string) => API.post('/v1/email/test', { to: to || null }),
 }
 
 export default API
