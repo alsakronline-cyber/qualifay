@@ -329,6 +329,7 @@ async def approve_lead(
 
 class BulkApproveRequest(BaseModel):
     ids: List[str]
+    template_id: Optional[str] = None   # use this template instead of AI-written copy
 
 
 @router.post("/bulk-approve")
@@ -354,7 +355,7 @@ async def bulk_approve_leads(
     await db.commit()
 
     for lead in leads:
-        process_approved_lead.apply_async(args=[lead.id], queue="outreach")
+        process_approved_lead.apply_async(args=[lead.id, body.template_id], queue="outreach")
 
     return {"approved": len(leads), "queued": len(leads)}
 

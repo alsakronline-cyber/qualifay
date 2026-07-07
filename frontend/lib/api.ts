@@ -80,8 +80,8 @@ export const leadsApi = {
   takeManually: (id: string) =>
     API.post(`/v1/leads/${id}/take-manually`),
 
-  bulkApprove: (ids: string[]) =>
-    API.post('/v1/leads/bulk-approve', { ids }),
+  bulkApprove: (ids: string[], templateId?: string) =>
+    API.post('/v1/leads/bulk-approve', { ids, template_id: templateId || null }),
 
   checkReachability: (ids?: string[]) =>
     API.post('/v1/leads/check-reachability', { ids: ids || null }),

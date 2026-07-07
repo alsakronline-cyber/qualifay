@@ -26,25 +26,27 @@ def run_async(coro):
 
 
 @celery_app.task(bind=True, max_retries=2, queue="outreach")
-def process_approved_lead(self, lead_id: str):
-    """
-    Send initial outreach message to an approved lead:
-    1. Check consent compliance
-    2. Check WA daily limit
-    3. Write AIDA message (AI)
-    4. Translate if Arabic
-    5. Send via Evolution API
-    6. Increment daily count
-    7. Update lead stage and conversation
-    """
+def process_approved_lead(self, lead_id: str, template_id: str = None):
+    """Send initial outreach to an approved lead. If template_id is given, the message
+    is the rendered template ({{vars}} filled from the lead); otherwise AI writes AIDA copy."""
     try:
-        return run_async(_process_approved_lead(lead_id))
+        return run_async(_process_approved_lead(lead_id, template_id))
     except Exception as exc:
         logger.error(f"process_approved_lead failed for {lead_id}: {exc}")
         raise self.retry(exc=exc, countdown=60)
 
 
-async def _process_approved_lead(lead_id: str):
+async def _load_template(db, tenant_id, template_id):
+    if not template_id:
+        return None
+    from app.models.models import MessageTemplate
+    from sqlalchemy import select, and_
+    return (await db.execute(select(MessageTemplate).where(and_(
+        MessageTemplate.id == template_id, MessageTemplate.tenant_id == tenant_id
+    )))).scalar_one_or_none()
+
+
+async def _process_approved_lead(lead_id: str, template_id: str = None):
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
         Lead, WaInstance, Conversation, Message,
@@ -69,11 +71,13 @@ async def _process_approved_lead(lead_id: str):
             logger.info(f"Outreach blocked for lead {lead_id}: status={lead.status.value}")
             return {"skipped": True, "reason": f"lead_status_{lead.status.value}"}
 
+        template = await _load_template(db, lead.tenant_id, template_id)
+
         # Channel selection: WhatsApp when there's a phone, else fall back to email
         # (many LinkedIn leads are email-only), else there's no way to reach them.
         if not lead.phone:
             if lead.email:
-                return await _send_email_outreach(db, lead)
+                return await _send_email_outreach(db, lead, template)
             logger.warning(f"Lead {lead_id} has no phone or email")
             return {"error": "no_contact"}
 
@@ -126,18 +130,18 @@ async def _process_approved_lead(lead_id: str):
             # Retry tomorrow
             raise process_approved_lead.retry(countdown=86400)
 
-        # Step 3: Write AIDA message
-        lead_for_msg = {
-            "name": lead.name,
-            "company": lead.company,
-            "industry": lead.industry,
-            "city": lead.city,
-            "language": lead.language,
-        }
-        message_text = await ai_service.write_aida_message(lead_for_msg)
+        # Step 3: Message — rendered template if chosen, else AI AIDA copy.
+        if template:
+            from app.services.template_render import render_for_lead
+            message_text = render_for_lead(template.body, lead)
+        else:
+            message_text = await ai_service.write_aida_message({
+                "name": lead.name, "company": lead.company, "industry": lead.industry,
+                "city": lead.city, "language": lead.language,
+            })
 
-        # Step 4: Translate if Arabic
-        if lead.language == "ar" and message_text:
+        # Step 4: Translate if Arabic (templates are already authored in the target language).
+        if not template and lead.language == "ar" and message_text:
             # Check if already Arabic
             arabic_chars = sum(1 for c in message_text if "؀" <= c <= "ۿ")
             if arabic_chars < len(message_text) * 0.3:
@@ -195,7 +199,7 @@ async def _process_approved_lead(lead_id: str):
         return {"sent": True, "lead_id": lead_id, "conversation_id": conv.id}
 
 
-async def _send_email_outreach(db, lead):
+async def _send_email_outreach(db, lead, template=None):
     """Email outreach for a lead with no WhatsApp number. Same consent + AIDA copy as
     WhatsApp, capped per-tenant per-day to protect sender reputation."""
     from datetime import date, datetime
@@ -231,16 +235,22 @@ async def _send_email_outreach(db, lead):
             logger.info(f"Email cap/pause hit for tenant {lead.tenant_id} ({used}/{cap})")
             raise process_approved_lead.retry(countdown=86400)
 
-    # AIDA copy (reused from the WhatsApp path), translated to Arabic if needed.
-    body = await ai_service.write_aida_message({
-        "name": lead.name, "company": lead.company, "industry": lead.industry,
-        "city": lead.city, "language": lead.language,
-    })
-    if lead.language == "ar" and body:
-        arabic = sum(1 for c in body if "؀" <= c <= "ۿ")
-        if arabic < len(body) * 0.3:
-            body = await ai_service.translate_arabic(body, direction="en_to_ar")
-    subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
+    # Rendered template if chosen, else AI AIDA copy.
+    if template:
+        from app.services.template_render import render_for_lead
+        body = render_for_lead(template.body, lead)
+        subject = render_for_lead(template.subject or "", lead) or (
+            "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}")
+    else:
+        body = await ai_service.write_aida_message({
+            "name": lead.name, "company": lead.company, "industry": lead.industry,
+            "city": lead.city, "language": lead.language,
+        })
+        if lead.language == "ar" and body:
+            arabic = sum(1 for c in body if "؀" <= c <= "ۿ")
+            if arabic < len(body) * 0.3:
+                body = await ai_service.translate_arabic(body, direction="en_to_ar")
+        subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
 
     try:
         if account:

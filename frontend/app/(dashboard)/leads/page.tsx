@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import Link from 'next/link'
 import { Search, RefreshCw, CheckCheck, Filter } from 'lucide-react'
-import { leadsApi } from '@/lib/api'
+import { leadsApi, templatesApi } from '@/lib/api'
 import type { Lead, LeadStage, LeadSource } from '@/lib/types'
 import LeadReviewCard from '@/components/LeadReviewCard'
 
@@ -63,6 +63,9 @@ function LeadsContent() {
   const [minScore, setMinScore] = useState<string>('')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [outreachTemplate, setOutreachTemplate] = useState<string>('')
+  const { data: tplData } = useSWR('templates', () => templatesApi.list().then((r) => r.data))
+  const templates: { id: string; name: string }[] = Array.isArray(tplData) ? tplData : []
 
   const allLeadsKey = tab === 'all' ? ['leads/all', search, stageFilter, sourceFilter, minScore, page] : null
   const { data: allData, isLoading: allLoading, mutate: mutateAll } = useSWR(
@@ -139,11 +142,11 @@ function LeadsContent() {
     const ids = Array.from(selectedIds)
     if (!ids.length) return
     try {
-      await leadsApi.bulkApprove(ids)
+      await leadsApi.bulkApprove(ids, outreachTemplate || undefined)
       toast.success(`تم قبول ${ids.length} عميل وبدء التواصل`)
       setSelectedIds(new Set())
     } catch { toast.error('فشل القبول الجماعي') }
-  }, [selectedIds])
+  }, [selectedIds, outreachTemplate])
 
   const [enriching, setEnriching] = useState(false)
   const handleEnrichLinkedIn = useCallback(async () => {
@@ -349,6 +352,17 @@ function LeadsContent() {
                 >
                   فحص واتساب
                 </button>
+                <select
+                  value={outreachTemplate}
+                  onChange={(e) => setOutreachTemplate(e.target.value)}
+                  title="اختر قالباً أو اترك للذكاء الاصطناعي"
+                  className="text-xs bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-200 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
+                >
+                  <option value="">✨ ذكاء اصطناعي</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
                 <button
                   onClick={handleBulkApproveSelected}
                   className="flex items-center gap-1.5 bg-green-500/15 hover:bg-green-500/25 text-green-400 border border-green-500/30 text-sm px-3 py-1.5 rounded-lg transition-colors font-cairo font-semibold"

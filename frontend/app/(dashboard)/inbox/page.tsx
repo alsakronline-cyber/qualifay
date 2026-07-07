@@ -7,7 +7,7 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
 import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic, UserRound, Pencil, Check } from 'lucide-react'
-import { conversationsApi, waSyncApi, instancesApi, templatesApi } from '@/lib/api'
+import { conversationsApi, waSyncApi, instancesApi, templatesApi, leadsApi } from '@/lib/api'
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
 import { renderTemplate } from '@/lib/templates'
@@ -179,6 +179,12 @@ export default function InboxPage() {
   )
   const selectedConv = conversations.find((c) => c.id === selectedId) || selectedConvData
 
+  // The selected chat's lead — so templates can fill {{company}}/{{industry}}/{{city}}.
+  const { data: selectedLead } = useSWR(
+    selectedConv?.lead_id ? `lead/${selectedConv.lead_id}` : null,
+    () => leadsApi.getOne(selectedConv!.lead_id!).then((r) => r.data)
+  )
+
   // Deep link from the lead profile: /inbox?lead=<id> or /inbox?conversation=<id>.
   // Read from window (client-only effect) to avoid the useSearchParams Suspense rule.
   useEffect(() => {
@@ -270,11 +276,15 @@ export default function InboxPage() {
   }, [selectedId, selectedConv, router])
 
   const insertTemplate = useCallback((body: string) => {
-    // Only the contact name is known in the inbox; other {{vars}} render empty and can
-    // be filled by hand before sending.
-    setMsgInput(renderTemplate(body, { name: selectedConv?.contact_name || '' }))
+    // Fill every {{var}} from the chat's lead (falls back to the contact name).
+    setMsgInput(renderTemplate(body, {
+      name: selectedLead?.name || selectedConv?.contact_name || '',
+      company: selectedLead?.company || '',
+      industry: selectedLead?.industry || '',
+      city: selectedLead?.city || '',
+    }))
     setShowTemplates(false)
-  }, [selectedConv])
+  }, [selectedConv, selectedLead])
 
   const startRename = useCallback(() => {
     setNameInput(selectedConv?.contact_name || '')
@@ -795,7 +805,7 @@ export default function InboxPage() {
                         <button key={t.id} onClick={() => insertTemplate(t.body)}
                           className="w-full text-right px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors">
                           <div className="text-sm text-white font-cairo truncate">{t.name}</div>
-                          <div className="text-[11px] text-gray-500 font-cairo truncate">{renderTemplate(t.body, { name: selectedConv?.contact_name || '' })}</div>
+                          <div className="text-[11px] text-gray-500 font-cairo truncate">{renderTemplate(t.body, { name: selectedLead?.name || selectedConv?.contact_name || '', company: selectedLead?.company || '', industry: selectedLead?.industry || '', city: selectedLead?.city || '' })}</div>
                         </button>
                       ))}
                   </div>
