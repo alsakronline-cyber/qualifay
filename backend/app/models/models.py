@@ -256,6 +256,26 @@ class WaInstance(Base):
     campaigns = relationship("Campaign", back_populates="wa_instance")
 
 
+# ─── Message Template ─────────────────────────────────────────
+
+class MessageTemplate(Base):
+    """Reusable message template for WhatsApp/email outreach and replies. Body may use
+    {{name}} {{company}} {{industry}} {{city}} placeholders, filled from the lead."""
+    __tablename__ = "message_templates"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    channel = Column(String, default="both")      # email | whatsapp | both
+    category = Column(String, nullable=True)       # e.g. outreach | follow_up | meeting
+    subject = Column(String, nullable=True)        # email only
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    tenant = relationship("Tenant")
+
+
 # ─── Email Account ────────────────────────────────────────────
 
 class EmailAccount(Base):

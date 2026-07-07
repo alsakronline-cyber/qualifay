@@ -7,9 +7,10 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
 import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic, UserRound, Pencil, Check } from 'lucide-react'
-import { conversationsApi, waSyncApi, instancesApi } from '@/lib/api'
+import { conversationsApi, waSyncApi, instancesApi, templatesApi } from '@/lib/api'
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
+import { renderTemplate } from '@/lib/templates'
 
 function MediaBubble({ conversationId, message }: { conversationId: string; message: Message }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -143,6 +144,11 @@ export default function InboxPage() {
   const { data: instData } = useSWR('wa-instances', () => instancesApi.list().then((r) => r.data))
   const instances: WaInstance[] = Array.isArray(instData) ? instData : (instData?.items || instData?.instances || [])
 
+  // Templates for the quick-insert picker in the reply box.
+  const { data: tplData } = useSWR('templates', () => templatesApi.list().then((r) => r.data))
+  const templates: { id: string; name: string; channel: string; body: string }[] = Array.isArray(tplData) ? tplData : []
+  const [showTemplates, setShowTemplates] = useState(false)
+
   // Conversations list. The instance filter is part of the SWR key so switching it
   // refetches; an empty filter lists chats from every instance (the backend returns
   // all of them unless instance_name is passed).
@@ -262,6 +268,13 @@ export default function InboxPage() {
       setOpeningLead(false)
     }
   }, [selectedId, selectedConv, router])
+
+  const insertTemplate = useCallback((body: string) => {
+    // Only the contact name is known in the inbox; other {{vars}} render empty and can
+    // be filled by hand before sending.
+    setMsgInput(renderTemplate(body, { name: selectedConv?.contact_name || '' }))
+    setShowTemplates(false)
+  }, [selectedConv])
 
   const startRename = useCallback(() => {
     setNameInput(selectedConv?.contact_name || '')
@@ -761,7 +774,33 @@ export default function InboxPage() {
               </button>
             </div>
           ) : (
-            <div className="px-4 py-3 border-t border-gray-800 flex gap-2 items-center">
+            <div className="px-4 py-3 border-t border-gray-800 flex gap-2 items-center relative">
+              {/* Template quick-insert */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setShowTemplates((s) => !s)}
+                  title="إدراج قالب"
+                  className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 hover:text-gold-primary flex items-center justify-center transition-colors"
+                >
+                  <FileText size={16} />
+                </button>
+                {showTemplates && (
+                  <div className="absolute bottom-12 right-0 w-64 max-h-72 overflow-y-auto bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-20 p-1">
+                    {templates.filter((t) => t.channel === 'both' || t.channel === (selectedIsEmail ? 'email' : 'whatsapp')).length === 0 && (
+                      <p className="text-xs text-gray-500 font-cairo p-3 text-center">لا توجد قوالب لهذه القناة</p>
+                    )}
+                    {templates
+                      .filter((t) => t.channel === 'both' || t.channel === (selectedIsEmail ? 'email' : 'whatsapp'))
+                      .map((t) => (
+                        <button key={t.id} onClick={() => insertTemplate(t.body)}
+                          className="w-full text-right px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors">
+                          <div className="text-sm text-white font-cairo truncate">{t.name}</div>
+                          <div className="text-[11px] text-gray-500 font-cairo truncate">{renderTemplate(t.body, { name: selectedConv?.contact_name || '' })}</div>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
               {/* Attachments/voice are WhatsApp-only for now. */}
               {!selectedIsEmail && <>
                 <input type="file" ref={fileInputRef} onChange={handleAttachFile} className="hidden" />

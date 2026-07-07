@@ -297,4 +297,14 @@ export const emailApi = {
   testAccount: (id: string, to?: string) => API.post(`/v1/email/accounts/${id}/test`, { to: to || null }),
 }
 
+// ── Message Templates ─────────────────────────────────────────────────────────
+export const templatesApi = {
+  list: () => API.get('/v1/templates'),
+  create: (body: { name: string; channel: string; category?: string; subject?: string; body: string }) =>
+    API.post('/v1/templates', body),
+  update: (id: string, body: { name: string; channel: string; category?: string; subject?: string; body: string }) =>
+    API.patch(`/v1/templates/${id}`, body),
+  remove: (id: string) => API.delete(`/v1/templates/${id}`),
+}
+
 export default API
