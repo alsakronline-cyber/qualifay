@@ -201,6 +201,7 @@ export const aiApi = {
 export const dashboardApi = {
   stats: () => API.get('/v1/dashboard/stats'),
   activity: () => API.get('/v1/dashboard/activity'),
+  analytics: () => API.get('/v1/dashboard/analytics'),
 }
 
 // ── Scrape ────────────────────────────────────────────────────────────────────

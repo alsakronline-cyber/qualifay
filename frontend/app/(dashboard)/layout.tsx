@@ -7,6 +7,7 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import {
   LayoutDashboard,
+  BarChart3,
   Users,
   MessageSquare,
   KanbanSquare,
@@ -38,6 +39,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/', label: 'الرئيسية', labelEn: 'Dashboard', icon: LayoutDashboard },
+  { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3 },
   { href: '/leads', label: 'العملاء المحتملون', labelEn: 'Leads', icon: Users },
   { href: '/inbox', label: 'صندوق الوارد', labelEn: 'Inbox', icon: MessageSquare },
   { href: '/pipeline', label: 'خط الأنابيب', labelEn: 'Pipeline', icon: KanbanSquare },

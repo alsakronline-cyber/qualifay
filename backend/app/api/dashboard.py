@@ -17,6 +17,84 @@ from app.api.auth import get_current_user
 router = APIRouter()
 
 
+@router.get("/analytics")
+async def get_analytics(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Funnel + per-channel reply rates + sequence stats — the feedback loop."""
+    tenant_id = current_user["tenant_id"]
+
+    # ── Funnel: active leads by stage ──
+    stage_rows = (await db.execute(
+        select(Lead.stage, func.count(Lead.id))
+        .where(and_(Lead.tenant_id == tenant_id, Lead.status == LeadStatus.active))
+        .group_by(Lead.stage)
+    )).all()
+    by_stage = {(s.value if s else "unknown"): n for s, n in stage_rows}
+
+    def stage_sum(*stages):
+        return sum(by_stage.get(s, 0) for s in stages)
+
+    funnel = {
+        "total": sum(by_stage.values()),
+        "new": stage_sum("new", "qualifying", "pending_review"),
+        "approved": stage_sum("approved"),
+        "contacted": stage_sum("outreach", "replied", "meeting", "proposal", "negotiation", "won", "lost"),
+        "replied": stage_sum("replied", "meeting", "proposal", "negotiation", "won"),
+        "booked": stage_sum("meeting", "proposal", "negotiation", "won"),
+        "won": stage_sum("won"),
+    }
+
+    # ── Per-channel: conversations + reply rate ──
+    channels = {}
+    for ch in ("whatsapp", "email"):
+        convs = (await db.execute(
+            select(func.count(Conversation.id)).where(and_(
+                Conversation.tenant_id == tenant_id, Conversation.channel == ch
+            ))
+        )).scalar() or 0
+        replied_convs = (await db.execute(
+            select(func.count(func.distinct(Message.conversation_id)))
+            .select_from(Message).join(Conversation, Message.conversation_id == Conversation.id)
+            .where(and_(
+                Conversation.tenant_id == tenant_id,
+                Conversation.channel == ch,
+                Message.direction == MessageDirection.inbound,
+            ))
+        )).scalar() or 0
+        channels[ch] = {
+            "conversations": convs,
+            "replied": replied_convs,
+            "reply_rate": round(replied_convs / convs * 100, 1) if convs else 0.0,
+        }
+
+    # ── Sequences by enrollment status ──
+    seq_stats = {}
+    try:
+        from app.models.models import SequenceEnrollment
+        rows = (await db.execute(
+            select(SequenceEnrollment.status, func.count(SequenceEnrollment.id))
+            .where(SequenceEnrollment.tenant_id == tenant_id)
+            .group_by(SequenceEnrollment.status)
+        )).all()
+        seq_stats = {s: n for s, n in rows}
+    except Exception:
+        seq_stats = {}
+
+    # ── Reachability ──
+    reach_rows = (await db.execute(
+        select(Lead.wa_reachable, func.count(Lead.id))
+        .where(Lead.tenant_id == tenant_id).group_by(Lead.wa_reachable)
+    )).all()
+    reach = {"on_whatsapp": 0, "not_on_whatsapp": 0, "unchecked": 0}
+    for val, n in reach_rows:
+        reach["on_whatsapp" if val is True else "not_on_whatsapp" if val is False else "unchecked"] += n
+
+    return {"funnel": funnel, "channels": channels, "sequences": seq_stats, "reachability": reach}
+
+
+
 @router.get("/stats")
 async def get_stats(
     current_user: dict = Depends(get_current_user),
