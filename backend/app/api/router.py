@@ -17,6 +17,7 @@ from app.api import (
     email,
     templates,
     sequences,
+    flows,
 )
 
 api_router = APIRouter()
@@ -35,3 +36,4 @@ api_router.include_router(activity.router, prefix="/activity", tags=["Activity"]
 api_router.include_router(email.router, prefix="/email", tags=["Email"])
 api_router.include_router(templates.router, prefix="/templates", tags=["Templates"])
 api_router.include_router(sequences.router, prefix="/sequences", tags=["Sequences"])
+api_router.include_router(flows.router, prefix="/flows", tags=["Flows"])

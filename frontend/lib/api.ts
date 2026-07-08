@@ -318,4 +318,13 @@ export const sequencesApi = {
   enroll: (id: string, leadIds: string[]) => API.post(`/v1/sequences/${id}/enroll`, { lead_ids: leadIds }),
 }
 
+// ── Conversion Flows (booking / order / quote / callback) ─────────────────────
+export const flowsApi = {
+  list: () => API.get('/v1/flows'),
+  create: (body: { name: string; type: string; active?: boolean; config?: Record<string, unknown> }) => API.post('/v1/flows', body),
+  submissions: () => API.get('/v1/flows/submissions'),
+  submit: (body: { flow_id: string; conversation_id?: string; lead_id?: string; data: Record<string, unknown>; send_confirmation?: boolean }) =>
+    API.post('/v1/flows/submit', body),
+}
+
 export default API

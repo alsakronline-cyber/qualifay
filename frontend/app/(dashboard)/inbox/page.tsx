@@ -11,6 +11,8 @@ import { conversationsApi, waSyncApi, instancesApi, templatesApi, leadsApi } fro
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
 import { renderTemplate } from '@/lib/templates'
+import ActionModal from '@/components/action-modal'
+import { CalendarCheck } from 'lucide-react'
 
 function MediaBubble({ conversationId, message }: { conversationId: string; message: Message }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -148,6 +150,7 @@ export default function InboxPage() {
   const { data: tplData } = useSWR('templates', () => templatesApi.list().then((r) => r.data))
   const templates: { id: string; name: string; channel: string; body: string }[] = Array.isArray(tplData) ? tplData : []
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showAction, setShowAction] = useState(false)
 
   // Conversations list. The instance filter is part of the SWR key so switching it
   // refetches; an empty filter lists chats from every instance (the backend returns
@@ -608,6 +611,14 @@ export default function InboxPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Conversion action: book / order / quote / callback for this chat. */}
+              <button
+                onClick={() => setShowAction(true)}
+                title="إجراء تحويل (حجز/طلب/عرض)"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-gold-primary/30 bg-gold-primary/10 text-gold-primary hover:bg-gold-primary/20 transition-colors font-cairo"
+              >
+                <CalendarCheck size={13} /> إجراء
+              </button>
               {/* Pipeline phase for this chat — empty until the user (or AI sync) sets one. */}
               <select
                 value={PIPELINE_STAGES.some((s) => s.value === selectedConv.stage) ? selectedConv.stage : ''}
@@ -868,6 +879,14 @@ export default function InboxPage() {
             <p className="text-sm text-gray-700 mt-1">Select a conversation</p>
           </div>
         </div>
+      )}
+
+      {showAction && selectedId && (
+        <ActionModal
+          conversationId={selectedId}
+          onClose={() => setShowAction(false)}
+          onDone={() => { mutateConvs(); mutateMsgs() }}
+        />
       )}
     </div>
   )

@@ -256,6 +256,39 @@ class WaInstance(Base):
     campaigns = relationship("Campaign", back_populates="wa_instance")
 
 
+# ─── Conversion Flows (sector-agnostic actions) ───────────────
+
+class ConversionFlow(Base):
+    """A conversion action a tenant offers — differs by sector: services book a
+    meeting, e-commerce takes an order, others request a quote/callback. `config`
+    holds type-specific setup (e.g. order → product list, booking → hours)."""
+    __tablename__ = "conversion_flows"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    type = Column(String, default="booking")   # booking | order | quote | callback | custom
+    active = Column(Boolean, default=True, nullable=False, server_default="true")
+    config = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=func.now())
+
+
+class FlowSubmission(Base):
+    """A captured conversion — a booked meeting, a placed order, a quote/callback
+    request — created from a conversation and tied to the lead."""
+    __tablename__ = "flow_submissions"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    flow_id = Column(String, ForeignKey("conversion_flows.id"), nullable=True)
+    lead_id = Column(String, ForeignKey("leads.id"), nullable=True, index=True)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=True)
+    type = Column(String, nullable=False)
+    data = Column(JSON, default=dict)           # {datetime}/{items,total}/{notes}...
+    status = Column(String, default="confirmed")  # confirmed | pending | cancelled | fulfilled
+    created_at = Column(DateTime, default=func.now())
+
+
 # ─── Sequences (multi-step cadences) ──────────────────────────
 
 class Sequence(Base):
