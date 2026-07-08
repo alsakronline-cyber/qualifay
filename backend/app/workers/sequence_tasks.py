@@ -128,7 +128,7 @@ async def _run_due():
                 continue
 
             lead = (await db.execute(select(Lead).where(Lead.id == en.lead_id))).scalar_one_or_none()
-            if not lead or lead.status in (LeadStatus.unsubscribed, LeadStatus.blocked, LeadStatus.invalid):
+            if not lead or lead.status in (LeadStatus.unsubscribed, LeadStatus.invalid, LeadStatus.duplicate):
                 en.status = "stopped"
                 continue
 

@@ -67,7 +67,7 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
 
         # Step 1a: Hard status gate — block unsubscribed/blocked/invalid before ANY send/AI call
         from app.models.models import LeadStatus as _LS
-        if lead.status in (_LS.unsubscribed, _LS.blocked, _LS.invalid):
+        if lead.status in (_LS.unsubscribed, _LS.invalid, _LS.duplicate):
             logger.info(f"Outreach blocked for lead {lead_id}: status={lead.status.value}")
             return {"skipped": True, "reason": f"lead_status_{lead.status.value}"}
 
