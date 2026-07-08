@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import Link from 'next/link'
 import { Search, RefreshCw, CheckCheck, Filter } from 'lucide-react'
-import { leadsApi, templatesApi } from '@/lib/api'
+import { leadsApi, templatesApi, sequencesApi } from '@/lib/api'
 import type { Lead, LeadStage, LeadSource } from '@/lib/types'
 import LeadReviewCard from '@/components/LeadReviewCard'
 
@@ -66,6 +66,19 @@ function LeadsContent() {
   const [outreachTemplate, setOutreachTemplate] = useState<string>('')
   const { data: tplData } = useSWR('templates', () => templatesApi.list().then((r) => r.data))
   const templates: { id: string; name: string }[] = Array.isArray(tplData) ? tplData : []
+  const { data: seqData } = useSWR('sequences', () => sequencesApi.list().then((r) => r.data))
+  const sequences: { id: string; name: string }[] = Array.isArray(seqData) ? seqData : []
+  const [enrollSeq, setEnrollSeq] = useState<string>('')
+
+  const handleEnroll = useCallback(async () => {
+    const ids = Array.from(selectedIds)
+    if (!ids.length || !enrollSeq) return
+    try {
+      const r = await sequencesApi.enroll(enrollSeq, ids)
+      toast.success(`تم تسجيل ${r.data?.enrolled ?? 0} عميل في التسلسل`)
+      setSelectedIds(new Set()); setEnrollSeq('')
+    } catch { toast.error('فشل التسجيل') }
+  }, [selectedIds, enrollSeq])
 
   const allLeadsKey = tab === 'all' ? ['leads/all', search, stageFilter, sourceFilter, minScore, page] : null
   const { data: allData, isLoading: allLoading, mutate: mutateAll } = useSWR(
@@ -370,6 +383,19 @@ function LeadsContent() {
                   <CheckCheck size={14} />
                   قبول وتواصل ({selectedIds.size})
                 </button>
+                {sequences.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <select value={enrollSeq} onChange={(e) => setEnrollSeq(e.target.value)}
+                      className="text-xs bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-200 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo">
+                      <option value="">تسلسل…</option>
+                      {sequences.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button onClick={handleEnroll} disabled={!enrollSeq}
+                      className="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg transition-colors font-cairo disabled:opacity-40">
+                      تسجيل
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

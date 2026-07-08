@@ -388,6 +388,14 @@ async def _handle_inbound_message(webhook_data: dict):
             )
             lead = lead_result.scalar_one_or_none()
 
+        # A WhatsApp reply stops the lead's active cadences (no more follow-ups).
+        if lead:
+            try:
+                from app.workers.sequence_tasks import stop_enrollments_for_lead
+                await stop_enrollments_for_lead(db, lead.id)
+            except Exception:
+                pass
+
         # Step 4: Find or create conversation
         query = select(Conversation).where(
             and_(

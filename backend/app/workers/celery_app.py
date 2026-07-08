@@ -10,6 +10,7 @@ celery_app = Celery(
         "app.workers.outreach_tasks",
         "app.workers.scrape_tasks",
         "app.workers.email_tasks",
+        "app.workers.sequence_tasks",
     ],
 )
 
@@ -51,6 +52,10 @@ celery_app.conf.update(
         "poll-inbound-email": {
             "task": "poll_inbound_email",
             "schedule": 180.0,  # every 3 min — fetch email replies into the inbox
+        },
+        "run-due-sequence-steps": {
+            "task": "run_due_sequence_steps",
+            "schedule": 300.0,  # every 5 min — advance enrolled leads through cadences
         },
     },
 )

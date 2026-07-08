@@ -256,6 +256,54 @@ class WaInstance(Base):
     campaigns = relationship("Campaign", back_populates="wa_instance")
 
 
+# ─── Sequences (multi-step cadences) ──────────────────────────
+
+class Sequence(Base):
+    """A multi-step follow-up cadence. Leads are enrolled and stepped through
+    automatically until they reply/book or the steps run out."""
+    __tablename__ = "sequences"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    active = Column(Boolean, default=True, nullable=False, server_default="true")
+    created_at = Column(DateTime, default=func.now())
+
+    steps = relationship("SequenceStep", back_populates="sequence",
+                         cascade="all, delete-orphan", order_by="SequenceStep.step_order")
+
+
+class SequenceStep(Base):
+    __tablename__ = "sequence_steps"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    sequence_id = Column(String, ForeignKey("sequences.id", ondelete="CASCADE"), nullable=False, index=True)
+    step_order = Column(Integer, default=0)          # 0-based position
+    delay_hours = Column(Integer, default=0)          # wait before THIS step (0 = immediate)
+    channel = Column(String, default="auto")          # auto | whatsapp | email
+    template_id = Column(String, ForeignKey("message_templates.id"), nullable=True)
+    subject = Column(String, nullable=True)           # inline (email) if no template
+    body = Column(Text, nullable=True)                # inline if no template
+
+    sequence = relationship("Sequence", back_populates="steps")
+
+
+class SequenceEnrollment(Base):
+    __tablename__ = "sequence_enrollments"
+    __table_args__ = (
+        UniqueConstraint("sequence_id", "lead_id", name="uq_enrollment_sequence_lead"),
+    )
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    sequence_id = Column(String, ForeignKey("sequences.id", ondelete="CASCADE"), nullable=False, index=True)
+    lead_id = Column(String, ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    current_step = Column(Integer, default=0)
+    status = Column(String, default="active", index=True)   # active | completed | stopped | replied
+    next_run_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=func.now())
+
+
 # ─── Message Template ─────────────────────────────────────────
 
 class MessageTemplate(Base):

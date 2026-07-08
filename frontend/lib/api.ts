@@ -307,4 +307,14 @@ export const templatesApi = {
   remove: (id: string) => API.delete(`/v1/templates/${id}`),
 }
 
+// ── Sequences (cadences) ──────────────────────────────────────────────────────
+export interface SeqStep { delay_hours: number; channel: string; template_id?: string | null; subject?: string | null; body?: string | null }
+export const sequencesApi = {
+  list: () => API.get('/v1/sequences'),
+  create: (body: { name: string; active: boolean; steps: SeqStep[] }) => API.post('/v1/sequences', body),
+  update: (id: string, body: { name: string; active: boolean; steps: SeqStep[] }) => API.patch(`/v1/sequences/${id}`, body),
+  remove: (id: string) => API.delete(`/v1/sequences/${id}`),
+  enroll: (id: string, leadIds: string[]) => API.post(`/v1/sequences/${id}/enroll`, { lead_ids: leadIds }),
+}
+
 export default API

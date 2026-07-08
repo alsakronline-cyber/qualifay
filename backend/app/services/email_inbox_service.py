@@ -209,6 +209,12 @@ async def poll_inbound_email() -> dict:
             conv.unread_count = (conv.unread_count or 0) + 1
             if not conv.lead_id:
                 conv.lead_id = lead.id
+            # A reply stops the lead's active cadences (no more follow-ups).
+            try:
+                from app.workers.sequence_tasks import stop_enrollments_for_lead
+                await stop_enrollments_for_lead(db, lead.id)
+            except Exception:
+                pass
             threaded += 1
         await db.commit()
 
