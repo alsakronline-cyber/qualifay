@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 from app.core.config import settings
 
 
@@ -26,6 +27,25 @@ async def get_db():
             await session.close()
 
 
+# Additive columns that were introduced after their tables already existed in
+# production. create_all() only creates missing TABLES, never adds columns to an
+# existing one, so these are applied idempotently on every startup (Postgres
+# ADD COLUMN IF NOT EXISTS). Keep this list append-only.
+_ENSURE_COLUMNS = [
+    ("campaigns", "sequence_id", "VARCHAR"),
+    ("campaigns", "audience_filter", "JSON"),
+    ("campaigns", "instance_ids", "JSON"),
+    ("campaigns", "auto_enroll", "BOOLEAN DEFAULT false"),
+    ("sequence_enrollments", "campaign_id", "VARCHAR"),
+    # Added mid-session to pre-existing tables; missing on the production DB (its
+    # tables predate these features), which silently broke email routing/warmup there.
+    ("conversations", "channel", "VARCHAR DEFAULT 'whatsapp'"),
+    ("tenants", "email_started_at", "TIMESTAMP"),
+]
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for table, col, coltype in _ENSURE_COLUMNS:
+            await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
