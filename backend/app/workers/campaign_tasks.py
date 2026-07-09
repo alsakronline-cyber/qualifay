@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 
 from app.workers.celery_app import celery_app
 
@@ -39,7 +40,8 @@ async def _sync():
         for c in campaigns:
             if not c.sequence_id:
                 continue
-            seq = (await db.execute(select(Sequence).where(Sequence.id == c.sequence_id))).scalar_one_or_none()
+            seq = (await db.execute(select(Sequence).options(selectinload(Sequence.steps)).where(
+                Sequence.id == c.sequence_id))).scalar_one_or_none()
             if not seq or not seq.steps:
                 continue
 

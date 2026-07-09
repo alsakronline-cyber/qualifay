@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, and_, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -163,7 +164,8 @@ async def launch_campaign(cid: str, current_user: dict = Depends(get_current_use
     c = await _get(cid, current_user["tenant_id"], db)
     if not c.sequence_id:
         raise HTTPException(status_code=400, detail="Campaign has no sequence")
-    seq = (await db.execute(select(Sequence).where(Sequence.id == c.sequence_id))).scalar_one_or_none()
+    seq = (await db.execute(select(Sequence).options(selectinload(Sequence.steps)).where(
+        Sequence.id == c.sequence_id))).scalar_one_or_none()
     if not seq or not seq.steps:
         raise HTTPException(status_code=400, detail="Sequence missing or has no steps")
 
