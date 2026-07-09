@@ -92,6 +92,12 @@ async def get_current_user(
     }
 
 
+def require_admin(current_user: dict) -> None:
+    """Raise 403 unless the caller is a tenant admin. Shared by admin-only endpoints."""
+    if not current_user.get("is_tenant_admin"):
+        raise HTTPException(status_code=403, detail="Admins only")
+
+
 async def get_tenant_user(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

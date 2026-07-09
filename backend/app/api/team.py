@@ -6,14 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 
 from app.core.database import get_db
-from app.api.auth import get_current_user, pwd_context
+from app.api.auth import get_current_user, pwd_context, require_admin as _require_admin
 
 router = APIRouter()
-
-
-def _require_admin(current_user: dict):
-    if not current_user.get("is_tenant_admin"):
-        raise HTTPException(status_code=403, detail="Admins only")
 
 
 def _u(u) -> dict:

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_admin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -86,8 +86,7 @@ async def backups(current_user: dict = Depends(get_current_user)):
 
 @router.post("/backups/run")
 async def trigger_backup(current_user: dict = Depends(get_current_user)):
-    if not current_user.get("is_tenant_admin"):
-        raise HTTPException(status_code=403, detail="Admins only")
+    require_admin(current_user)
     from app.workers.backup_tasks import run_backup
     task = run_backup.apply_async(queue="default")
     return {"queued": True, "task_id": task.id}

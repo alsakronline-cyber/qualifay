@@ -106,6 +106,14 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: List[str] = ["http://80.225.65.148", "http://localhost:3000"]
 
+    @property
+    def cors_origins_effective(self) -> List[str]:
+        """In production, don't trust localhost origins (they're only needed when running
+        `next dev` against a remote backend). Deployments are reached via the server IP."""
+        if self.ENVIRONMENT == "production":
+            return [o for o in self.CORS_ORIGINS if "localhost" not in o and "127.0.0.1" not in o]
+        return self.CORS_ORIGINS
+
     class Config:
         env_file = ".env"
         case_sensitive = True

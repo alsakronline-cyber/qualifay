@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.core.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_admin as _require_admin
 
 router = APIRouter()
 
@@ -18,11 +18,6 @@ AVAILABLE_EVENTS = [
     "conversation.replied", "message.received",
     "flow.submitted", "booking.created", "sequence.completed",
 ]
-
-
-def _require_admin(cu: dict):
-    if not cu.get("is_tenant_admin"):
-        raise HTTPException(status_code=403, detail="Admins only")
 
 
 def _w(w) -> dict:
