@@ -27,5 +27,3 @@ npm-debug.log*
 frontend/tsconfig.tsbuildinfo
 
 
-# workflow files need a PAT with 'workflow' scope to push — add via GitHub UI
-.github/workflows/

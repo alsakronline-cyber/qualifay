@@ -1,0 +1,44 @@
+name: security-audit
+
+# Dependency vulnerability scan for both stacks. Runs on pushes/PRs to the main
+# branches and weekly, so a newly-disclosed CVE in a pinned dep surfaces without
+# waiting for someone to run a scan by hand.
+on:
+  push:
+    branches: [development, production, main]
+  pull_request:
+    branches: [development, production, main]
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  backend-pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit backend dependencies
+        # Scan the pinned requirements. Don't fail the build on advisories yet
+        # (many transitive deps lack fixes); surface them in the log for triage.
+        run: pip-audit -r backend/requirements.txt --desc || true
+
+  frontend-npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        # Fail only on high/critical so build-time-only moderates (e.g. bundled
+        # postcss) don't block, but a real exploitable dep does.
+        run: npm audit --audit-level=high
