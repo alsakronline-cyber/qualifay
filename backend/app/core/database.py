@@ -37,6 +37,10 @@ _ENSURE_COLUMNS = [
     ("campaigns", "instance_ids", "JSON"),
     ("campaigns", "auto_enroll", "BOOLEAN DEFAULT false"),
     ("sequence_enrollments", "campaign_id", "VARCHAR"),
+    # Added mid-session to pre-existing tables; missing on the production DB (its
+    # tables predate these features), which silently broke email routing/warmup there.
+    ("conversations", "channel", "VARCHAR DEFAULT 'whatsapp'"),
+    ("tenants", "email_started_at", "TIMESTAMP"),
 ]
 
 
