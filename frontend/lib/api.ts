@@ -266,8 +266,12 @@ export const campaignsApi = {
   list: () => API.get('/v1/campaigns'),
   get: (id: string) => API.get(`/v1/campaigns/${id}`),
   create: (data: Record<string, unknown>) => API.post('/v1/campaigns', data),
+  update: (id: string, data: Record<string, unknown>) => API.patch(`/v1/campaigns/${id}`, data),
+  launch: (id: string) => API.post(`/v1/campaigns/${id}/launch`),
   pause: (id: string) => API.post(`/v1/campaigns/${id}/pause`),
   resume: (id: string) => API.post(`/v1/campaigns/${id}/resume`),
+  remove: (id: string) => API.delete(`/v1/campaigns/${id}`),
+  audiencePreview: (id: string) => API.get(`/v1/campaigns/${id}/audience-preview`),
 }
 
 // ── Agent Automation (browser-extension LinkedIn/Facebook sourcing) ───────────

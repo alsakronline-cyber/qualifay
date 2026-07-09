@@ -331,8 +331,9 @@ class SequenceEnrollment(Base):
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
     sequence_id = Column(String, ForeignKey("sequences.id", ondelete="CASCADE"), nullable=False, index=True)
     lead_id = Column(String, ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    campaign_id = Column(String, ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True, index=True)
     current_step = Column(Integer, default=0)
-    status = Column(String, default="active", index=True)   # active | completed | stopped | replied
+    status = Column(String, default="active", index=True)   # active | completed | stopped | replied | paused
     next_run_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())
 
@@ -525,13 +526,21 @@ class Campaign(Base):
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     wa_instance_id = Column(String, ForeignKey("wa_instances.id"), nullable=True)
-    message_template = Column(Text, nullable=True)
+    message_template = Column(Text, nullable=True)      # legacy — sequence_id supersedes this
     status = Column(String, default="draft")            # draft, running, paused, done
     target_count = Column(Integer, default=0)
     sent_count = Column(Integer, default=0)
     replied_count = Column(Integer, default=0)
     channel = Column(String, default="whatsapp")        # whatsapp, email, both
     created_at = Column(DateTime, default=func.now())
+
+    # Orchestration layer: a campaign binds an AUDIENCE (filter over leads) to a
+    # SEQUENCE (the multi-step engine that actually sends), so campaigns reuse the
+    # enrollment machinery rather than owning a second send path.
+    sequence_id = Column(String, ForeignKey("sequences.id"), nullable=True, index=True)
+    audience_filter = Column(JSON, nullable=True)       # {stage, source, city, industry, min_score, search}
+    instance_ids = Column(JSON, nullable=True)          # WA instance pool for rotation (list of ids)
+    auto_enroll = Column(Boolean, default=False)        # keep syncing NEW matching leads while running
 
     tenant = relationship("Tenant", back_populates="campaigns")
     wa_instance = relationship("WaInstance", back_populates="campaigns")

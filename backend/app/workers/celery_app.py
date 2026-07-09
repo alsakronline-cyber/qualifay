@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.workers.sequence_tasks",
         "app.workers.webhook_tasks",
         "app.workers.backup_tasks",
+        "app.workers.campaign_tasks",
     ],
 )
 
@@ -62,6 +63,10 @@ celery_app.conf.update(
         "nightly-db-backup": {
             "task": "backups.run",
             "schedule": 86400.0,  # daily pg_dump → /app/backups + MinIO
+        },
+        "sync-campaign-audiences": {
+            "task": "campaigns.sync_audiences",
+            "schedule": 600.0,  # every 10 min — enroll new matching leads into running campaigns
         },
     },
 )
