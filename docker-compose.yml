@@ -193,11 +193,17 @@ services:
     platform: linux/arm64
     container_name: qualifay_frontend
     restart: unless-stopped
+    # Next 15 standalone binds to os.hostname() by default (resolves to 127.0.1.1 on
+    # this host), which nginx (proxying to 127.0.0.1:3000) can't reach. Pin the bind
+    # explicitly to loopback:3000. Same quirk the dev frontend already works around.
+    command: sh -c "HOSTNAME=127.0.0.1 PORT=3000 node server.js"
     environment:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: http://${SERVER_IP:-80.225.65.148}
       NEXT_PUBLIC_API_URL: http://${SERVER_IP:-80.225.65.148}/api
       BACKEND_URL: http://127.0.0.1:5000
+      HOSTNAME: 127.0.0.1
+      PORT: 3000
     network_mode: host
     deploy:
       resources:
