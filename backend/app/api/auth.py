@@ -64,6 +64,10 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        # Only access tokens authenticate API calls — a refresh token (30-day lifetime)
+        # must not be usable as a bearer on protected routes.
+        if payload.get("type") != "access":
+            raise credentials_exception
         user_id: str = payload.get("sub")
         tenant_id: str = payload.get("tenant_id")
         if user_id is None:

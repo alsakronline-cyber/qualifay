@@ -3,9 +3,12 @@ custom). Delivery runs in Celery so the request path never blocks on a slow endp
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
+import socket
 from datetime import datetime
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -13,6 +16,34 @@ from sqlalchemy import select
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+class UnsafeWebhookURL(ValueError):
+    """Raised when a webhook target resolves to a private/internal address (SSRF guard)."""
+
+
+def assert_safe_url(url: str):
+    """Reject anything that isn't a plain http(s) URL resolving to a public address.
+
+    The backend runs on the host network and can reach internal services (Postgres,
+    Redis, Qdrant, n8n, MinIO, cloud metadata at 169.254.169.254), so a webhook target
+    must never point inward. Resolve the host and check every returned address."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise UnsafeWebhookURL("URL must use http or https")
+    host = parsed.hostname
+    if not host:
+        raise UnsafeWebhookURL("URL has no host")
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise UnsafeWebhookURL(f"could not resolve host: {e}")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            raise UnsafeWebhookURL(f"host resolves to a non-public address ({ip})")
 
 
 def run_async(coro):
@@ -30,6 +61,7 @@ def _subscribed(events, event: str) -> bool:
 
 
 async def _deliver(endpoint, event: str, payload: dict):
+    assert_safe_url(endpoint.url)  # SSRF guard — re-checked at send time, not just on create
     body = json.dumps({"event": event, "data": payload, "sent_at": datetime.utcnow().isoformat()},
                       ensure_ascii=False, default=str).encode("utf-8")
     headers = {"Content-Type": "application/json", "X-Qualifay-Event": event}

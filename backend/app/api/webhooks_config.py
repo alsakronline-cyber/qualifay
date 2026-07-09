@@ -70,8 +70,11 @@ async def list_webhooks(current_user: dict = Depends(get_current_user), db: Asyn
 async def create_webhook(body: WebhookIn, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     _require_admin(current_user)
     from app.models.models import WebhookEndpoint
-    if not body.url.startswith("http"):
-        raise HTTPException(status_code=400, detail="URL must start with http(s)")
+    from app.workers.webhook_tasks import assert_safe_url, UnsafeWebhookURL
+    try:
+        assert_safe_url(body.url.strip())
+    except UnsafeWebhookURL as e:
+        raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {e}")
     w = WebhookEndpoint(
         tenant_id=current_user["tenant_id"], url=body.url.strip(),
         events=body.events or ["*"], description=body.description,
@@ -100,6 +103,11 @@ async def update_webhook(wid: str, body: WebhookUpdate, current_user: dict = Dep
     _require_admin(current_user)
     w = await _get(wid, current_user["tenant_id"], db)
     if body.url is not None:
+        from app.workers.webhook_tasks import assert_safe_url, UnsafeWebhookURL
+        try:
+            assert_safe_url(body.url.strip())
+        except UnsafeWebhookURL as e:
+            raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {e}")
         w.url = body.url.strip()
     if body.events is not None:
         w.events = body.events
