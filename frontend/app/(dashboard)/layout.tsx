@@ -25,6 +25,10 @@ import {
   Menu,
   X,
   Bot,
+  UserCog,
+  Webhook,
+  Activity,
+  FlaskConical,
 } from 'lucide-react'
 import { authApi, notificationsApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -51,6 +55,10 @@ const navItems: NavItem[] = [
   { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail },
   { href: '/templates', label: 'القوالب', labelEn: 'Templates', icon: FileText },
   { href: '/scrape', label: 'جمع البيانات', labelEn: 'Scrape', icon: Bot },
+  { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog },
+  { href: '/webhooks', label: 'الويب هوك', labelEn: 'Webhooks', icon: Webhook },
+  { href: '/ab-tests', label: 'اختبارات A/B', labelEn: 'A/B Tests', icon: FlaskConical },
+  { href: '/monitoring', label: 'المراقبة', labelEn: 'Monitoring', icon: Activity },
   { href: '/settings', label: 'الإعدادات', labelEn: 'Settings', icon: Settings },
   { href: '/billing', label: 'الفوترة', labelEn: 'Billing', icon: CreditCard },
 ]

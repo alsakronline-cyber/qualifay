@@ -159,4 +159,15 @@ async def submit_flow(body: SubmitIn, current_user: dict = Depends(get_current_u
 
     await db.commit()
     await db.refresh(sub)
+
+    # Fan out to tenant webhooks (n8n/Zapier/custom).
+    try:
+        from app.workers.webhook_tasks import emit
+        payload = {"submission_id": sub.id, "type": flow.type, "lead_id": lead_id, "data": body.data}
+        emit(tid, "flow.submitted", payload)
+        if flow.type == "booking":
+            emit(tid, "booking.created", payload)
+    except Exception:
+        pass
+
     return {**_sub_dict(sub), "confirmation_sent": sent}

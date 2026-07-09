@@ -98,6 +98,8 @@ services:
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       SERVER_IP: ${SERVER_IP:-80.225.65.148}
+    volumes:
+      - ./backups:/app/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -141,6 +143,8 @@ services:
       MINIO_PASSWORD: ${MINIO_PASSWORD}
       QDRANT_URL: http://127.0.0.1:6333
       ENVIRONMENT: ${ENVIRONMENT:-production}
+    volumes:
+      - ./backups:/app/backups
     depends_on:
       postgres:
         condition: service_healthy

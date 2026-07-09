@@ -215,6 +215,11 @@ async def poll_inbound_email() -> dict:
                 await stop_enrollments_for_lead(db, lead.id)
             except Exception:
                 pass
+            try:
+                from app.services.ab_service import mark_replied
+                await mark_replied(db, lead.id)
+            except Exception:
+                pass
             threaded += 1
         await db.commit()
 

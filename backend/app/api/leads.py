@@ -440,6 +440,12 @@ async def approve_lead(
     from app.workers.outreach_tasks import process_approved_lead
     task = process_approved_lead.apply_async(args=[lead_id], queue="outreach")
 
+    try:
+        from app.workers.webhook_tasks import emit
+        emit(lead.tenant_id, "lead.approved", {"lead_id": lead_id, "company": lead.company, "phone": lead.phone})
+    except Exception:
+        pass
+
     return {"approved": True, "lead_id": lead_id, "task_id": task.id}
 
 

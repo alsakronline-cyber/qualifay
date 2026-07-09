@@ -11,6 +11,8 @@ celery_app = Celery(
         "app.workers.scrape_tasks",
         "app.workers.email_tasks",
         "app.workers.sequence_tasks",
+        "app.workers.webhook_tasks",
+        "app.workers.backup_tasks",
     ],
 )
 
@@ -56,6 +58,10 @@ celery_app.conf.update(
         "run-due-sequence-steps": {
             "task": "run_due_sequence_steps",
             "schedule": 300.0,  # every 5 min — advance enrolled leads through cadences
+        },
+        "nightly-db-backup": {
+            "task": "backups.run",
+            "schedule": 86400.0,  # daily pg_dump → /app/backups + MinIO
         },
     },
 )

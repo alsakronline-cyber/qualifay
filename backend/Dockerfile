@@ -5,7 +5,7 @@ ENV PYTHONPATH=/app
 
 # System dependencies (Playwright + psycopg2 + ffmpeg for voice-note transcoding)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl wget gnupg ffmpeg \
+    gcc libpq-dev postgresql-client curl wget gnupg ffmpeg \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
     libxdamage1 libxfixes3 libxrandr2 libgbm1 \

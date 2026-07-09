@@ -130,8 +130,14 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
             # Retry tomorrow
             raise process_approved_lead.retry(countdown=86400)
 
-        # Step 3: Message — rendered template if chosen, else AI AIDA copy.
-        if template:
+        # Step 3: Message — active A/B test variant wins, else template, else AI AIDA copy.
+        ab_used = False
+        from app.services.ab_service import assign_variant
+        ab = await assign_variant(db, lead.tenant_id, "whatsapp", lead)
+        if ab:
+            _variant, message_text, _subject = ab
+            ab_used = True
+        elif template:
             from app.services.template_render import render_for_lead
             message_text = render_for_lead(template.body, lead)
         else:
@@ -140,8 +146,8 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
                 "city": lead.city, "language": lead.language,
             })
 
-        # Step 4: Translate if Arabic (templates are already authored in the target language).
-        if not template and lead.language == "ar" and message_text:
+        # Step 4: Translate if Arabic (templates/AB variants are already authored in-language).
+        if not template and not ab_used and lead.language == "ar" and message_text:
             # Check if already Arabic
             arabic_chars = sum(1 for c in message_text if "؀" <= c <= "ۿ")
             if arabic_chars < len(message_text) * 0.3:
@@ -235,12 +241,17 @@ async def _send_email_outreach(db, lead, template=None):
             logger.info(f"Email cap/pause hit for tenant {lead.tenant_id} ({used}/{cap})")
             raise process_approved_lead.retry(countdown=86400)
 
-    # Rendered template if chosen, else AI AIDA copy.
-    if template:
+    # Active A/B test variant wins, else template, else AI AIDA copy.
+    from app.services.ab_service import assign_variant
+    ab = await assign_variant(db, lead.tenant_id, "email", lead)
+    _default_subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
+    if ab:
+        _variant, body, ab_subject = ab
+        subject = ab_subject or _default_subject
+    elif template:
         from app.services.template_render import render_for_lead
         body = render_for_lead(template.body, lead)
-        subject = render_for_lead(template.subject or "", lead) or (
-            "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}")
+        subject = render_for_lead(template.subject or "", lead) or _default_subject
     else:
         body = await ai_service.write_aida_message({
             "name": lead.name, "company": lead.company, "industry": lead.industry,
@@ -393,6 +404,11 @@ async def _handle_inbound_message(webhook_data: dict):
             try:
                 from app.workers.sequence_tasks import stop_enrollments_for_lead
                 await stop_enrollments_for_lead(db, lead.id)
+            except Exception:
+                pass
+            try:
+                from app.services.ab_service import mark_replied
+                await mark_replied(db, lead.id)
             except Exception:
                 pass
 

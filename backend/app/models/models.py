@@ -624,3 +624,62 @@ class ActivityLog(Base):
     summary = Column(String(500), nullable=False)
     extra_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=func.now(), index=True)
+
+
+# ─── Webhooks (n8n / Zapier / custom) ─────────────────────────
+
+class WebhookEndpoint(Base):
+    __tablename__ = "webhook_endpoints"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, nullable=False, index=True)
+    url = Column(String(1000), nullable=False)
+    events = Column(JSON, nullable=False, default=list)  # list of event names, ["*"] = all
+    secret = Column(String, nullable=True)               # for HMAC signature
+    active = Column(Boolean, default=True)
+    description = Column(String(255), nullable=True)
+    last_status = Column(Integer, nullable=True)         # last HTTP status delivered
+    last_fired_at = Column(DateTime, nullable=True)
+    failure_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=func.now())
+
+
+# ─── A/B Testing (outreach message variants) ──────────────────
+
+class ABTest(Base):
+    __tablename__ = "ab_tests"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    channel = Column(String(20), default="whatsapp")  # whatsapp | email
+    status = Column(String(20), default="active")      # active | paused | done
+    created_at = Column(DateTime, default=func.now())
+
+    variants = relationship("ABVariant", back_populates="test", cascade="all, delete-orphan")
+
+
+class ABVariant(Base):
+    __tablename__ = "ab_variants"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    test_id = Column(String, ForeignKey("ab_tests.id", ondelete="CASCADE"), nullable=False, index=True)
+    label = Column(String(80), nullable=False)          # "A", "B", ...
+    subject = Column(String(300), nullable=True)        # email only
+    body = Column(Text, nullable=False)                 # supports {{name}} {{company}} ...
+    sent_count = Column(Integer, default=0)
+    reply_count = Column(Integer, default=0)
+
+    test = relationship("ABTest", back_populates="variants")
+
+
+class ABAssignment(Base):
+    __tablename__ = "ab_assignments"
+    __table_args__ = (UniqueConstraint("test_id", "lead_id", name="uq_abtest_lead"),)
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    test_id = Column(String, index=True, nullable=False)
+    variant_id = Column(String, index=True, nullable=False)
+    lead_id = Column(String, index=True, nullable=False)
+    replied = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())

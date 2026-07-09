@@ -18,6 +18,10 @@ from app.api import (
     templates,
     sequences,
     flows,
+    team,
+    webhooks_config,
+    monitoring,
+    ab_tests,
 )
 
 api_router = APIRouter()
@@ -37,3 +41,7 @@ api_router.include_router(email.router, prefix="/email", tags=["Email"])
 api_router.include_router(templates.router, prefix="/templates", tags=["Templates"])
 api_router.include_router(sequences.router, prefix="/sequences", tags=["Sequences"])
 api_router.include_router(flows.router, prefix="/flows", tags=["Flows"])
+api_router.include_router(team.router, prefix="/team", tags=["Team"])
+api_router.include_router(webhooks_config.router, prefix="/webhooks", tags=["Webhooks Config"])
+api_router.include_router(monitoring.router, prefix="/monitoring", tags=["Monitoring"])
+api_router.include_router(ab_tests.router, prefix="/ab-tests", tags=["A/B Testing"])

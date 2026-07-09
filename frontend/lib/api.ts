@@ -334,4 +334,36 @@ export const flowsApi = {
     API.post('/v1/flows/submit', body),
 }
 
+// ── Team ──────────────────────────────────────────────────────────────────────
+export const teamApi = {
+  list: () => API.get('/v1/team'),
+  invite: (body: { email: string; full_name: string; password: string; is_admin: boolean }) => API.post('/v1/team/invite', body),
+  update: (id: string, body: { full_name?: string; is_admin?: boolean }) => API.patch(`/v1/team/${id}`, body),
+  remove: (id: string) => API.delete(`/v1/team/${id}`),
+}
+
+// ── Webhooks (n8n / Zapier / custom) ────────────────────────────────────────────
+export const webhooksApi = {
+  list: () => API.get('/v1/webhooks'),
+  events: () => API.get('/v1/webhooks/events'),
+  create: (body: { url: string; events: string[]; description?: string; active?: boolean }) => API.post('/v1/webhooks', body),
+  update: (id: string, body: { url?: string; events?: string[]; description?: string; active?: boolean }) => API.patch(`/v1/webhooks/${id}`, body),
+  remove: (id: string) => API.delete(`/v1/webhooks/${id}`),
+  test: (id: string) => API.post(`/v1/webhooks/${id}/test`, {}),
+}
+
+// ── A/B testing ─────────────────────────────────────────────────────────────────
+export const abTestsApi = {
+  list: () => API.get('/v1/ab-tests'),
+  create: (body: { name: string; channel: string; variants: { label: string; subject?: string; body: string }[] }) => API.post('/v1/ab-tests', body),
+  update: (id: string, body: { status?: string; name?: string }) => API.patch(`/v1/ab-tests/${id}`, body),
+  remove: (id: string) => API.delete(`/v1/ab-tests/${id}`),
+}
+
+// ── Monitoring & backups ────────────────────────────────────────────────────────
+export const monitoringApi = {
+  health: () => API.get('/v1/monitoring/health'),
+  runBackup: () => API.post('/v1/monitoring/backups/run', {}),
+}
+
 export default API
