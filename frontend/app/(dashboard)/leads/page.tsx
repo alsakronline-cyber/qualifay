@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useCallback, Suspense } from 'react'
+import { useState, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import Link from 'next/link'
-import { Search, RefreshCw, CheckCheck, Filter } from 'lucide-react'
+import { Search, RefreshCw, CheckCheck, Filter, Download, Upload } from 'lucide-react'
 import { leadsApi, templatesApi, sequencesApi } from '@/lib/api'
 import type { Lead, LeadStage, LeadSource } from '@/lib/types'
 import LeadReviewCard from '@/components/LeadReviewCard'
@@ -161,6 +161,26 @@ function LeadsContent() {
     } catch { toast.error('فشل القبول الجماعي') }
   }, [selectedIds, outreachTemplate])
 
+  const importRef = useRef<HTMLInputElement>(null)
+  const handleExport = useCallback(async () => {
+    try {
+      const res = await leadsApi.exportCsv({ stage: stageFilter || undefined, source: sourceFilter || undefined, search: search || undefined })
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
+      const a = document.createElement('a'); a.href = url; a.download = 'leads.csv'; a.click()
+      URL.revokeObjectURL(url)
+    } catch { toast.error('فشل التصدير') }
+  }, [stageFilter, sourceFilter, search])
+
+  const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const r = await leadsApi.importCsv(file)
+      toast.success(`تم استيراد ${r.data?.created ?? 0} عميل (${r.data?.skipped ?? 0} مكرر)`)
+      mutateAll()
+    } catch { toast.error('فشل الاستيراد') }
+  }, [])
+
   const [enriching, setEnriching] = useState(false)
   const handleEnrichLinkedIn = useCallback(async () => {
     setEnriching(true)
@@ -206,9 +226,22 @@ function LeadsContent() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">العملاء المحتملون</h1>
-        <p className="text-gray-400 text-sm mt-1">Leads Management</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white font-cairo">العملاء المحتملون</h1>
+          <p className="text-gray-400 text-sm mt-1">Leads Management</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input ref={importRef} type="file" accept=".csv" onChange={handleImport} className="hidden" />
+          <button onClick={() => importRef.current?.click()}
+            className="flex items-center gap-1.5 text-sm border border-gray-700 hover:border-gray-600 text-gray-300 px-3 py-1.5 rounded-lg transition-colors font-cairo">
+            <Upload size={14} /> استيراد CSV
+          </button>
+          <button onClick={handleExport}
+            className="flex items-center gap-1.5 text-sm border border-gray-700 hover:border-gray-600 text-gray-300 px-3 py-1.5 rounded-lg transition-colors font-cairo">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

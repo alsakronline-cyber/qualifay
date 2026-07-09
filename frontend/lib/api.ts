@@ -86,6 +86,13 @@ export const leadsApi = {
   checkReachability: (ids?: string[]) =>
     API.post('/v1/leads/check-reachability', { ids: ids || null }),
 
+  exportCsv: (params?: { stage?: string; source?: string; search?: string }) =>
+    API.get('/v1/leads/export', { params, responseType: 'blob' }),
+  importCsv: (file: File) => {
+    const fd = new FormData(); fd.append('file', file)
+    return API.post('/v1/leads/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+
   enrichLinkedIn: (ids?: string[]) =>
     API.post('/v1/leads/enrich-linkedin', { ids: ids || null }),
 

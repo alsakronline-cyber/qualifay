@@ -1,7 +1,8 @@
 """
 Leads API — B2B lead management with BANT scoring and pool integration
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from typing import Optional, List
@@ -282,6 +283,121 @@ async def list_leads(
         "limit": limit,
         "leads": [_lead_dict(l) for l in leads],
     }
+
+
+@router.get("/export")
+async def export_leads(
+    stage: Optional[str] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export the tenant's leads (optionally filtered) as a CSV download."""
+    import csv, io
+    tenant_id = current_user["tenant_id"]
+    filters = [Lead.tenant_id == tenant_id]
+    if stage:
+        try:
+            filters.append(Lead.stage == LeadStage(stage))
+        except ValueError:
+            pass
+    if source:
+        try:
+            filters.append(Lead.source == LeadSource(source))
+        except ValueError:
+            pass
+    if search:
+        term = f"%{search}%"
+        filters.append(or_(Lead.name.ilike(term), Lead.company.ilike(term),
+                           Lead.phone.ilike(term), Lead.email.ilike(term)))
+
+    rows = (await db.execute(select(Lead).where(and_(*filters)).order_by(Lead.created_at.desc()).limit(10000))).scalars().all()
+
+    cols = ["name", "company", "phone", "email", "industry", "city", "website",
+            "linkedin_url", "stage", "status", "bant_score", "source", "created_at"]
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(cols)
+    for l in rows:
+        w.writerow([
+            l.name or "", l.company or "", l.phone or "", l.email or "", l.industry or "",
+            l.city or "", l.website or "", l.linkedin_url or "",
+            l.stage.value if l.stage else "", l.status.value if l.status else "",
+            l.bant_score or 0, l.source.value if l.source else "",
+            l.created_at.isoformat() if l.created_at else "",
+        ])
+    csv_bytes = ("﻿" + buf.getvalue()).encode("utf-8")  # BOM so Excel reads Arabic
+    return Response(content=csv_bytes, media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=leads.csv"})
+
+
+@router.post("/import")
+async def import_leads(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import leads from a CSV. Flexible headers (name/company/phone/email/industry/
+    city/website/linkedin_url). Dedupes by phone or email within the tenant."""
+    import csv, io
+    from app.lib.phone import normalize_egyptian_phone
+
+    tenant_id = current_user["tenant_id"]
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        text = raw.decode("utf-8-sig")
+    except Exception:
+        text = raw.decode("latin-1", errors="replace")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="No header row")
+
+    # Map header names (case/space-insensitive) to lead fields.
+    def norm(h): return (h or "").strip().lower().replace(" ", "_")
+    header_map = {norm(h): h for h in reader.fieldnames}
+
+    def get(row, *keys):
+        for k in keys:
+            if k in header_map:
+                v = (row.get(header_map[k]) or "").strip()
+                if v:
+                    return v
+        return None
+
+    # Existing contacts to dedupe against.
+    existing = (await db.execute(select(Lead.phone, Lead.email).where(Lead.tenant_id == tenant_id))).all()
+    seen_phones = {p for p, _ in existing if p}
+    seen_emails = {e.lower() for _, e in existing if e}
+
+    created = skipped = 0
+    for row in reader:
+        name = get(row, "name", "full_name", "contact")
+        company = get(row, "company", "company_name", "organization")
+        raw_phone = get(row, "phone", "mobile", "phone_number", "whatsapp")
+        email = get(row, "email", "email_address")
+        if not (name or company or raw_phone or email):
+            continue
+        phone = normalize_egyptian_phone(raw_phone) if raw_phone else None
+        if (phone and phone in seen_phones) or (email and email.lower() in seen_emails):
+            skipped += 1
+            continue
+        db.add(Lead(
+            tenant_id=tenant_id, source=LeadSource.manual, stage=LeadStage.new, status=LeadStatus.active,
+            name=name, company=company, phone=phone, email=email,
+            industry=get(row, "industry", "sector"), city=get(row, "city", "location"),
+            website=get(row, "website", "url"), linkedin_url=get(row, "linkedin_url", "linkedin"),
+        ))
+        if phone:
+            seen_phones.add(phone)
+        if email:
+            seen_emails.add(email.lower())
+        created += 1
+    await db.commit()
+    return {"created": created, "skipped": skipped}
 
 
 @router.get("/{lead_id}")
