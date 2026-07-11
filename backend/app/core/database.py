@@ -41,6 +41,9 @@ _ENSURE_COLUMNS = [
     # tables predate these features), which silently broke email routing/warmup there.
     ("conversations", "channel", "VARCHAR DEFAULT 'whatsapp'"),
     ("tenants", "email_started_at", "TIMESTAMP"),
+    ("tenants", "tenant_profile", "JSON"),
+    ("tenants", "autonomy", "VARCHAR DEFAULT 'copilot'"),
+    ("tenants", "onboarding_done", "BOOLEAN DEFAULT false"),
 ]
 
 

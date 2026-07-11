@@ -108,6 +108,12 @@ class Tenant(Base):
     contribute_to_pool = Column(Boolean, default=True)
     # When this tenant first sent an outreach email — anchors the email warmup ramp.
     email_started_at = Column(DateTime, nullable=True)
+    # AI Setup Consultant: structured business profile captured in the conversational
+    # onboarding interview, injected as context into every agent so copy is on-brand.
+    tenant_profile = Column(JSON, nullable=True)
+    # How much the system runs on its own: full (autopilot) | copilot (approve+send) | manual.
+    autonomy = Column(String, default="copilot")
+    onboarding_done = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

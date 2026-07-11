@@ -606,5 +606,68 @@ Match the language of the customer (Arabic or English)."""
         ]
 
 
+    # ─── AI Setup Consultant ──────────────────────────────────
+
+    async def interview_turn(self, history: list, profile: dict) -> dict:
+        """One turn of the onboarding interview. Given the conversation so far and the
+        profile gathered, ask the next question (or wrap up) and extract new fields.
+        Returns {reply, done, profile_patch}."""
+        system = """أنت مستشار أعمال ذكي في منصة Qualifay لتوليد العملاء وإدارة المبيعات عبر واتساب.
+مهمتك: إجراء مقابلة قصيرة وودّية مع صاحب العمل لفهم نشاطه، حتى نبني له النظام كاملاً.
+اجمع تدريجياً: اسم النشاط، المجال/الصناعة، ما الذي يبيعه، نطاق الأسعار، المدن المستهدفة،
+العميل المثالي (الصناعة/الحجم/المنصب)، مشاكل العميل، قيمة العرض (لماذا يختارونه)،
+مصادر العملاء الحالية، الهدف الشهري للعملاء، حجم فريق المبيعات، ونبرة التواصل المفضلة.
+اطرح سؤالاً واحداً في كل مرة، بلغة صاحب العمل نفسها. خصّص الأسئلة حسب المجال
+(مثلاً: مقاولات → المناقصات؛ عيادة → الحجوزات).
+عندما تجمع ما يكفي (8+ حقول)، اجعل done=true وقدّم ملخصاً ودوداً.
+أعد فقط JSON صالح:
+{
+  "reply": "ردّك/سؤالك التالي بلغة صاحب العمل",
+  "done": true|false,
+  "profile_patch": { الحقول الجديدة أو المحدّثة فقط، بمفاتيح إنجليزية: business_name, industry, sells, price_range, cities, ideal_customer, pain_points, value_prop, current_sources, monthly_lead_target, team_size, tone, recommended_autonomy(full|copilot|manual) }
+}"""
+        convo = "\n".join([f"{m.get('role')}: {m.get('content','')}" for m in history[-12:]])
+        prompt = f"الملف المجمّع حتى الآن:\n{json.dumps(profile, ensure_ascii=False)}\n\nالمحادثة:\n{convo}"
+        result = await self._groq(
+            [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            max_tokens=700,
+        )
+        return self._parse_json(result, {
+            "reply": "عذراً، لم أستطع المتابعة الآن. هل يمكنك إعادة صياغة إجابتك؟",
+            "done": False, "profile_patch": {},
+        })
+
+    async def generate_build_plan(self, profile: dict) -> dict:
+        """From the finished business profile, draft the whole workspace: ICP + scoring,
+        scrape plans, message templates (in the owner's voice), a follow-up sequence, a
+        conversion flow, and an A/B test. Returned as drafts for the owner to review."""
+        system = """أنت خبير نمو مبيعات B2B للسوق المصري. من ملف نشاط تجاري، صمّم مساحة عمل جاهزة للإطلاق.
+أعد فقط JSON صالح بهذا الشكل بالضبط:
+{
+  "icp": {"summary": "وصف العميل المثالي", "min_bant_score": 40-70},
+  "scrape_plans": [{"query": "كلمة بحث", "city": "المدينة"}],
+  "templates": [
+    {"name": "افتتاحية", "channel": "whatsapp", "subject": null, "body": "نص يستخدم {{name}} {{company}} بنبرة صاحب العمل"},
+    {"name": "متابعة", "channel": "whatsapp", "subject": null, "body": "..."},
+    {"name": "إعادة تفعيل", "channel": "whatsapp", "subject": null, "body": "..."}
+  ],
+  "sequence": {"name": "التسلسل الافتراضي", "steps": [
+    {"delay_hours": 0, "channel": "whatsapp", "template_ref": 0},
+    {"delay_hours": 72, "channel": "whatsapp", "template_ref": 1},
+    {"delay_hours": 168, "channel": "whatsapp", "template_ref": 2}
+  ]},
+  "flow": {"type": "booking|order|quote|callback", "name": "..."},
+  "ab_test": {"name": "اختبار الافتتاحية", "variant_b_body": "صيغة بديلة للافتتاحية"},
+  "campaign_name": "حملتي الأولى"
+}
+اكتب كل النصوص بلغة الملف (عربي غالباً)، ونبرة مطابقة لحقل tone. اجعل الرسائل قصيرة وطبيعية بدون روابط في أول رسالة."""
+        prompt = f"ملف النشاط:\n{json.dumps(profile, ensure_ascii=False)}"
+        result = await self._or_reason(
+            [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            max_tokens=2000,
+        )
+        return self._parse_json(result, {})
+
+
 # Singleton
 ai_service = AIService()
