@@ -79,7 +79,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       GROQ_MODEL_REALTIME: ${GROQ_MODEL_REALTIME:-llama-3.3-70b-versatile}
-      OPENROUTER_MODEL_REASONING: ${OPENROUTER_MODEL_REASONING:-deepseek/deepseek-r1:free}
+      OPENROUTER_MODEL_REASONING: ${OPENROUTER_MODEL_REASONING:-meta-llama/llama-3.3-70b-instruct:free}
       OPENROUTER_MODEL_FAST: ${OPENROUTER_MODEL_FAST:-meta-llama/llama-3.3-70b-instruct:free}
       SECRET_KEY: ${SECRET_KEY}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
@@ -130,7 +130,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       GROQ_MODEL_REALTIME: ${GROQ_MODEL_REALTIME:-llama-3.3-70b-versatile}
-      OPENROUTER_MODEL_REASONING: ${OPENROUTER_MODEL_REASONING:-deepseek/deepseek-r1:free}
+      OPENROUTER_MODEL_REASONING: ${OPENROUTER_MODEL_REASONING:-meta-llama/llama-3.3-70b-instruct:free}
       OPENROUTER_MODEL_FAST: ${OPENROUTER_MODEL_FAST:-meta-llama/llama-3.3-70b-instruct:free}
       SECRET_KEY: ${SECRET_KEY}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
