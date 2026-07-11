@@ -23,6 +23,7 @@ from app.api import (
     monitoring,
     ab_tests,
     campaigns,
+    onboarding,
 )
 
 api_router = APIRouter()
@@ -47,3 +48,4 @@ api_router.include_router(webhooks_config.router, prefix="/webhooks", tags=["Web
 api_router.include_router(monitoring.router, prefix="/monitoring", tags=["Monitoring"])
 api_router.include_router(ab_tests.router, prefix="/ab-tests", tags=["A/B Testing"])
 api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
+api_router.include_router(onboarding.router, prefix="/onboarding", tags=["Onboarding"])

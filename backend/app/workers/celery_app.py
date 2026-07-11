@@ -14,6 +14,7 @@ celery_app = Celery(
         "app.workers.webhook_tasks",
         "app.workers.backup_tasks",
         "app.workers.campaign_tasks",
+        "app.workers.onboarding_tasks",
     ],
 )
 

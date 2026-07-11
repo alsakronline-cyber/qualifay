@@ -67,7 +67,9 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://qualifay:${POSTGRES_PASSWORD}@127.0.0.1:5436/qualifay_dev
-      REDIS_URL: redis://127.0.0.1:6380
+      # Must match the dev worker's Redis DB (/1) so Celery tasks the backend enqueues
+      # actually reach the dev worker — and stay isolated from prod's broker on DB 0.
+      REDIS_URL: redis://127.0.0.1:6380/1
       REDIS_KEY_PREFIX: "qualifay_dev:"
       EVOLUTION_API_URL: http://localhost:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}

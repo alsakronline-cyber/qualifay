@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # AI — OpenRouter (reasoning + batch)
     OPENROUTER_API_KEY: str
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    OPENROUTER_MODEL_REASONING: str = "deepseek/deepseek-r1"
+    OPENROUTER_MODEL_REASONING: str = "meta-llama/llama-3.3-70b-instruct:free"
     OPENROUTER_MODEL_FAST: str = "meta-llama/llama-3.3-70b-instruct"
 
     # Scraping

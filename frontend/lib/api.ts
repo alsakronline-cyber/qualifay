@@ -274,6 +274,15 @@ export const campaignsApi = {
   audiencePreview: (id: string) => API.get(`/v1/campaigns/${id}/audience-preview`),
 }
 
+// ── AI Setup Consultant (onboarding) ──────────────────────────────────────────
+export const onboardingApi = {
+  profile: () => API.get('/v1/onboarding/profile'),
+  chat: (messages: { role: string; content: string }[]) => API.post('/v1/onboarding/chat', { messages }),
+  build: () => API.post('/v1/onboarding/build', {}),
+  setAutonomy: (level: string) => API.post('/v1/onboarding/autonomy', { level }),
+  apply: (plan: Record<string, unknown>, autonomy: string) => API.post('/v1/onboarding/apply', { plan, autonomy }),
+}
+
 // ── Agent Automation (browser-extension LinkedIn/Facebook sourcing) ───────────
 export const agentApi = {
   getSetup: () => API.get('/v1/agent/setup'),
