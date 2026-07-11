@@ -71,7 +71,8 @@ class AIService:
                 return await self._or_fast(messages, max_tokens)
 
     async def _or_fast(self, messages: list, max_tokens: int = 512) -> str:
-        """Call OpenRouter Llama-3.3-70B fast model."""
+        """Call OpenRouter Llama-3.3-70B fast model; fall back to Groq if the free tier
+        is rate-limited/unavailable, so callers get real output instead of a static stub."""
         try:
             resp = await self.openrouter.chat.completions.create(
                 model=settings.OPENROUTER_MODEL_FAST,
@@ -81,8 +82,18 @@ class AIService:
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
-            logger.error(f"OR fast model failed: {e}")
-            return ""
+            logger.warning(f"OR fast model failed: {e} — falling back to Groq")
+            try:
+                resp = await self.groq.chat.completions.create(
+                    model=settings.GROQ_MODEL_REALTIME,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.3,
+                )
+                return resp.choices[0].message.content.strip()
+            except Exception as e2:
+                logger.error(f"Groq fallback also failed: {e2}")
+                return ""
 
     def _parse_json(self, text: str, fallback: dict) -> dict:
         """Parse JSON from LLM response, stripping markdown fences. Returns fallback on failure."""
@@ -247,6 +258,7 @@ If a field cannot be determined, use null. Do NOT invent data."""
         contact_name: str,
         history: list,
         language: str = "auto",
+        tenant_context: str = "",
     ) -> Optional[str]:
         """
         Generate a WhatsApp reply using Groq.
@@ -259,8 +271,9 @@ If a field cannot be determined, use null. Do NOT invent data."""
 
         lang_instruction = "Respond in the same language as the customer." if language == "auto" else f"Respond in {'Arabic' if language == 'ar' else 'English'}."
 
+        brand = f"\nYou represent this business — stay on-brand and specific to it:\n{tenant_context}\n" if tenant_context else ""
         system = f"""You are a professional B2B sales assistant for an Egyptian company.
-{lang_instruction}
+{brand}{lang_instruction}
 Rules:
 - Be concise, warm, and professional (max 3 sentences)
 - Never claim to be AI unless directly asked
@@ -667,6 +680,24 @@ Match the language of the customer (Arabic or English)."""
             max_tokens=2000,
         )
         return self._parse_json(result, {})
+
+
+def tenant_context_str(profile: dict) -> str:
+    """Condense a tenant's onboarding profile into a short brand brief that is injected
+    into outreach/reply copy so every message sounds like THIS business, not a generic bot."""
+    if not profile:
+        return ""
+    fields = [
+        ("business_name", "Business"), ("industry", "Industry"), ("sells", "Sells"),
+        ("value_prop", "Why customers choose us"), ("ideal_customer", "Ideal customer"),
+        ("tone", "Preferred tone"), ("price_range", "Price range"),
+    ]
+    parts = []
+    for key, label in fields:
+        val = profile.get(key)
+        if val:
+            parts.append(f"{label}: {val}")
+    return "\n".join(parts)
 
 
 # Singleton
