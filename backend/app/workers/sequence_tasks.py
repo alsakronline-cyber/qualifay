@@ -111,6 +111,7 @@ async def _run_due():
     from app.core.database import AsyncSessionLocal
     from app.models.models import SequenceEnrollment, SequenceStep, Lead, LeadStatus
 
+    from app.models.models import Tenant
     async with AsyncSessionLocal() as db:
         now = datetime.utcnow()
         enrolls = (await db.execute(select(SequenceEnrollment).where(
@@ -118,8 +119,21 @@ async def _run_due():
             SequenceEnrollment.next_run_at <= now,
         ).limit(200))).scalars().all()
 
+        autonomy_cache = {}
+
+        async def _is_manual(tenant_id):
+            if tenant_id not in autonomy_cache:
+                t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+                autonomy_cache[tenant_id] = (t.autonomy if t else "copilot") or "copilot"
+            return autonomy_cache[tenant_id] == "manual"
+
         sent = 0
         for en in enrolls:
+            # In 'manual' autonomy the system never sends on its own — pause the cadence
+            # (the owner can flip back to copilot/full to resume).
+            if await _is_manual(en.tenant_id):
+                en.status = "paused"
+                continue
             steps = (await db.execute(select(SequenceStep).where(
                 SequenceStep.sequence_id == en.sequence_id
             ).order_by(SequenceStep.step_order))).scalars().all()

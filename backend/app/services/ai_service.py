@@ -247,6 +247,7 @@ If a field cannot be determined, use null. Do NOT invent data."""
         contact_name: str,
         history: list,
         language: str = "auto",
+        tenant_context: str = "",
     ) -> Optional[str]:
         """
         Generate a WhatsApp reply using Groq.
@@ -259,8 +260,9 @@ If a field cannot be determined, use null. Do NOT invent data."""
 
         lang_instruction = "Respond in the same language as the customer." if language == "auto" else f"Respond in {'Arabic' if language == 'ar' else 'English'}."
 
+        brand = f"\nYou represent this business — stay on-brand and specific to it:\n{tenant_context}\n" if tenant_context else ""
         system = f"""You are a professional B2B sales assistant for an Egyptian company.
-{lang_instruction}
+{brand}{lang_instruction}
 Rules:
 - Be concise, warm, and professional (max 3 sentences)
 - Never claim to be AI unless directly asked
@@ -667,6 +669,24 @@ Match the language of the customer (Arabic or English)."""
             max_tokens=2000,
         )
         return self._parse_json(result, {})
+
+
+def tenant_context_str(profile: dict) -> str:
+    """Condense a tenant's onboarding profile into a short brand brief that is injected
+    into outreach/reply copy so every message sounds like THIS business, not a generic bot."""
+    if not profile:
+        return ""
+    fields = [
+        ("business_name", "Business"), ("industry", "Industry"), ("sells", "Sells"),
+        ("value_prop", "Why customers choose us"), ("ideal_customer", "Ideal customer"),
+        ("tone", "Preferred tone"), ("price_range", "Price range"),
+    ]
+    parts = []
+    for key, label in fields:
+        val = profile.get(key)
+        if val:
+            parts.append(f"{label}: {val}")
+    return "\n".join(parts)
 
 
 # Singleton
