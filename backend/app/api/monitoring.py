@@ -19,7 +19,8 @@ async def _check_db(db: AsyncSession):
         await db.execute(text("SELECT 1"))
         return {"ok": True}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+        logger.warning("health check failed: %s", e)  # detail stays server-side
+        return {"ok": False}
 
 
 def _check_redis():
@@ -29,7 +30,8 @@ def _check_redis():
         r.ping()
         return {"ok": True}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+        logger.warning("health check failed: %s", e)  # detail stays server-side
+        return {"ok": False}
 
 
 async def _check_evolution():
@@ -39,7 +41,8 @@ async def _check_evolution():
             resp = await c.get(f"{settings.EVOLUTION_API_URL}/")
         return {"ok": resp.status_code < 500, "status": resp.status_code}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+        logger.warning("health check failed: %s", e)  # detail stays server-side
+        return {"ok": False}
 
 
 def _check_celery():
@@ -48,7 +51,8 @@ def _check_celery():
         pong = celery_app.control.ping(timeout=3)
         return {"ok": bool(pong), "workers": len(pong or [])}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+        logger.warning("health check failed: %s", e)  # detail stays server-side
+        return {"ok": False}
 
 
 def _disk():

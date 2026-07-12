@@ -36,8 +36,11 @@ def audience_conditions(af: Optional[Dict[str, Any]], tenant_id: str) -> list:
             conds.append(Lead.source == LeadSource(af["source"]))
         except ValueError:
             pass
-    if af.get("min_score") is not None:
-        conds.append(Lead.bant_score >= int(af["min_score"]))
+    if af.get("min_score") not in (None, ""):
+        try:
+            conds.append(Lead.bant_score >= int(af["min_score"]))
+        except (ValueError, TypeError):
+            pass  # ignore a non-numeric filter value rather than 500 the whole campaign
     if af.get("city"):
         conds.append(Lead.city.ilike(f"%{af['city']}%"))
     if af.get("industry"):
