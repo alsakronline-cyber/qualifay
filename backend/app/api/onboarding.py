@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_admin
 from app.services.ai_service import ai_service
 
 router = APIRouter()
@@ -47,6 +47,7 @@ async def get_profile(current_user: dict = Depends(get_current_user), db: AsyncS
 @router.post("/chat")
 async def chat(body: ChatIn, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """One interview turn. Merges any newly-extracted fields into the tenant profile."""
+    require_admin(current_user)  # onboarding is an owner/admin setup task
     t = await _tenant(current_user["tenant_id"], db)
     profile: Dict[str, Any] = dict(t.tenant_profile or {})
     profile.pop("_build_draft", None)  # don't feed the draft back into the interview
@@ -67,6 +68,7 @@ async def chat(body: ChatIn, current_user: dict = Depends(get_current_user), db:
 @router.post("/build")
 async def build(current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Kick off the workspace-plan generation (reasoning model, runs in Celery)."""
+    require_admin(current_user)
     t = await _tenant(current_user["tenant_id"], db)
     if not t.tenant_profile:
         raise HTTPException(status_code=400, detail="Finish the interview first")
@@ -81,6 +83,7 @@ class AutonomyIn(BaseModel):
 
 @router.post("/autonomy")
 async def set_autonomy(body: AutonomyIn, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
     if body.level not in AUTONOMY_LEVELS:
         raise HTTPException(status_code=400, detail=f"level must be one of {AUTONOMY_LEVELS}")
     t = await _tenant(current_user["tenant_id"], db)
@@ -105,9 +108,13 @@ async def apply(body: ApplyIn, current_user: dict = Depends(get_current_user), d
         MessageTemplate, Sequence, SequenceStep, ConversionFlow,
         ABTest, ABVariant, Campaign,
     )
+    require_admin(current_user)
     tid = current_user["tenant_id"]
     t = await _tenant(tid, db)
     plan = body.plan or {}
+    # Bound what a single apply can create (a crafted plan shouldn't spawn unbounded rows).
+    if len(plan.get("templates") or []) > 20 or len((plan.get("sequence") or {}).get("steps") or []) > 20:
+        raise HTTPException(status_code=400, detail="Plan too large")
     created = {"templates": 0, "sequence": None, "flow": None, "ab_test": None, "campaign": None}
 
     # 1) Templates — keep their created ids so sequence steps can reference them.
