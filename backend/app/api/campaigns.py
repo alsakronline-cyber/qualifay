@@ -51,13 +51,7 @@ def audience_conditions(af: Optional[Dict[str, Any]], tenant_id: str) -> list:
     return conds
 
 
-async def _stats(campaign_id: str, db: AsyncSession) -> dict:
-    """Live counts derived from enrollments — the campaign's real numbers."""
-    from app.models.models import SequenceEnrollment as E
-    rows = (await db.execute(
-        select(E.status, func.count(E.id)).where(E.campaign_id == campaign_id).group_by(E.status)
-    )).all()
-    by = {status: n for status, n in rows}
+def _stats_from_counts(by: dict) -> dict:
     total = sum(by.values())
     replied = by.get("replied", 0)
     return {
@@ -69,6 +63,30 @@ async def _stats(campaign_id: str, db: AsyncSession) -> dict:
         "replied": replied,
         "reply_rate": round(replied / total * 100, 1) if total else 0.0,
     }
+
+
+async def _stats(campaign_id: str, db: AsyncSession) -> dict:
+    """Live counts derived from enrollments — the campaign's real numbers."""
+    from app.models.models import SequenceEnrollment as E
+    rows = (await db.execute(
+        select(E.status, func.count(E.id)).where(E.campaign_id == campaign_id).group_by(E.status)
+    )).all()
+    return _stats_from_counts({status: n for status, n in rows})
+
+
+async def _stats_bulk(campaign_ids: list, db: AsyncSession) -> dict:
+    """Stats for many campaigns in a single grouped query (avoids an N+1 on the list)."""
+    from app.models.models import SequenceEnrollment as E
+    if not campaign_ids:
+        return {}
+    rows = (await db.execute(
+        select(E.campaign_id, E.status, func.count(E.id))
+        .where(E.campaign_id.in_(campaign_ids)).group_by(E.campaign_id, E.status)
+    )).all()
+    grouped: dict = {cid: {} for cid in campaign_ids}
+    for cid, status, n in rows:
+        grouped.setdefault(cid, {})[status] = n
+    return {cid: _stats_from_counts(by) for cid, by in grouped.items()}
 
 
 def _c(c, stats: dict) -> dict:
@@ -114,7 +132,8 @@ async def list_campaigns(current_user: dict = Depends(get_current_user), db: Asy
     rows = (await db.execute(select(Campaign).where(
         Campaign.tenant_id == current_user["tenant_id"]).order_by(Campaign.created_at.desc())
     )).scalars().all()
-    return {"items": [_c(c, await _stats(c.id, db)) for c in rows]}
+    stats = await _stats_bulk([c.id for c in rows], db)
+    return {"items": [_c(c, stats.get(c.id, _stats_from_counts({}))) for c in rows]}
 
 
 @router.get("/{cid}")

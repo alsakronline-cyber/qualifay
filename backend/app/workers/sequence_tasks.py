@@ -119,29 +119,46 @@ async def _run_due():
             SequenceEnrollment.next_run_at <= now,
         ).limit(200))).scalars().all()
 
-        autonomy_cache = {}
+        # Batch-load everything the loop needs (avoids an N+1 per enrollment): tenant
+        # autonomy, sequence steps, and leads — three queries instead of 3×N.
+        seq_ids = {en.sequence_id for en in enrolls}
+        lead_ids = {en.lead_id for en in enrolls}
+        tenant_ids = {en.tenant_id for en in enrolls}
 
-        async def _is_manual(tenant_id):
-            if tenant_id not in autonomy_cache:
-                t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
-                autonomy_cache[tenant_id] = (t.autonomy if t else "copilot") or "copilot"
-            return autonomy_cache[tenant_id] == "manual"
+        manual_tenants = set()
+        if tenant_ids:
+            for tid, autonomy in (await db.execute(
+                select(Tenant.id, Tenant.autonomy).where(Tenant.id.in_(tenant_ids))
+            )).all():
+                if (autonomy or "copilot") == "manual":
+                    manual_tenants.add(tid)
+
+        steps_by_seq: dict = {}
+        if seq_ids:
+            for st in (await db.execute(select(SequenceStep).where(
+                SequenceStep.sequence_id.in_(seq_ids)).order_by(SequenceStep.step_order)
+            )).scalars().all():
+                steps_by_seq.setdefault(st.sequence_id, []).append(st)
+
+        leads_by_id = {}
+        if lead_ids:
+            leads_by_id = {l.id: l for l in (await db.execute(
+                select(Lead).where(Lead.id.in_(lead_ids))
+            )).scalars().all()}
 
         sent = 0
         for en in enrolls:
             # In 'manual' autonomy the system never sends on its own — pause the cadence
             # (the owner can flip back to copilot/full to resume).
-            if await _is_manual(en.tenant_id):
+            if en.tenant_id in manual_tenants:
                 en.status = "paused"
                 continue
-            steps = (await db.execute(select(SequenceStep).where(
-                SequenceStep.sequence_id == en.sequence_id
-            ).order_by(SequenceStep.step_order))).scalars().all()
+            steps = steps_by_seq.get(en.sequence_id, [])
             if en.current_step >= len(steps):
                 en.status = "completed"
                 continue
 
-            lead = (await db.execute(select(Lead).where(Lead.id == en.lead_id))).scalar_one_or_none()
+            lead = leads_by_id.get(en.lead_id)
             if not lead or lead.status in (LeadStatus.unsubscribed, LeadStatus.invalid, LeadStatus.duplicate):
                 en.status = "stopped"
                 continue

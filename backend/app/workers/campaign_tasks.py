@@ -28,8 +28,8 @@ def sync_campaign_audiences():
 
 async def _sync():
     from app.core.database import AsyncSessionLocal
-    from app.models.models import Campaign, Sequence, SequenceEnrollment, Lead
-    from app.api.campaigns import audience_conditions
+    from app.models.models import Campaign, Sequence
+    from app.api.campaigns import _enroll_audience  # shared with the launch path
 
     total = 0
     async with AsyncSessionLocal() as db:
@@ -45,26 +45,7 @@ async def _sync():
             if not seq or not seq.steps:
                 continue
 
-            first_delay = sorted(seq.steps, key=lambda x: x.step_order)[0].delay_hours or 0
-            first_run = datetime.utcnow() + timedelta(hours=first_delay)
-
-            already = {e.lead_id for e in (await db.execute(
-                select(SequenceEnrollment).where(SequenceEnrollment.sequence_id == seq.id)
-            )).scalars().all()}
-
-            leads = (await db.execute(select(Lead.id).where(
-                and_(*audience_conditions(c.audience_filter, c.tenant_id))
-            ))).scalars().all()
-
-            added = 0
-            for lid in leads:
-                if lid in already:
-                    continue
-                db.add(SequenceEnrollment(
-                    tenant_id=c.tenant_id, sequence_id=seq.id, lead_id=lid, campaign_id=c.id,
-                    current_step=0, status="active", next_run_at=first_run,
-                ))
-                added += 1
+            added = await _enroll_audience(c, seq, c.tenant_id, db)
             if added:
                 logger.info("campaign %s auto-enrolled %d new leads", c.id, added)
             total += added
