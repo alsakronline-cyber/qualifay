@@ -29,6 +29,7 @@ import {
   Webhook,
   Activity,
   FlaskConical,
+  Sparkles,
 } from 'lucide-react'
 import { authApi, notificationsApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -44,6 +45,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/', label: 'الرئيسية', labelEn: 'Dashboard', icon: LayoutDashboard },
+  { href: '/activity', label: 'نشاط المساعد', labelEn: 'AI Activity', icon: Sparkles },
   { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3 },
   { href: '/leads', label: 'العملاء المحتملون', labelEn: 'Leads', icon: Users },
   { href: '/inbox', label: 'صندوق الوارد', labelEn: 'Inbox', icon: MessageSquare },

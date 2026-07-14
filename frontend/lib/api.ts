@@ -283,6 +283,12 @@ export const onboardingApi = {
   apply: (plan: Record<string, unknown>, autonomy: string) => API.post('/v1/onboarding/apply', { plan, autonomy }),
 }
 
+// ── Agent Activity (autonomous orchestrator feed) ─────────────────────────────
+export const agentRunsApi = {
+  list: (limit = 50) => API.get(`/v1/agent-runs?limit=${limit}`),
+  runNow: () => API.post('/v1/agent-runs/run-now', {}),
+}
+
 // ── Agent Automation (browser-extension LinkedIn/Facebook sourcing) ───────────
 export const agentApi = {
   getSetup: () => API.get('/v1/agent/setup'),
