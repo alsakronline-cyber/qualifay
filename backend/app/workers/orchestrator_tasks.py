@@ -130,6 +130,53 @@ async def _assess_tenant(t, db):
                     summary=summary, actions=actions, metrics=metrics))
 
 
+AB_MIN_SENT = 15        # min sends per variant before we trust the signal
+AB_MIN_LIFT = 5.0       # winner must beat the runner-up by this many points
+
+
+@celery_app.task(name="orchestrator.optimize_ab_tests")
+def optimize_ab_tests():
+    """Auto-promote the winning A/B variant once there's a clear, well-powered winner —
+    turn it into a reusable template, close the test, and tell the owner."""
+    return run_async(_optimize_ab())
+
+
+async def _optimize_ab():
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import ABTest, ABVariant, MessageTemplate, NotificationType
+    from app.services.notification_service import notify
+    from sqlalchemy.orm import selectinload
+
+    promoted = 0
+    async with AsyncSessionLocal() as db:
+        tests = (await db.execute(select(ABTest).options(selectinload(ABTest.variants)).where(
+            ABTest.status == "active"))).scalars().all()
+        for t in tests:
+            vs = [v for v in t.variants if (v.sent_count or 0) >= AB_MIN_SENT]
+            if len(vs) < 2:
+                continue  # not enough data on at least two arms yet
+            def rate(v):
+                return (v.reply_count or 0) / (v.sent_count or 1) * 100
+            vs.sort(key=rate, reverse=True)
+            winner, runner = vs[0], vs[1]
+            if rate(winner) - rate(runner) < AB_MIN_LIFT:
+                continue  # no clear winner — keep testing
+
+            db.add(MessageTemplate(
+                tenant_id=t.tenant_id, name=f"{t.name} — الفائزة", channel=t.channel or "whatsapp",
+                category="outreach", subject=winner.subject, body=winner.body))
+            t.status = "done"
+            await notify(
+                db, t.tenant_id, NotificationType.system,
+                title="🏆 فاز اختبار A/B",
+                message=f"في اختبار «{t.name}» تفوّقت النسخة {winner.label} بمعدل رد {rate(winner):.0f}% "
+                        f"(مقابل {rate(runner):.0f}%). اعتمدناها كقالب جاهز.",
+                data={"test_id": t.id, "winner": winner.label, "source": "ab_optimizer"})
+            promoted += 1
+        await db.commit()
+    return {"promoted": promoted}
+
+
 @celery_app.task(name="orchestrator.harvest_learnings")
 def harvest_learnings():
     """Turn recently closed (won/lost) leads into reusable tenant memory."""
