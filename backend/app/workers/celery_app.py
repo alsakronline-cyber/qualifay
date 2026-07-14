@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.workers.backup_tasks",
         "app.workers.campaign_tasks",
         "app.workers.onboarding_tasks",
+        "app.workers.orchestrator_tasks",
     ],
 )
 
@@ -68,6 +69,10 @@ celery_app.conf.update(
         "sync-campaign-audiences": {
             "task": "campaigns.sync_audiences",
             "schedule": 600.0,  # every 10 min — enroll new matching leads into running campaigns
+        },
+        "orchestrator-run": {
+            "task": "orchestrator.run",
+            "schedule": 900.0,  # every 15 min — the autonomous brain assesses each tenant
         },
     },
 )

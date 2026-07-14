@@ -24,6 +24,7 @@ from app.api import (
     ab_tests,
     campaigns,
     onboarding,
+    agent_runs,
 )
 
 api_router = APIRouter()
@@ -49,3 +50,4 @@ api_router.include_router(monitoring.router, prefix="/monitoring", tags=["Monito
 api_router.include_router(ab_tests.router, prefix="/ab-tests", tags=["A/B Testing"])
 api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
 api_router.include_router(onboarding.router, prefix="/onboarding", tags=["Onboarding"])
+api_router.include_router(agent_runs.router, prefix="/agent-runs", tags=["Agent Activity"])

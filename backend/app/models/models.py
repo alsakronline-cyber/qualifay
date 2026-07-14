@@ -698,3 +698,21 @@ class ABAssignment(Base):
     lead_id = Column(String, index=True, nullable=False)
     replied = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
+
+
+# ─── Agent Runtime (autonomous orchestrator activity log) ─────
+
+class AgentRun(Base):
+    """Every autonomous decision cycle the orchestrator makes for a tenant is logged
+    here — the transparency layer that turns 'the AI did something' into a coworker's
+    readable report. The activity feed is built from these rows."""
+    __tablename__ = "agent_runs"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String, default="orchestrator")   # orchestrator | digest | ...
+    status = Column(String, default="idle")          # idle | acted | alerted
+    summary = Column(Text, nullable=False)           # human-readable, in the tenant's language
+    actions = Column(JSON, default=list)             # [{type, detail}] — what it actually did
+    metrics = Column(JSON, default=dict)             # state snapshot at decision time
+    created_at = Column(DateTime, default=func.now(), index=True)
