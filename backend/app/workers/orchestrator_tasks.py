@@ -99,12 +99,14 @@ async def _assess_tenant(t, db):
     metrics["wa_instances"] = len(instances)
     metrics["wa_near_cap"] = len(near_cap)
     if disconnected and not await _recent_notif(db, tid, NotificationType.wa_disconnected, hours=6):
-        db.add(Notification(
-            tenant_id=tid, type=NotificationType.wa_disconnected,
+        from app.services.notification_service import notify
+        await notify(
+            db, tid, NotificationType.wa_disconnected,
             title="⚠️ واتساب غير متصل",
             message=f"{len(disconnected)} جهاز واتساب غير متصل — قد يتوقف التواصل.",
             data={"instances": [i.instance_name for i in disconnected], "source": "orchestrator"},
-        ))
+            urgent=True,  # revenue-critical — reach the owner on their WhatsApp too
+        )
         actions.append({"type": "alert_wa_disconnected", "detail": f"{len(disconnected)} instances down"})
 
     # ── 4) Today's throughput (for the digest + the owner's sense of progress) ─
@@ -126,6 +128,56 @@ async def _assess_tenant(t, db):
     summary = _summarize(autonomy, metrics, actions)
     db.add(AgentRun(tenant_id=tid, kind="orchestrator", status=status,
                     summary=summary, actions=actions, metrics=metrics))
+
+
+@celery_app.task(name="orchestrator.daily_digest")
+def send_daily_digest():
+    """Once a day: send each tenant owner a plain-language end-of-day report."""
+    return run_async(_digest_all())
+
+
+async def _digest_all():
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import (
+        Tenant, Lead, LeadStage, Conversation, Message, MessageDirection,
+        NotificationType,
+    )
+    from app.services.notification_service import notify
+    sent = 0
+    async with AsyncSessionLocal() as db:
+        tenants = (await db.execute(select(Tenant).where(Tenant.onboarding_done == True))).scalars().all()  # noqa: E712
+        since = datetime.utcnow() - timedelta(hours=24)
+        for t in tenants:
+            tid = t.id
+            new_leads = (await db.execute(select(func.count(Lead.id)).where(and_(
+                Lead.tenant_id == tid, Lead.created_at >= since)))).scalar() or 0
+            pending = (await db.execute(select(func.count(Lead.id)).where(and_(
+                Lead.tenant_id == tid, Lead.stage == LeadStage.pending_review)))).scalar() or 0
+            won = (await db.execute(select(func.count(Lead.id)).where(and_(
+                Lead.tenant_id == tid, Lead.stage == LeadStage.won, Lead.updated_at >= since)))).scalar() or 0
+            sent_msgs = (await db.execute(select(func.count(Message.id)).join(
+                Conversation, Message.conversation_id == Conversation.id).where(and_(
+                    Conversation.tenant_id == tid, Message.direction == MessageDirection.outbound,
+                    Message.created_at >= since)))).scalar() or 0
+            replies = (await db.execute(select(func.count(Message.id)).join(
+                Conversation, Message.conversation_id == Conversation.id).where(and_(
+                    Conversation.tenant_id == tid, Message.direction == MessageDirection.inbound,
+                    Message.created_at >= since)))).scalar() or 0
+
+            if not any([new_leads, sent_msgs, replies, pending]):
+                continue  # nothing happened — don't spam a quiet day
+
+            msg = (f"ملخص اليوم 📊\n"
+                   f"• عملاء جدد: {new_leads}\n"
+                   f"• رسائل مُرسلة: {sent_msgs}\n"
+                   f"• ردود: {replies}\n"
+                   f"• بانتظار مراجعتك: {pending}\n"
+                   f"• صفقات مربوحة: {won}")
+            await notify(db, tid, NotificationType.system, title="ملخص اليوم من مساعدك الذكي",
+                         message=msg, data={"source": "daily_digest"}, urgent=True)
+            sent += 1
+        await db.commit()
+    return {"digests_sent": sent}
 
 
 async def _recent_notif(db, tid, ntype, hours):

@@ -506,6 +506,25 @@ async def _handle_inbound_message(webhook_data: dict):
         from app.workers.ai_tasks import update_sentiment
         update_sentiment.apply_async(args=[conv.id], queue="ai")
 
+        # Step 11: Hot-lead alert — a buying signal reaches the owner in real time
+        # (in-app + their WhatsApp), so they can jump on it.
+        if intent_data.get("intent") in ("purchase_intent", "booking"):
+            try:
+                from app.services.notification_service import notify
+                from app.models.models import NotificationType
+                who = (lead.company or lead.name) if lead else (push_name or "عميل")
+                await notify(
+                    db, conv.tenant_id, NotificationType.leads_ready,
+                    title="🔥 عميل مهتم الآن",
+                    message=f"{who}: {intent_data.get('summary') or content[:80]}",
+                    data={"conversation_id": conv.id, "lead_id": lead.id if lead else None,
+                          "intent": intent_data.get("intent"), "source": "hot_lead"},
+                    urgent=True,
+                )
+                await db.commit()
+            except Exception as e:
+                logger.warning("hot-lead alert failed: %s", e)
+
         return {
             "conversation_id": conv.id,
             "lead_id": lead.id if lead else None,

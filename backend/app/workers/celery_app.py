@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from app.core.config import settings
 
 celery_app = Celery(
@@ -73,6 +74,10 @@ celery_app.conf.update(
         "orchestrator-run": {
             "task": "orchestrator.run",
             "schedule": 900.0,  # every 15 min — the autonomous brain assesses each tenant
+        },
+        "daily-digest": {
+            "task": "orchestrator.daily_digest",
+            "schedule": crontab(hour=20, minute=0),  # 20:00 Africa/Cairo — owner's end-of-day report
         },
     },
 )
