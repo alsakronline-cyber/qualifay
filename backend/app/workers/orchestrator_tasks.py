@@ -130,6 +130,58 @@ async def _assess_tenant(t, db):
                     summary=summary, actions=actions, metrics=metrics))
 
 
+@celery_app.task(name="orchestrator.harvest_learnings")
+def harvest_learnings():
+    """Turn recently closed (won/lost) leads into reusable tenant memory."""
+    return run_async(_harvest())
+
+
+async def _harvest():
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Lead, LeadStage, TenantMemory, Conversation, Message
+    from app.services.ai_service import ai_service
+    from app.services.memory_service import remember, prune
+
+    learned = 0
+    async with AsyncSessionLocal() as db:
+        cut = datetime.utcnow() - timedelta(days=7)
+        closed = (await db.execute(select(Lead).where(and_(
+            Lead.stage.in_([LeadStage.won, LeadStage.lost]), Lead.updated_at >= cut,
+        )).limit(50))).scalars().all()
+
+        for lead in closed:
+            # Skip leads we've already learned from.
+            done = (await db.execute(select(func.count(TenantMemory.id)).where(
+                TenantMemory.source_lead_id == lead.id))).scalar() or 0
+            if done:
+                continue
+
+            conv = (await db.execute(select(Conversation).where(
+                Conversation.lead_id == lead.id))).scalars().first()
+            history = []
+            if conv:
+                msgs = (await db.execute(select(Message).where(
+                    Message.conversation_id == conv.id).order_by(Message.created_at).limit(30))).scalars().all()
+                history = [{"direction": m.direction.value, "content": m.content or ""} for m in msgs]
+
+            outcome = "won" if lead.stage == LeadStage.won else "lost"
+            lesson = await ai_service.extract_learning(
+                {"company": lead.company, "industry": lead.industry, "city": lead.city}, outcome, history)
+            if lesson:
+                await remember(db, lead.tenant_id, lesson["kind"], lesson["content"], source_lead_id=lead.id)
+                learned += 1
+            else:
+                # Mark as processed even with no lesson (a zero-weight marker) to avoid re-querying.
+                db.add(TenantMemory(tenant_id=lead.tenant_id, kind="insight",
+                                    content=f"(لا درس من {lead.company or lead.id})", weight=0, source_lead_id=lead.id))
+
+        # Prune per tenant so memory stays sharp.
+        for tid in {l.tenant_id for l in closed}:
+            await prune(db, tid)
+        await db.commit()
+    return {"learned": learned}
+
+
 @celery_app.task(name="orchestrator.daily_digest")
 def send_daily_digest():
     """Once a day: send each tenant owner a plain-language end-of-day report."""
