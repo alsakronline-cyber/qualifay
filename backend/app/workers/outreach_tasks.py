@@ -55,7 +55,16 @@ async def _tenant_ctx(db, tenant_id):
     t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
     if not t:
         return "", "copilot"
-    return tenant_context_str(t.tenant_profile or {}), (t.autonomy or "copilot")
+    brand = tenant_context_str(t.tenant_profile or {})
+    # Fold in what we've learned about this tenant's market (adaptive memory).
+    try:
+        from app.services.memory_service import tenant_memory_str
+        mem = await tenant_memory_str(db, tenant_id)
+        if mem:
+            brand = (brand + "\n\n" + mem) if brand else mem
+    except Exception:
+        pass
+    return brand, (t.autonomy or "copilot")
 
 
 async def _supervise_send(db, tenant_id, text, autonomy, brand, first_contact=False):

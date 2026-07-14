@@ -716,3 +716,22 @@ class AgentRun(Base):
     actions = Column(JSON, default=list)             # [{type, detail}] — what it actually did
     metrics = Column(JSON, default=dict)             # state snapshot at decision time
     created_at = Column(DateTime, default=func.now(), index=True)
+
+
+# ─── Adaptive Memory (per-tenant learnings the agents accumulate) ─────
+
+class TenantMemory(Base):
+    """What the system has learned about THIS tenant's market — win/loss reasons,
+    common objections, insights — harvested from real outcomes and injected back into
+    every message the agents write. This is the compounding moat: each tenant's agent
+    gets smarter about their specific business over time."""
+    __tablename__ = "tenant_memories"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String, default="insight")   # win_reason | loss_reason | objection | insight
+    content = Column(Text, nullable=False)      # one concise, actionable fact (in the tenant's language)
+    weight = Column(Integer, default=1)         # reinforced each time the same lesson recurs
+    source_lead_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

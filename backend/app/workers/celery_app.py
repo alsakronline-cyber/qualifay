@@ -79,5 +79,9 @@ celery_app.conf.update(
             "task": "orchestrator.daily_digest",
             "schedule": crontab(hour=20, minute=0),  # 20:00 Africa/Cairo — owner's end-of-day report
         },
+        "harvest-learnings": {
+            "task": "orchestrator.harvest_learnings",
+            "schedule": 14400.0,  # every 4h — distill won/lost leads into tenant memory
+        },
     },
 )
