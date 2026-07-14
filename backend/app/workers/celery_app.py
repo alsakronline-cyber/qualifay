@@ -83,5 +83,9 @@ celery_app.conf.update(
             "task": "orchestrator.harvest_learnings",
             "schedule": 14400.0,  # every 4h — distill won/lost leads into tenant memory
         },
+        "optimize-ab-tests": {
+            "task": "orchestrator.optimize_ab_tests",
+            "schedule": 21600.0,  # every 6h — auto-promote a clear A/B winner to a template
+        },
     },
 )
