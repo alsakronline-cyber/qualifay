@@ -58,6 +58,27 @@ async def _tenant_ctx(db, tenant_id):
     return tenant_context_str(t.tenant_profile or {}), (t.autonomy or "copilot")
 
 
+async def _supervise_send(db, tenant_id, text, autonomy, brand, first_contact=False):
+    """Critic gate before an autonomous send. Only gates FULL autopilot (copilot/manual
+    have a human in the loop). Returns (ok, final_text, reason): ok=False means HOLD."""
+    # Cheap hard rule for everyone: no links in a first-contact message (anti-ban).
+    if first_contact and ("http://" in text or "https://" in text or "wa.me/" in text):
+        return False, text, "link in first-contact message"
+    if autonomy != "full":
+        return True, text, ""
+    try:
+        from app.services.ai_service import ai_service
+        verdict = await ai_service.supervise_message(text, brand, first_contact=first_contact)
+        if verdict.get("ok"):
+            return True, text, ""
+        revised = verdict.get("revised")
+        if revised and isinstance(revised, str) and len(revised) > 10:
+            return True, revised, f"auto-revised: {verdict.get('reason','')}"
+        return False, text, verdict.get("reason", "held by supervisor")
+    except Exception:
+        return True, text, "supervisor-error-failopen"
+
+
 async def _process_approved_lead(lead_id: str, template_id: str = None):
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
@@ -165,6 +186,21 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
             arabic_chars = sum(1 for c in message_text if "؀" <= c <= "ۿ")
             if arabic_chars < len(message_text) * 0.3:
                 message_text = await ai_service.translate_arabic(message_text, direction="en_to_ar")
+
+        # Step 4b: Supervisor gate — first-contact anti-ban + (full autopilot) brand check.
+        _brand2, _autonomy2 = await _tenant_ctx(db, lead.tenant_id)
+        ok, message_text, _reason = await _supervise_send(
+            db, lead.tenant_id, message_text, _autonomy2, _brand2, first_contact=True)
+        if not ok:
+            from app.services.notification_service import notify
+            from app.models.models import NotificationType
+            await notify(db, lead.tenant_id, NotificationType.system,
+                         title="✋ رسالة تواصل مُعلّقة",
+                         message=f"حُجبت رسالة أولى تلقائية للعميل ({lead.company or lead.name}): {_reason}.",
+                         data={"lead_id": lead_id, "source": "supervisor"})
+            await db.commit()
+            logger.info(f"Outreach held by supervisor for lead {lead_id}: {_reason}")
+            return {"held": True, "reason": _reason, "lead_id": lead_id}
 
         # Step 5: Send via Evolution API
         wa_jid = f"{lead.phone.replace('+', '')}@s.whatsapp.net"
@@ -584,15 +620,28 @@ async def _send_ai_reply(
 
         # Brand context so the reply sounds like this business (on-brand).
         conv = (await db.execute(select(Conversation).where(Conversation.id == conversation_id))).scalar_one_or_none()
-        _brand = ""
+        _brand, _autonomy = ("", "copilot")
         if conv:
-            _brand, _ = await _tenant_ctx(db, conv.tenant_id)
+            _brand, _autonomy = await _tenant_ctx(db, conv.tenant_id)
 
         # Generate reply
         reply = await ai_service.generate_wa_reply(message, contact_name, history, language, tenant_context=_brand)
         if not reply:
             logger.warning(f"AI returned empty reply for conversation {conversation_id}")
             return {"sent": False, "reason": "empty_reply"}
+
+        # Supervisor gate — in full autopilot, vet the reply before it goes out.
+        ok, reply, reason = await _supervise_send(db, conv.tenant_id if conv else None, reply, _autonomy, _brand)
+        if not ok:
+            from app.services.notification_service import notify
+            from app.models.models import NotificationType
+            await notify(db, conv.tenant_id, NotificationType.system,
+                         title="✋ رسالة تلقائية مُعلّقة للمراجعة",
+                         message=f"حجب المشرف ردّاً تلقائياً: {reason}. راجعه في المحادثة.",
+                         data={"conversation_id": conversation_id, "held_reply": reply, "source": "supervisor"})
+            await db.commit()
+            logger.info(f"AI reply held by supervisor for {conversation_id}: {reason}")
+            return {"sent": False, "reason": f"held:{reason}"}
 
         # Show typing
         await evolution_service.send_typing(instance_name, wa_jid, duration=2)
