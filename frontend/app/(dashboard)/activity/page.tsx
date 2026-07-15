@@ -6,8 +6,45 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { Sparkles, RefreshCw, Send, MessageSquareReply, Users, AlertTriangle, CheckCircle2, Zap } from 'lucide-react'
+import { Sparkles, RefreshCw, Send, MessageSquareReply, Users, AlertTriangle, CheckCircle2, Zap, Brain, Trophy, ShieldAlert, Lightbulb } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { agentRunsApi } from '@/lib/api'
+
+interface Memory { id: string; kind: string; content: string; weight: number }
+const MEM_KIND: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
+  win_reason: { label: 'يكسب العملاء', icon: Trophy, cls: 'text-green-400' },
+  loss_reason: { label: 'يخسر العملاء', icon: ShieldAlert, cls: 'text-red-400' },
+  objection: { label: 'اعتراض شائع', icon: AlertTriangle, cls: 'text-yellow-400' },
+  insight: { label: 'ملاحظة', icon: Lightbulb, cls: 'text-blue-400' },
+}
+
+function MemoryPanel() {
+  const { data } = useSWR('agent-memory', () => agentRunsApi.memory().then((r) => r.data))
+  const mems: Memory[] = data?.items || []
+  if (mems.length === 0) return null
+  return (
+    <div className="bg-gray-900 border border-gold-primary/20 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Brain size={17} className="text-gold-primary" />
+        <h2 className="text-sm font-bold text-white font-cairo">ما تعلّمه نظامك عن سوقك</h2>
+        <span className="text-[11px] text-gray-500 mr-auto font-cairo">{mems.length} درس</span>
+      </div>
+      <div className="space-y-2">
+        {mems.map((m) => {
+          const k = MEM_KIND[m.kind] || MEM_KIND.insight
+          const Icon = k.icon
+          return (
+            <div key={m.id} className="flex items-start gap-2 text-sm">
+              <Icon size={13} className={clsx('mt-0.5 shrink-0', k.cls)} />
+              <span className="text-gray-300 font-cairo flex-1">{m.content}</span>
+              {m.weight > 1 && <span className="text-[10px] text-gold-primary/70 bg-gold-primary/10 rounded-full px-1.5 shrink-0">×{m.weight}</span>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 interface Action { type: string; detail: string }
 interface Metrics { sent_24h?: number; replies_24h?: number; pending_review?: number; cold_leads?: number; wa_near_cap?: number }
@@ -44,6 +81,8 @@ export default function ActivityPage() {
           <RefreshCw size={15} className={running ? 'animate-spin' : ''} /> شغّل الآن
         </button>
       </div>
+
+      <MemoryPanel />
 
       {isLoading ? (
         <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" /></div>
