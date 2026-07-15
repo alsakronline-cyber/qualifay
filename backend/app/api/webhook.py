@@ -76,7 +76,6 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
             try:
                 from app.core.database import AsyncSessionLocal
                 from app.models.models import WaInstance
-                from sqlalchemy import select
                 from app.services.inbox_sync_service import upsert_inbound_message
                 async with AsyncSessionLocal() as db:
                     inst_res = await db.execute(
@@ -103,7 +102,7 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
             try:
                 from app.core.database import AsyncSessionLocal
                 from app.models.models import Lead
-                from sqlalchemy import select, update
+                from sqlalchemy import update
                 from datetime import datetime, timezone
                 phone_normalized = "+" + wa_jid.split("@")[0] if not wa_jid.split("@")[0].startswith("+") else wa_jid.split("@")[0]
                 async with AsyncSessionLocal() as db2:

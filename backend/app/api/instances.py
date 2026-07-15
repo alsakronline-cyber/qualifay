@@ -74,6 +74,7 @@ async def list_instances(
     return output
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 async def create_instance(
     req: CreateInstanceRequest,
