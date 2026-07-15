@@ -287,6 +287,7 @@ export const onboardingApi = {
 export const agentRunsApi = {
   list: (limit = 50) => API.get(`/v1/agent-runs?limit=${limit}`),
   runNow: () => API.post('/v1/agent-runs/run-now', {}),
+  memory: () => API.get('/v1/agent-runs/memory'),
 }
 
 // ── Agent Automation (browser-extension LinkedIn/Facebook sourcing) ───────────
