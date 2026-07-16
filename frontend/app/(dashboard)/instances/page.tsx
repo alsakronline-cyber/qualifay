@@ -33,9 +33,9 @@ function QrModal({ instanceId, onClose }: { instanceId: string; onClose: () => v
             <div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" />
           </div>
         )}
-        {error && (
+        {error && !data?.qr_code && (
           <p className="text-center text-red-400 font-cairo text-sm py-4">
-            تعذر تحميل رمز QR. تحقق من الاتصال.
+            جاري تجهيز رمز QR... لحظات من فضلك.
           </p>
         )}
         {data?.qr_code && (
