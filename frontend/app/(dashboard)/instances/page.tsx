@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -10,6 +10,11 @@ import type { WaInstance } from '@/lib/types'
 import WarmupIndicator from '@/components/WarmupIndicator'
 
 function QrModal({ instanceId, onClose }: { instanceId: string; onClose: () => void }) {
+  // A WhatsApp QR expires (~1 min unscanned) and the session closes; on open, ask the
+  // backend to regenerate a fresh QR (logout+connect) before we start polling for it.
+  useEffect(() => {
+    instancesApi.reconnect(instanceId).catch(() => {})
+  }, [instanceId])
   const { data, isLoading, error } = useSWR(
     `instances/${instanceId}/qr`,
     () => instancesApi.getQr(instanceId).then((r) => r.data),
