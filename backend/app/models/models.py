@@ -412,6 +412,9 @@ class Conversation(Base):
     status = Column(SAEnum(ConversationStatus), default=ConversationStatus.open)
     ai_enabled = Column(Boolean, default=False)
     last_message = Column(Text, nullable=True)
+    # Real timestamp of the last message (from WhatsApp), NOT the row's write time —
+    # so the inbox sorts by true recency instead of when the sync happened to run.
+    last_message_at = Column(DateTime, nullable=True, index=True)
     unread_count = Column(Integer, default=0)
     sentiment = Column(String, default="neutral")
     created_at = Column(DateTime, default=func.now())

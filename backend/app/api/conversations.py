@@ -3,7 +3,7 @@ Conversations API — WhatsApp conversation management
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, func
 from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -39,8 +39,8 @@ def _conv_dict(c: Conversation, lead_stage: Optional[str] = None) -> dict:
         contact_phone = c.wa_jid.split("@")[0] if c.wa_jid else ""
         if contact_phone and not contact_phone.startswith("+"):
             contact_phone = "+" + contact_phone
-    # last_message_at = updated_at when last_message is set
-    last_msg_at = c.updated_at or c.created_at
+    # Prefer the real WhatsApp message time; fall back to row timestamps for old rows.
+    last_msg_at = c.last_message_at or c.updated_at or c.created_at
     return {
         "id": c.id,
         "tenant_id": c.tenant_id,
@@ -110,7 +110,7 @@ async def list_conversations(
     result = await db.execute(
         select(Conversation)
         .where(and_(*filters))
-        .order_by(Conversation.updated_at.desc())
+        .order_by(func.coalesce(Conversation.last_message_at, Conversation.updated_at).desc())
         .offset(skip)
         .limit(limit)
     )
