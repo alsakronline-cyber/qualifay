@@ -101,24 +101,38 @@ class EvolutionService:
         except Exception as e:
             raise RuntimeError(f"Failed to logout instance '{instance_name}': {e}")
 
-    async def regenerate_qr(self, instance_name: str) -> Optional[str]:
-        """Force a fresh QR for a closed/stale instance. A WhatsApp QR expires after a
-        minute if unscanned and the session goes 'close' — then plain connect returns
-        only {count}. Logging out resets it so connect re-opens and Evolution emits a new
-        qrcode.updated (cached by the webhook). Returns a QR if immediately available,
-        else None (the caller should poll /qr for the freshly-cached one)."""
+    async def regenerate_qr(self, instance_name: str, webhook_url: str = None) -> Optional[str]:
+        """Force a guaranteed-fresh QR for a disconnected/stale instance. A WhatsApp QR
+        expires after ~1 min unscanned and the session goes 'close'; a plain connect then
+        only returns {count}, and logout+connect is flaky on this Evolution build. Fresh
+        creation, however, reliably regenerates — so recreate the Evolution-side instance
+        (the Qualifay WaInstance record + warmup live in our own DB and are untouched).
+        The new qrcode.updated is cached by the webhook; poll /qr for it."""
         import asyncio
+        # Only recreate when not actually connected — never blow away a live session.
         try:
             st = await self.connect_status(instance_name)
             state = st.get("state") or (st.get("instance") or {}).get("state")
-            if state not in ("open", "connected"):
-                try:
-                    await self.logout_instance(instance_name)
-                except Exception:
-                    pass
-                await asyncio.sleep(2)
+            if state in ("open", "connected"):
+                return None
         except Exception:
             pass
+        try:
+            await self.logout_instance(instance_name)
+        except Exception:
+            pass
+        try:
+            await self.delete_instance(instance_name)
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+        try:
+            await self.create_instance(instance_name)
+            if webhook_url:
+                await self.set_webhook(instance_name, webhook_url)
+        except Exception as e:
+            logger.error(f"regenerate_qr recreate failed for '{instance_name}': {e}")
+        await asyncio.sleep(2)
         return await self.get_qr(instance_name)
 
     # ─── Messaging ──────────────────────────────────────────

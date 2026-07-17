@@ -288,9 +288,12 @@ async def reconnect_instance(
     )).scalar_one_or_none()
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
+    # Same webhook URL create_instance registers (localhost → nginx → backend), so the
+    # recreated instance's qrcode.updated events reach us and get cached.
+    webhook_url = "http://localhost/api/v1/webhook/evolution"
     qr = None
     try:
-        qr = await evolution_service.regenerate_qr(instance.instance_name)
+        qr = await evolution_service.regenerate_qr(instance.instance_name, webhook_url)
     except Exception:
         pass
     return {"reconnecting": True, "instance_id": instance_id, "qr": qr}
