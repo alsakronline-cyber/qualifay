@@ -101,6 +101,26 @@ class EvolutionService:
         except Exception as e:
             raise RuntimeError(f"Failed to logout instance '{instance_name}': {e}")
 
+    async def regenerate_qr(self, instance_name: str) -> Optional[str]:
+        """Force a fresh QR for a closed/stale instance. A WhatsApp QR expires after a
+        minute if unscanned and the session goes 'close' — then plain connect returns
+        only {count}. Logging out resets it so connect re-opens and Evolution emits a new
+        qrcode.updated (cached by the webhook). Returns a QR if immediately available,
+        else None (the caller should poll /qr for the freshly-cached one)."""
+        import asyncio
+        try:
+            st = await self.connect_status(instance_name)
+            state = st.get("state") or (st.get("instance") or {}).get("state")
+            if state not in ("open", "connected"):
+                try:
+                    await self.logout_instance(instance_name)
+                except Exception:
+                    pass
+                await asyncio.sleep(2)
+        except Exception:
+            pass
+        return await self.get_qr(instance_name)
+
     # ─── Messaging ──────────────────────────────────────────
 
     async def send_text(self, instance_name: str, jid: str, text: str) -> dict:

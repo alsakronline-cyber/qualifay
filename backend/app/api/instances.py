@@ -290,7 +290,7 @@ async def reconnect_instance(
         raise HTTPException(status_code=404, detail="Instance not found")
     qr = None
     try:
-        qr = await evolution_service.get_qr(instance.instance_name)
+        qr = await evolution_service.regenerate_qr(instance.instance_name)
     except Exception:
         pass
     return {"reconnecting": True, "instance_id": instance_id, "qr": qr}
