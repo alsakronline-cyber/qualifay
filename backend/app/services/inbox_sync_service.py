@@ -125,6 +125,16 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                 or last_msg.get("extendedTextMessage", {}).get("text")
                 if isinstance(last_msg, dict) else None
             )
+            # Real last-activity time from WhatsApp (unix seconds) so the inbox sorts by
+            # true recency, not when this sync ran.
+            last_at = None
+            raw_ts = (last_msg.get("messageTimestamp") if isinstance(last_msg, dict) else None) \
+                or chat.get("conversationTimestamp") or chat.get("t")
+            if raw_ts:
+                try:
+                    last_at = datetime.utcfromtimestamp(int(raw_ts))
+                except (ValueError, TypeError, OSError):
+                    last_at = None
 
             if not conv:
                 conv = Conversation(
@@ -136,6 +146,7 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                     status=ConversationStatus.open,
                     ai_enabled=False,
                     last_message=last_content,
+                    last_message_at=last_at,
                     unread_count=int(chat.get("unreadCount") or 0),
                 )
                 db.add(conv)
@@ -147,6 +158,8 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                     conv.contact_name = name
                 if last_content:
                     conv.last_message = last_content
+                if last_at and (not conv.last_message_at or last_at > conv.last_message_at):
+                    conv.last_message_at = last_at
                 conv.unread_count = int(chat.get("unreadCount") or 0)
 
         # Backfill names for EVERY existing conversation from the contact book — not just
@@ -233,8 +246,18 @@ async def upsert_inbound_message(
                 )
                 conv = conv_result2.scalar_one()
 
-        # Update last message
+        # Update last message + its real time (for recency sorting in the inbox).
         conv.last_message = content[:200] if content else conv.last_message
+        _msg_at = None
+        if timestamp:
+            try:
+                _msg_at = datetime.utcfromtimestamp(int(timestamp))
+            except (ValueError, TypeError, OSError):
+                _msg_at = None
+        if _msg_at is None:
+            _msg_at = datetime.utcnow()
+        if not conv.last_message_at or _msg_at >= conv.last_message_at:
+            conv.last_message_at = _msg_at
         if not from_me:
             conv.unread_count = (conv.unread_count or 0) + 1
             # Backfill the contact's WhatsApp profile name once, if we don't have a real one.
