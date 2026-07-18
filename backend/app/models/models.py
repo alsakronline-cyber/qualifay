@@ -37,6 +37,7 @@ class LeadSource(str, enum.Enum):
     pool = "pool"
     referral = "referral"
     inbound_wa = "inbound_wa"
+    inbound_email = "inbound_email"
     tender = "tender"
     facebook = "facebook"
     directories = "directories"
