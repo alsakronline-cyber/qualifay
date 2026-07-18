@@ -62,5 +62,9 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
         for table, col, coltype in _ENSURE_COLUMNS:
             await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
+    # Enum ADD VALUE must run OUTSIDE a transaction block (Postgres won't let a new enum
+    # label be added and used within the same tx), so use an autocommit connection.
+    async with engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
         for enum_name, value in _ENSURE_ENUM_VALUES:
             await conn.execute(text(f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{value}'"))
