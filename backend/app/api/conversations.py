@@ -1,7 +1,7 @@
 """
 Conversations API — WhatsApp conversation management
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from typing import Optional
@@ -377,9 +377,41 @@ async def get_messages(
             "is_ai_generated": m.is_ai_generated,
             "message_type": m.message_type or "text",
             "has_media": m.message_type in ("image", "video", "audio", "document", "sticker", "media") and bool(m.wa_message_id),
+            # Attachment metadata (email PDFs, images…) — data is streamed separately.
+            "attachments": [
+                {"filename": a.get("filename"), "content_type": a.get("content_type"), "size": a.get("size")}
+                for a in (m.attachments or [])
+            ],
         }
         for m in msgs
     ]
+
+
+@router.get("/messages/{message_id}/attachment/{idx}")
+async def download_attachment(
+    message_id: str,
+    idx: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream an email/message attachment (by index) from object storage, tenant-scoped."""
+    from app.models.models import Message
+    from app.services.storage_service import get_attachment
+    msg = (await db.execute(
+        select(Message).join(Conversation, Message.conversation_id == Conversation.id)
+        .where(and_(Message.id == message_id, Conversation.tenant_id == current_user["tenant_id"]))
+    )).scalar_one_or_none()
+    if not msg or not msg.attachments or idx >= len(msg.attachments):
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    att = msg.attachments[idx]
+    data, ct = get_attachment(att.get("key", ""))
+    if not data:
+        raise HTTPException(status_code=404, detail="Attachment unavailable")
+    fname = att.get("filename", "attachment")
+    return Response(
+        content=data, media_type=att.get("content_type") or ct or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{fname}"'},
+    )
 
 
 @router.get("/{conversation_id}/messages/{message_id}/media")

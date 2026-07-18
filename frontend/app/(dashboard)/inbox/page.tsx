@@ -101,6 +101,54 @@ function MediaBubble({ conversationId, message }: { conversationId: string; mess
   )
 }
 
+function fmtSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function AttachmentChip({ messageId, idx, att }: {
+  messageId: string
+  idx: number
+  att: { filename: string; content_type?: string; size?: number }
+}) {
+  const [loading, setLoading] = useState(false)
+
+  const download = async () => {
+    if (loading) return
+    setLoading(true)
+    try {
+      const res = await conversationsApi.getAttachmentBlob(messageId, idx)
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = att.filename || 'attachment'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+    } catch {
+      toast.error('تعذر تحميل المرفق')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={download}
+      disabled={loading}
+      className="flex items-center gap-2 bg-black/20 rounded-lg px-3 py-2 hover:bg-black/30 transition-colors text-start w-full max-w-xs"
+    >
+      {loading ? <Loader2 size={18} className="shrink-0 animate-spin" /> : <FileText size={18} className="shrink-0" />}
+      <span className="text-sm truncate flex-1">{att.filename || 'مرفق'}</span>
+      {att.size ? <span className="text-xs opacity-60 shrink-0">{fmtSize(att.size)}</span> : null}
+      <Download size={15} className="shrink-0 opacity-80" />
+    </button>
+  )
+}
+
 export default function InboxPage() {
   const router = useRouter()
   const [openingLead, setOpeningLead] = useState(false)
@@ -674,7 +722,14 @@ export default function InboxPage() {
                   {msg.has_media && selectedId ? (
                     <MediaBubble conversationId={selectedId} message={msg} />
                   ) : (
-                    msg.content
+                    <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                  )}
+                  {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      {msg.attachments.map((a, i) => (
+                        <AttachmentChip key={i} messageId={msg.id} idx={i} att={a} />
+                      ))}
+                    </div>
                   )}
                   <div className={clsx(
                     'flex items-center gap-1 mt-1',

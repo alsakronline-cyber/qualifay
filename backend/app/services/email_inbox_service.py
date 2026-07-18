@@ -9,16 +9,78 @@ Uses stdlib imaplib/email — the blocking IMAP work runs in a thread so it neve
 the async event loop.
 """
 import asyncio
+import html as _htmllib
 import imaplib
 import email
 import logging
 import re
+import uuid
 from email.header import decode_header
 from email.utils import parseaddr
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _html_to_text(html: str) -> str:
+    """Turn HTML email into readable plain text — block elements become line breaks so
+    the message keeps its structure instead of collapsing into one run-on paragraph."""
+    if not html:
+        return ""
+    html = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", html)
+    html = re.sub(r"(?i)<\s*br\s*/?>", "\n", html)
+    html = re.sub(r"(?i)</\s*(p|div|tr|li|h[1-6]|table|blockquote)\s*>", "\n", html)
+    html = re.sub(r"(?i)<\s*(p|div|tr|li|h[1-6]|blockquote)[^>]*>", "\n", html)
+    html = re.sub(r"(?i)</\s*td\s*>", "  ", html)
+    html = re.sub(r"<[^>]+>", "", html)
+    html = _htmllib.unescape(html)
+    lines = [ln.rstrip() for ln in html.split("\n")]
+    text = "\n".join(lines)
+    text = re.sub(r"[ \t]{3,}", "  ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _extract_attachments(msg) -> list:
+    """Pull file attachments from an email as [{filename, content_type, data, size}]."""
+    atts = []
+    if not msg.is_multipart():
+        return atts
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        disp = str(part.get("Content-Disposition") or "")
+        fn = part.get_filename()
+        if not fn and "attachment" not in disp.lower():
+            continue
+        try:
+            data = part.get_payload(decode=True)
+        except Exception:
+            data = None
+        if not data:
+            continue
+        atts.append({
+            "filename": _decode(fn) if fn else "attachment",
+            "content_type": part.get_content_type() or "application/octet-stream",
+            "data": data,
+            "size": len(data),
+        })
+    return atts
+
+
+def _store_attachments(atts: list) -> list:
+    """Upload attachment bytes to object storage; return metadata (no data) for the DB."""
+    from app.services.storage_service import upload_attachment
+    meta = []
+    for a in atts:
+        if not a.get("data"):
+            continue
+        key = f"{uuid.uuid4().hex}_{re.sub(r'[^A-Za-z0-9._-]', '_', a['filename'])[:80]}"
+        if upload_attachment(key, a["data"], a["content_type"]):
+            meta.append({"filename": a["filename"], "key": key,
+                         "content_type": a["content_type"], "size": a["size"]})
+    return meta
 
 
 def _decode(s) -> str:
@@ -57,14 +119,15 @@ def _plain_body(msg) -> str:
                     try:
                         html = part.get_payload(decode=True).decode(
                             part.get_content_charset() or "utf-8", errors="replace")
-                        body = re.sub(r"<[^>]+>", " ", html)
+                        body = _html_to_text(html)
                         break
                     except Exception:
                         continue
     else:
         try:
-            body = msg.get_payload(decode=True).decode(
+            raw = msg.get_payload(decode=True).decode(
                 msg.get_content_charset() or "utf-8", errors="replace")
+            body = _html_to_text(raw) if msg.get_content_type() == "text/html" else raw
         except Exception:
             body = str(msg.get_payload())
     # Trim the most common quoted-reply markers so the thread shows the new text.
@@ -103,6 +166,7 @@ def _fetch_unseen(host=None, port=None, user=None, pwd=None):
                 "subject": _decode(msg.get("Subject", "")),
                 "message_id": (msg.get("Message-ID") or "").strip(),
                 "body": _plain_body(msg),
+                "attachments": _extract_attachments(msg),
             })
             imap.store(mid, "+FLAGS", "\\Seen")
     finally:
@@ -200,10 +264,11 @@ async def poll_inbound_email() -> dict:
                     continue
 
             body = m["body"] or m["subject"] or "(رسالة فارغة)"
+            att_meta = _store_attachments(m.get("attachments") or [])
             db.add(Message(
                 conversation_id=conv.id, wa_message_id=m["message_id"] or None,
                 direction=MessageDirection.inbound, content=body[:5000],
-                message_type="email",
+                message_type="email", attachments=att_meta or None,
             ))
             conv.last_message = (m["subject"] or body)[:200]
             conv.unread_count = (conv.unread_count or 0) + 1
