@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from typing import Optional
 from pydantic import BaseModel
-from datetime import datetime
 
 from app.core.database import get_db
 from app.models.models import Conversation, ConversationStatus
@@ -14,9 +13,34 @@ from app.api.auth import get_current_user
 from app.services.evolution_service import EvolutionService
 import datetime
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# MIME types a browser will execute as markup/script if rendered inline. Files arrive
+# from external senders (email attachments, WhatsApp docs), so treat these as downloads
+# of inert bytes rather than trusting the sender's declared type.
+_ACTIVE_CONTENT_TYPES = {
+    "text/html", "application/xhtml+xml", "image/svg+xml",
+    "text/xml", "application/xml", "application/javascript", "text/javascript",
+}
+
+
+def _safe_download_headers(filename: str, content_type: str) -> tuple[str, dict]:
+    """(media_type, headers) for serving a sender-supplied file safely: the filename is
+    stripped of header-breaking characters (CR/LF/quotes — header injection), and
+    browser-executable types are forced to a plain attachment download."""
+    fname = re.sub(r'[\x00-\x1f"\\;]', "_", filename or "attachment")[:150] or "attachment"
+    ct = (content_type or "application/octet-stream").split(";")[0].strip().lower()
+    disposition = "inline"
+    if ct in _ACTIVE_CONTENT_TYPES:
+        ct = "application/octet-stream"
+        disposition = "attachment"
+    return ct, {
+        "Content-Disposition": f'{disposition}; filename="{fname}"',
+        "X-Content-Type-Options": "nosniff",
+    }
 
 
 class UpdateConversationRequest(BaseModel):
@@ -198,7 +222,7 @@ async def update_conversation(
     if body.contact_name is not None:
         conv.contact_name = body.contact_name
 
-    conv.updated_at = datetime.utcnow()
+    conv.updated_at = datetime.datetime.utcnow()
     await db.commit()
     await db.refresh(conv)
     return _conv_dict(conv)
@@ -413,17 +437,15 @@ async def download_attachment(
         select(Message).join(Conversation, Message.conversation_id == Conversation.id)
         .where(and_(Message.id == message_id, Conversation.tenant_id == current_user["tenant_id"]))
     )).scalar_one_or_none()
-    if not msg or not msg.attachments or idx >= len(msg.attachments):
+    if not msg or not msg.attachments or idx < 0 or idx >= len(msg.attachments):
         raise HTTPException(status_code=404, detail="Attachment not found")
     att = msg.attachments[idx]
     data, ct = get_attachment(att.get("key", ""))
     if not data:
         raise HTTPException(status_code=404, detail="Attachment unavailable")
-    fname = att.get("filename", "attachment")
-    return Response(
-        content=data, media_type=att.get("content_type") or ct or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{fname}"'},
-    )
+    media_type, headers = _safe_download_headers(
+        att.get("filename", "attachment"), att.get("content_type") or ct or "")
+    return Response(content=data, media_type=media_type, headers=headers)
 
 
 @router.get("/{conversation_id}/messages/{message_id}/media")
@@ -486,11 +508,8 @@ async def get_message_media(
         raise HTTPException(status_code=404, detail="Media not available")
 
     file_bytes = b64.b64decode(b64_data)
-    return Response(
-        content=file_bytes,
-        media_type=mimetype,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
-    )
+    media_type, safe_headers = _safe_download_headers(filename, mimetype)
+    return Response(content=file_bytes, media_type=media_type, headers=safe_headers)
 
 
 

@@ -17,6 +17,12 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _hdr(value: str) -> str:
+    """Sanitize a value destined for a MIME header: embedded CR/LF would let extra
+    headers (e.g. a hidden Bcc:) be injected into the outgoing message."""
+    return (value or "").replace("\r", " ").replace("\n", " ").strip()
+
+
 class EmailService:
     def is_configured(self) -> bool:
         return bool(settings.SMTP_HOST and settings.SMTP_USER and self._password())
@@ -31,8 +37,8 @@ class EmailService:
     def _send_sync(self, to: str, subject: str, body_text: str) -> None:
         msg = MIMEMultipart()
         msg["From"] = formataddr((settings.SMTP_FROM_NAME or "", self._from()))
-        msg["To"] = to
-        msg["Subject"] = subject
+        msg["To"] = _hdr(to)
+        msg["Subject"] = _hdr(subject)
         msg.attach(MIMEText(body_text, "plain", "utf-8"))
 
         ctx = ssl.create_default_context()
@@ -56,9 +62,9 @@ class EmailService:
     def _send_via_sync(self, host, port, user, pwd, from_name, from_email,
                        to, subject, body_text) -> None:
         msg = MIMEMultipart()
-        msg["From"] = formataddr((from_name or "", from_email or user))
-        msg["To"] = to
-        msg["Subject"] = subject
+        msg["From"] = formataddr((_hdr(from_name), from_email or user))
+        msg["To"] = _hdr(to)
+        msg["Subject"] = _hdr(subject)
         msg.attach(MIMEText(body_text, "plain", "utf-8"))
         ctx = ssl.create_default_context()
         if int(port) == 465:

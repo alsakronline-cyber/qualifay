@@ -225,6 +225,8 @@ async def poll_inbound_email() -> dict:
 
     threaded = 0
     bounced = 0
+    auto_leads = 0
+    AUTO_LEAD_CAP = 50   # per poll cycle — a spam flood must not mint unlimited leads
     async with AsyncSessionLocal() as db:
         for m in messages:
             addr = m["from_addr"]
@@ -248,6 +250,9 @@ async def poll_inbound_email() -> dict:
                 tid_mb = m.get("mailbox_tenant_id")
                 if not tid_mb:
                     continue  # unknown sender on the shared mailbox — leave it
+                if auto_leads >= AUTO_LEAD_CAP:
+                    logger.warning("auto-lead cap hit (%s) — dropping mail from %s this cycle", AUTO_LEAD_CAP, addr)
+                    continue  # flood guard: overflow from unknown senders is dropped
                 lead = Lead(
                     tenant_id=tid_mb, source=LeadSource.inbound_email,
                     name=m["from_name"] or None, email=addr,
@@ -255,6 +260,7 @@ async def poll_inbound_email() -> dict:
                 )
                 db.add(lead)
                 await db.flush()
+                auto_leads += 1
 
             conv = (await db.execute(
                 select(Conversation).where(and_(
