@@ -53,6 +53,7 @@ _ENSURE_COLUMNS = [
 # startup (PG12+ supports ADD VALUE IF NOT EXISTS). Keep append-only.
 _ENSURE_ENUM_VALUES = [
     ("notificationtype", "missed_followup"),
+    ("leadsource", "inbound_email"),
 ]
 
 
