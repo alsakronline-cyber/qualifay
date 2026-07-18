@@ -13,7 +13,7 @@ from app.services.ai_service import ai_service
 
 router = APIRouter()
 
-AUTONOMY_LEVELS = ("full", "copilot", "manual")
+AUTONOMY_LEVELS = ("full", "copilot", "manual", "off")
 
 
 async def _tenant(tenant_id: str, db: AsyncSession):

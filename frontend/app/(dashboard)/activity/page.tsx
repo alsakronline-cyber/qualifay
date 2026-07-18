@@ -6,9 +6,68 @@ import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { Sparkles, RefreshCw, Send, MessageSquareReply, Users, AlertTriangle, CheckCircle2, Zap, Brain, Trophy, ShieldAlert, Lightbulb } from 'lucide-react'
+import { Sparkles, RefreshCw, Send, MessageSquareReply, Users, AlertTriangle, CheckCircle2, Zap, Brain, Trophy, ShieldAlert, Lightbulb, Bot, Handshake, UserRound, PauseCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { agentRunsApi } from '@/lib/api'
+import { agentRunsApi, onboardingApi } from '@/lib/api'
+
+const MODES: { key: string; icon: LucideIcon; title: string; desc: string }[] = [
+  { key: 'full', icon: Bot, title: 'وكيل كامل', desc: 'يعتمد ويرسل ويتابع تلقائياً — تصلك النتائج فقط.' },
+  { key: 'copilot', icon: Handshake, title: 'مساعد ذكي', desc: 'يؤهّل ويقترح، ويعيد تنشيط العملاء الباردين تلقائياً.' },
+  { key: 'manual', icon: UserRound, title: 'يدوي', desc: 'يقيّم ويُنبّهك فقط — لا يرسل أي رسالة بنفسه.' },
+  { key: 'off', icon: PauseCircle, title: 'متوقّف', desc: 'إيقاف كامل: لا قرارات، لا رسائل، لا تنبيهات تلقائية.' },
+]
+
+function AutonomyControl() {
+  const { data, mutate } = useSWR('onboarding-profile', () => onboardingApi.profile().then((r) => r.data))
+  const current: string = data?.autonomy || 'copilot'
+  const [saving, setSaving] = useState<string | null>(null)
+
+  async function pick(level: string) {
+    if (level === current || saving) return
+    setSaving(level)
+    try {
+      await onboardingApi.setAutonomy(level)
+      await mutate()
+      toast.success(level === 'off' ? 'تم إيقاف التشغيل التلقائي' : 'تم تحديث وضع التشغيل')
+    } catch { toast.error('فشل التحديث') } finally { setSaving(null) }
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <h2 className="text-sm font-bold text-white font-cairo mb-1">وضع التشغيل التلقائي</h2>
+      <p className="text-xs text-gray-500 font-cairo mb-3">يتحكّم في مدى تصرّف النظام نيابةً عنك. اختر «متوقّف» لإيقاف كل شيء.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {MODES.map((m) => {
+          const Icon = m.icon
+          const active = current === m.key
+          const isOff = m.key === 'off'
+          return (
+            <button
+              key={m.key}
+              onClick={() => pick(m.key)}
+              disabled={!!saving}
+              className={clsx(
+                'text-right rounded-xl border p-3 flex items-start gap-2.5 transition disabled:opacity-60',
+                active
+                  ? (isOff ? 'border-red-500/50 bg-red-500/10' : 'border-gold-primary bg-gold-primary/10')
+                  : 'border-gray-800 hover:border-gray-700'
+              )}
+            >
+              <Icon size={18} className={clsx('shrink-0 mt-0.5', active ? (isOff ? 'text-red-400' : 'text-gold-primary') : 'text-gray-400')} />
+              <span className="flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-white font-cairo">{m.title}</span>
+                  {active && <span className={clsx('text-[10px] rounded-full px-1.5 font-cairo', isOff ? 'bg-red-500/20 text-red-300' : 'bg-gold-primary/20 text-gold-primary')}>الحالي</span>}
+                </span>
+                <span className="block text-xs text-gray-400 font-cairo mt-0.5 leading-relaxed">{m.desc}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 interface Memory { id: string; kind: string; content: string; weight: number }
 const MEM_KIND: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
@@ -81,6 +140,8 @@ export default function ActivityPage() {
           <RefreshCw size={15} className={running ? 'animate-spin' : ''} /> شغّل الآن
         </button>
       </div>
+
+      <AutonomyControl />
 
       <MemoryPanel />
 
