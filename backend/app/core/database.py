@@ -1,24 +1,41 @@
 import logging
+import sys
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Celery workers run each task in a fresh event loop (asyncio.run per task). A pooled
+# asyncpg connection is bound to the loop that opened it, so reusing the pool across
+# tasks raises "Future attached to a different loop" / "Event loop is closed". Give the
+# worker process a non-pooling engine (a connection is opened and closed within each
+# task's own loop); the FastAPI web process keeps its normal pool.
+_IS_WORKER = any("celery" in str(a) for a in sys.argv)
 
 
 class Base(DeclarativeBase):
     pass
 
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
+if _IS_WORKER:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_pre_ping=True,
+        poolclass=NullPool,   # no cross-loop connection reuse in Celery tasks
+    )
+else:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+    )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
