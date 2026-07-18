@@ -107,10 +107,22 @@ async def list_conversations(
     if ai_enabled is not None:
         filters.append(Conversation.ai_enabled == ai_enabled)
 
+    # The inbox is a list of real chats — hide message-less conversations (synced contact
+    # cards from an instance's phonebook, which carry no content and only add noise). When
+    # deep-linking to a specific lead we skip this filter so its thread always resolves.
+    if not lead_id:
+        from app.models.models import Message
+        filters.append(
+            select(Message.id).where(Message.conversation_id == Conversation.id).exists()
+        )
+
     result = await db.execute(
         select(Conversation)
         .where(and_(*filters))
-        .order_by(func.coalesce(Conversation.last_message_at, Conversation.updated_at).desc())
+        # Order by the real last-message time; fall back to creation, never updated_at
+        # (which gets bumped by non-message events like lead-linking and would wrongly
+        # float stale threads to the top).
+        .order_by(func.coalesce(Conversation.last_message_at, Conversation.created_at).desc())
         .offset(skip)
         .limit(limit)
     )
