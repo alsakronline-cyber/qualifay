@@ -101,10 +101,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await notificationsApi.list({ unread: true })
-      const items: Notification[] = res.data?.items || []
+      const res = await notificationsApi.list({ unread_only: true })
+      // The API returns a bare array (unread-first); tolerate a wrapped shape too.
+      const items: Notification[] = Array.isArray(res.data) ? res.data : (res.data?.items || [])
       setNotifications(items)
-      setUnreadNotifCount(items.length)
+      setUnreadNotifCount(items.filter((n) => !n.read_at && !n.read).length)
     } catch {
       // ignore
     }

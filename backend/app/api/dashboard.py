@@ -264,15 +264,19 @@ async def get_recent_activity(
 
 @router.get("/notifications")
 async def get_notifications(
+    unread: bool = False,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List notifications — unread first, max 50."""
+    """List notifications — unread first, max 50. `unread=true` returns only unread."""
     tenant_id = current_user["tenant_id"]
 
+    conds = [Notification.tenant_id == tenant_id]
+    if unread:
+        conds.append(Notification.read_at.is_(None))
     result = await db.execute(
         select(Notification)
-        .where(Notification.tenant_id == tenant_id)
+        .where(and_(*conds))
         .order_by(
             Notification.read_at.is_(None).desc(),
             Notification.created_at.desc(),

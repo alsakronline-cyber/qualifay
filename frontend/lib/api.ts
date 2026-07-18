@@ -258,10 +258,10 @@ export const waSyncApi = {
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 export const notificationsApi = {
-  list: (params?: { unread?: boolean }) =>
+  list: (params?: { unread_only?: boolean }) =>
     API.get('/v1/notifications', { params }),
   markRead: (id: string) => API.post(`/v1/notifications/${id}/read`),
-  markAllRead: () => API.post('/v1/notifications/mark-all-read'),
+  markAllRead: () => API.post('/v1/notifications/read-all'),
 }
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
