@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useCallback, DragEvent } from 'react'
+import { useState, useCallback, useRef, DragEvent } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
+import { useRouter } from 'next/navigation'
+import { MessageSquare } from 'lucide-react'
 import { leadsApi } from '@/lib/api'
 import type { Lead, LeadStage } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
@@ -45,15 +47,23 @@ function ScoreBadge({ score }: { score?: number }) {
 function LeadCard({
   lead,
   onDragStart,
+  onOpen,
 }: {
   lead: Lead
   onDragStart: (e: DragEvent, leadId: string) => void
+  onOpen: (leadId: string) => void
 }) {
+  // A drag ends with a click event in some browsers — suppress that so a drop doesn't
+  // also navigate. Real clicks (no drag) still open the conversation.
+  const draggedRef = useRef(false)
   return (
     <div
       draggable
-      onDragStart={(e) => onDragStart(e, lead.id)}
-      className="bg-gray-900 border border-gray-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-gray-600 transition-colors select-none"
+      onDragStart={(e) => { draggedRef.current = true; onDragStart(e, lead.id) }}
+      onDragEnd={() => { setTimeout(() => { draggedRef.current = false }, 0) }}
+      onClick={() => { if (draggedRef.current) return; onOpen(lead.id) }}
+      title="افتح المحادثة"
+      className="group bg-gray-900 border border-gray-700 rounded-lg p-3 cursor-pointer hover:border-gold-primary/50 transition-colors select-none"
     >
       <div className="flex items-start justify-between gap-1 mb-1.5">
         <span className="text-sm font-medium text-white font-cairo leading-snug">
@@ -64,9 +74,15 @@ function LeadCard({
       <div className="text-xs text-gray-500 font-cairo">
         {[lead.industry, lead.city].filter(Boolean).join(' · ') || '—'}
       </div>
-      {lead.phone && (
-        <div className="text-xs text-gray-600 mt-1" dir="ltr">{lead.phone}</div>
-      )}
+      <div className="flex items-center justify-between mt-1">
+        {lead.phone
+          ? <span className="text-xs text-gray-600" dir="ltr">{lead.phone}</span>
+          : <span />}
+        <MessageSquare
+          size={13}
+          className="text-gray-600 group-hover:text-gold-primary transition-colors shrink-0"
+        />
+      </div>
     </div>
   )
 }
@@ -78,6 +94,7 @@ function KanbanColumn({
   onDragOver,
   onDragLeave,
   isOver,
+  onOpen,
 }: {
   column: Column
   leads: Lead[]
@@ -85,6 +102,7 @@ function KanbanColumn({
   onDragOver: (e: DragEvent) => void
   onDragLeave: () => void
   isOver: boolean
+  onOpen: (leadId: string) => void
   onDragStart: (e: DragEvent, id: string) => void
 } & { onDragStart: (e: DragEvent, id: string) => void }) {
   return (
@@ -114,6 +132,7 @@ function KanbanColumn({
           <LeadCard
             key={lead.id}
             lead={lead}
+            onOpen={onOpen}
             onDragStart={(e, id) => {
               e.dataTransfer.setData('leadId', id)
               e.dataTransfer.effectAllowed = 'move'
@@ -129,6 +148,12 @@ function KanbanColumn({
 }
 
 export default function PipelinePage() {
+  const router = useRouter()
+  const handleOpen = useCallback((leadId: string) => {
+    // Open the lead's conversation (WhatsApp or email) in the inbox.
+    router.push(`/inbox?lead=${leadId}`)
+  }, [router])
+
   const { data, mutate, isLoading } = useSWR(
     'leads/pipeline',
     () => leadsApi.list({ per_page: 200 }).then((r) => r.data),
@@ -200,6 +225,7 @@ export default function PipelinePage() {
               key={col.stage}
               column={col}
               leads={getColumnLeads(col)}
+              onOpen={handleOpen}
               onDragStart={handleDragStart}
               onDrop={handleDrop}
               onDragOver={(e) => { handleDragOver(e); setDragOverStage(col.stage) }}
