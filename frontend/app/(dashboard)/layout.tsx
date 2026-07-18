@@ -117,6 +117,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => clearInterval(interval)
   }, [fetchNotifications])
 
+  // Where a notification points: an explicit link, or a chat / lead in its data payload.
+  const notifHref = (n: Notification): string | null => {
+    const d = (n.data || {}) as Record<string, unknown>
+    if (typeof d.link === 'string') return d.link
+    if (typeof d.conversation_id === 'string') return `/inbox?conversation=${d.conversation_id}`
+    if (typeof d.lead_id === 'string') return `/inbox?lead=${d.lead_id}`
+    return null
+  }
+
+  const handleNotifClick = (n: Notification) => {
+    const href = notifHref(n)
+    notificationsApi.markRead(n.id).catch(() => {})
+    setNotifOpen(false)
+    fetchNotifications()
+    if (!href) return
+    const convId = (n.data as Record<string, unknown>)?.conversation_id
+    // Already on the inbox? router.push won't re-run its mount effect — nudge it directly.
+    if (typeof convId === 'string' && pathname.startsWith('/inbox')) {
+      window.history.pushState({}, '', href)
+      window.dispatchEvent(new CustomEvent('qualifay:selectConversation', { detail: convId }))
+    } else {
+      router.push(href)
+    }
+  }
+
   async function handleLogout() {
     try {
       await authApi.logout()
@@ -278,12 +303,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {notifications.length === 0 ? (
                       <p className="text-center text-gray-500 py-6 text-sm font-cairo">لا توجد إشعارات</p>
                     ) : (
-                      notifications.map((n) => (
-                        <div key={n.id} className="px-4 py-3 hover:bg-gray-800 transition-colors">
-                          <p className="text-sm text-white font-cairo">{n.title}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 whitespace-pre-wrap">{n.message || n.body}</p>
-                        </div>
-                      ))
+                      notifications.map((n) => {
+                        const href = notifHref(n)
+                        return (
+                          <div
+                            key={n.id}
+                            onClick={() => handleNotifClick(n)}
+                            className={clsx(
+                              'px-4 py-3 hover:bg-gray-800 transition-colors',
+                              href && 'cursor-pointer'
+                            )}
+                          >
+                            <p className="text-sm text-white font-cairo">{n.title}</p>
+                            <p className="text-xs text-gray-400 mt-0.5 whitespace-pre-wrap">{n.message || n.body}</p>
+                          </div>
+                        )
+                      })
                     )}
                   </div>
                 </div>

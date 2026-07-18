@@ -251,6 +251,16 @@ export default function InboxPage() {
     }).catch(() => {})
   }, [])
 
+  // A notification clicked while already on the inbox: open that thread without a reload.
+  useEffect(() => {
+    const onSelect = (e: Event) => {
+      const id = (e as CustomEvent).detail
+      if (typeof id === 'string' && id) setSelectedId(id)
+    }
+    window.addEventListener('qualifay:selectConversation', onSelect)
+    return () => window.removeEventListener('qualifay:selectConversation', onSelect)
+  }, [])
+
   const selectedIsEmail = selectedConv?.channel === 'email'
   // A WhatsApp conversation whose instance is no longer in the live list = a removed
   // number. Email conversations aren't tied to an instance, so never "disconnected".

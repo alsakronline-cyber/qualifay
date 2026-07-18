@@ -340,16 +340,18 @@ ORDER BY lm.created_at ASC
 """
 
 
+MISSED_MAX_PER_RUN = 25     # cap the burst if a big backlog surfaces at once
+MISSED_RENOTIFY_DAYS = 3    # don't re-notify the SAME conversation more often than this
+
+
 async def _alert_missed_tenant(db, tid) -> int:
     from sqlalchemy import text
-    from app.models.models import NotificationType
-    from app.services.notification_service import notify
-
-    # Once a day is plenty — don't re-nag every scan.
-    if await _recent_notif(db, tid, NotificationType.missed_followup, hours=20):
-        return 0
+    from app.models.models import Notification, NotificationType
 
     now = datetime.utcnow()
+    # Has the owner already had a WhatsApp ping about this recently? (check before we add today's)
+    owner_pinged_recently = await _recent_notif(db, tid, NotificationType.missed_followup, hours=20)
+
     rows = (await db.execute(text(_MISSED_SQL), {
         "tid": tid,
         "old_cut": now - timedelta(days=MISSED_MIN_DAYS),
@@ -358,33 +360,57 @@ async def _alert_missed_tenant(db, tid) -> int:
     if not rows:
         return 0
 
-    wa = sum(1 for r in rows if r["channel"] == "whatsapp")
-    em = len(rows) - wa
-    names = [r["name"] for r in rows[:5] if r["name"]]
-    channel_bits = []
-    if wa:
-        channel_bits.append(f"{wa} على واتساب")
-    if em:
-        channel_bits.append(f"{em} على البريد")
-    head = " و".join(channel_bits) if channel_bits else f"{len(rows)}"
+    # One notification PER contact, each deep-linking straight to its chat/email — so the
+    # owner clicks and lands in the exact thread. Debounced per conversation so an
+    # unanswered contact resurfaces at most every few days, not every scan.
+    created = 0
+    for r in rows:
+        if created >= MISSED_MAX_PER_RUN:
+            break
+        if await _missed_notif_exists(db, tid, r["id"], MISSED_RENOTIFY_DAYS):
+            continue
+        name = r["name"] or ("جهة اتصال" if r["channel"] == "whatsapp" else "مُرسِل")
+        ch_ar = "واتساب" if r["channel"] == "whatsapp" else "البريد الإلكتروني"
+        days = max((now - r["last_at"]).days, MISSED_MIN_DAYS)
+        db.add(Notification(
+            tenant_id=tid, type=NotificationType.missed_followup,
+            title=f"⏰ رد متأخر: {name}",
+            message=f"{name} تواصل معك عبر {ch_ar} منذ {days} يوم/أيام ولم تردّ عليه بأي وسيلة. "
+                    f"اضغط لفتح المحادثة والرد.",
+            data={
+                "conversation_id": r["id"], "channel": r["channel"],
+                "link": f"/inbox?conversation={r['id']}", "days": days,
+                "source": "missed_followup",
+            },
+        ))
+        created += 1
 
-    sample = "، ".join(names)
-    message = (f"لديك {len(rows)} جهة تواصلت معك ولم تردّ عليها منذ يومين أو أكثر ({head}). "
-               f"لم نجد أنك تواصلت معهم بأي وسيلة أخرى."
-               + (f"\nمنهم: {sample}" if sample else ""))
+    # A single owner WhatsApp nudge summarising the backlog (not once per contact), throttled.
+    if rows and not owner_pinged_recently:
+        try:
+            from app.services.notification_service import _whatsapp_owner
+            await _whatsapp_owner(
+                db, tid,
+                f"*⏰ متابعات فائتة*\nلديك {len(rows)} جهة تواصلت معك ولم تردّ عليها منذ يومين أو أكثر. "
+                f"افتح صندوق الوارد — كل إشعار يفتح المحادثة مباشرة.",
+            )
+        except Exception as e:
+            logger.warning("missed-followup owner ping failed for tenant %s: %s", tid, e)
+    return created
 
-    await notify(
-        db, tid, NotificationType.missed_followup,
-        title="⏰ ردود متأخرة — متابعات فائتة",
-        message=message,
-        data={
-            "count": len(rows), "whatsapp": wa, "email": em,
-            "conversation_ids": [r["id"] for r in rows[:50]],
-            "source": "missed_followup",
-        },
-        urgent=True,  # a warm lead going cold is revenue-critical — ping the owner's WhatsApp too
-    )
-    return 1
+
+async def _missed_notif_exists(db, tid, conv_id, days) -> bool:
+    """True if we already raised a missed-followup for this exact conversation recently —
+    so an unanswered contact isn't re-notified on every single scan."""
+    from app.models.models import Notification, NotificationType
+    cut = datetime.utcnow() - timedelta(days=days)
+    n = (await db.execute(select(func.count(Notification.id)).where(and_(
+        Notification.tenant_id == tid,
+        Notification.type == NotificationType.missed_followup,
+        Notification.created_at >= cut,
+        Notification.data["conversation_id"].astext == str(conv_id),
+    )))).scalar() or 0
+    return n > 0
 
 
 async def _recent_notif(db, tid, ntype, hours):
