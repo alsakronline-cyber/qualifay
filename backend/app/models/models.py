@@ -89,6 +89,7 @@ class NotificationType(str, enum.Enum):
     consent_issue = "consent_issue"
     campaign_done = "campaign_done"
     pool_match = "pool_match"
+    missed_followup = "missed_followup"
     system = "system"
 
 
