@@ -1,7 +1,11 @@
+import logging
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -60,11 +64,19 @@ _ENSURE_ENUM_VALUES = [
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Cap lock waits so a stuck session can never hang boot indefinitely (one once did,
+        # holding locks and bricking every restart). Fail-fast → visible crash-loop instead.
+        await conn.execute(text("SET lock_timeout = '10s'"))
         for table, col, coltype in _ENSURE_COLUMNS:
             await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
     # Enum ADD VALUE must run OUTSIDE a transaction block (Postgres won't let a new enum
     # label be added and used within the same tx), so use an autocommit connection.
+    # Best-effort per value: a lock/timeout here degrades one feature, it must not brick boot.
     async with engine.connect() as conn:
         conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(text("SET lock_timeout = '10s'"))
         for enum_name, value in _ENSURE_ENUM_VALUES:
-            await conn.execute(text(f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{value}'"))
+            try:
+                await conn.execute(text(f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{value}'"))
+            except Exception as e:
+                logger.warning("enum ensure failed (%s += %s): %s", enum_name, value, e)
