@@ -286,6 +286,7 @@ export const onboardingApi = {
   chat: (messages: { role: string; content: string }[]) => API.post('/v1/onboarding/chat', { messages }),
   build: () => API.post('/v1/onboarding/build', {}),
   setAutonomy: (level: string) => API.post('/v1/onboarding/autonomy', { level }),
+  skip: () => API.post('/v1/onboarding/skip', {}),
   apply: (plan: Record<string, unknown>, autonomy: string) => API.post('/v1/onboarding/apply', { plan, autonomy }),
 }
 

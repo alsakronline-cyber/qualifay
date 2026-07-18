@@ -77,8 +77,15 @@ export default function AIConsultant() {
     try {
       await onboardingApi.apply(draft, autonomy)
       toast.success('🎉 تم بناء نظامك! جاري التحويل إلى لوحة التحكم')
+      localStorage.setItem('qualifay_onboarding_done', '1')
       setTimeout(() => router.push('/'), 1200)
     } catch { toast.error('فشل التطبيق'); setApplying(false) }
+  }
+
+  async function skip() {
+    try { await onboardingApi.skip() } catch { /* mark locally anyway */ }
+    localStorage.setItem('qualifay_onboarding_done', '1')
+    router.push('/')
   }
 
   // ── Review screen ──
@@ -172,6 +179,13 @@ export default function AIConsultant() {
           <div className="text-white font-semibold font-cairo text-sm">المستشار الذكي</div>
           <div className="text-[11px] text-gray-500 font-cairo">يفهم نشاطك ليبني لك النظام</div>
         </div>
+        <button
+          onClick={skip}
+          className="mr-auto text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-600 rounded-lg px-3 py-1.5 font-cairo transition-colors"
+          title="تخطّي الإعداد والذهاب إلى لوحة التحكم"
+        >
+          تخطّي ←
+        </button>
       </div>
 
       {filled.length > 0 && (
