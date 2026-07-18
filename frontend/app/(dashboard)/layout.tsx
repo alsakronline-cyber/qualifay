@@ -280,7 +280,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       notifications.map((n) => (
                         <div key={n.id} className="px-4 py-3 hover:bg-gray-800 transition-colors">
                           <p className="text-sm text-white font-cairo">{n.title}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{n.body}</p>
+                          <p className="text-xs text-gray-400 mt-0.5 whitespace-pre-wrap">{n.message || n.body}</p>
                         </div>
                       ))
                     )}

@@ -126,8 +126,10 @@ export interface Notification {
   tenant_id: string
   type: string
   title: string
-  body: string
-  read: boolean
+  message?: string
+  body?: string
+  read?: boolean
+  read_at?: string | null
   data?: Record<string, unknown>
   created_at: string
 }

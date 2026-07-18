@@ -79,6 +79,10 @@ celery_app.conf.update(
             "task": "orchestrator.daily_digest",
             "schedule": crontab(hour=20, minute=0),  # 20:00 Africa/Cairo — owner's end-of-day report
         },
+        "alert-missed-followups": {
+            "task": "orchestrator.alert_missed_followups",
+            "schedule": crontab(hour="9,15", minute=30),  # 09:30 & 15:30 Cairo — flag 2-day-stale replies
+        },
         "harvest-learnings": {
             "task": "orchestrator.harvest_learnings",
             "schedule": 14400.0,  # every 4h — distill won/lost leads into tenant memory

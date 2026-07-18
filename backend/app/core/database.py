@@ -48,9 +48,18 @@ _ENSURE_COLUMNS = [
     ("tenants", "onboarding_done", "BOOLEAN DEFAULT false"),
 ]
 
+# Enum values added to native PG enums after they were first created. create_all()
+# never alters an existing enum type, so new members are applied idempotently on
+# startup (PG12+ supports ADD VALUE IF NOT EXISTS). Keep append-only.
+_ENSURE_ENUM_VALUES = [
+    ("notificationtype", "missed_followup"),
+]
+
 
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         for table, col, coltype in _ENSURE_COLUMNS:
             await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
+        for enum_name, value in _ENSURE_ENUM_VALUES:
+            await conn.execute(text(f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{value}'"))

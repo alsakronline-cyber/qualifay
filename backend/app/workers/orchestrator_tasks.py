@@ -279,6 +279,114 @@ async def _digest_all():
     return {"digests_sent": sent}
 
 
+MISSED_MIN_DAYS = 2     # an unanswered inbound older than this is a missed follow-up
+MISSED_MAX_DAYS = 14    # …but ignore ancient threads (and the year of imported cold email)
+
+
+@celery_app.task(name="orchestrator.alert_missed_followups")
+def alert_missed_followups():
+    """Alert each tenant about contacts who reached out and got no reply for 2+ days —
+    on WhatsApp OR email — while confirming the owner hasn't already answered them by
+    some other channel. This is the 'you're about to drop a warm lead' safety net."""
+    return run_async(_alert_missed_all())
+
+
+async def _alert_missed_all():
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Tenant
+    total = 0
+    async with AsyncSessionLocal() as db:
+        tenants = (await db.execute(select(Tenant))).scalars().all()
+        for t in tenants:
+            try:
+                total += await _alert_missed_tenant(db, t.id)
+            except Exception as e:  # one tenant must not stop the rest
+                logger.warning("missed-followup scan failed for tenant %s: %s", t.id, e)
+        await db.commit()
+    return {"tenants_alerted": total}
+
+
+# Last message per conversation is inbound and 2–14 days stale, the contact is worth
+# chasing (a WhatsApp thread, or an email tied to a live lead — never the bulk-imported
+# cold email with no lead), and the owner hasn't replied to that lead on ANY channel since.
+_MISSED_SQL = """
+SELECT c.id,
+       COALESCE(NULLIF(c.contact_name, ''), c.wa_jid) AS name,
+       c.channel,
+       lm.created_at AS last_at
+FROM conversations c
+JOIN LATERAL (
+    SELECT direction, created_at FROM messages m
+    WHERE m.conversation_id = c.id
+    ORDER BY m.created_at DESC
+    LIMIT 1
+) lm ON TRUE
+LEFT JOIN leads l ON l.id = c.lead_id
+WHERE c.tenant_id = :tid
+  AND lm.direction = 'inbound'
+  AND lm.created_at <= :old_cut
+  AND lm.created_at >= :recent_cut
+  AND (c.channel = 'whatsapp' OR c.lead_id IS NOT NULL)
+  AND (l.id IS NULL OR (l.status = 'active' AND l.stage NOT IN ('won', 'lost', 'archived')))
+  AND NOT EXISTS (
+      SELECT 1 FROM messages mo
+      JOIN conversations c2 ON mo.conversation_id = c2.id
+      WHERE c.lead_id IS NOT NULL
+        AND c2.lead_id = c.lead_id
+        AND mo.direction = 'outbound'
+        AND mo.created_at > lm.created_at
+  )
+ORDER BY lm.created_at ASC
+"""
+
+
+async def _alert_missed_tenant(db, tid) -> int:
+    from sqlalchemy import text
+    from app.models.models import NotificationType
+    from app.services.notification_service import notify
+
+    # Once a day is plenty — don't re-nag every scan.
+    if await _recent_notif(db, tid, NotificationType.missed_followup, hours=20):
+        return 0
+
+    now = datetime.utcnow()
+    rows = (await db.execute(text(_MISSED_SQL), {
+        "tid": tid,
+        "old_cut": now - timedelta(days=MISSED_MIN_DAYS),
+        "recent_cut": now - timedelta(days=MISSED_MAX_DAYS),
+    })).mappings().all()
+    if not rows:
+        return 0
+
+    wa = sum(1 for r in rows if r["channel"] == "whatsapp")
+    em = len(rows) - wa
+    names = [r["name"] for r in rows[:5] if r["name"]]
+    channel_bits = []
+    if wa:
+        channel_bits.append(f"{wa} على واتساب")
+    if em:
+        channel_bits.append(f"{em} على البريد")
+    head = " و".join(channel_bits) if channel_bits else f"{len(rows)}"
+
+    sample = "، ".join(names)
+    message = (f"لديك {len(rows)} جهة تواصلت معك ولم تردّ عليها منذ يومين أو أكثر ({head}). "
+               f"لم نجد أنك تواصلت معهم بأي وسيلة أخرى."
+               + (f"\nمنهم: {sample}" if sample else ""))
+
+    await notify(
+        db, tid, NotificationType.missed_followup,
+        title="⏰ ردود متأخرة — متابعات فائتة",
+        message=message,
+        data={
+            "count": len(rows), "whatsapp": wa, "email": em,
+            "conversation_ids": [r["id"] for r in rows[:50]],
+            "source": "missed_followup",
+        },
+        urgent=True,  # a warm lead going cold is revenue-critical — ping the owner's WhatsApp too
+    )
+    return 1
+
+
 async def _recent_notif(db, tid, ntype, hours):
     """Debounce — avoid re-notifying about the same thing every cycle."""
     from app.models.models import Notification
