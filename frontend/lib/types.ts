@@ -112,8 +112,9 @@ export interface Message {
   content: string
   media_url?: string
   media_type?: string
-  message_type?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker'
+  message_type?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'email'
   has_media?: boolean
+  attachments?: { filename: string; content_type?: string; size?: number }[]
   is_ai_generated: boolean
   wa_message_id?: string
   status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'

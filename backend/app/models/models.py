@@ -439,6 +439,8 @@ class Message(Base):
     content = Column(Text, nullable=True)
     message_type = Column(String, default="text")
     media_url = Column(String, nullable=True)
+    # File attachments (email PDFs, images…): [{filename, key, content_type, size}].
+    attachments = Column(JSON, nullable=True)
     is_ai_generated = Column(Boolean, default=False)
     ai_confidence = Column(Float, nullable=True)
     transcription = Column(Text, nullable=True)

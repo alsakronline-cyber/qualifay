@@ -173,6 +173,9 @@ export const conversationsApi = {
   getMediaBlob: (conversationId: string, messageId: string) =>
     API.get(`/v1/conversations/${conversationId}/messages/${messageId}/media`, { responseType: 'blob' }),
 
+  getAttachmentBlob: (messageId: string, idx: number) =>
+    API.get(`/v1/conversations/messages/${messageId}/attachment/${idx}`, { responseType: 'blob' }),
+
   sendMessage: (id: string, content: string) =>
     API.post(`/v1/conversations/${id}/messages`, { content }),
 
