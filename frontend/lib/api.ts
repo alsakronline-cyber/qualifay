@@ -179,6 +179,9 @@ export const conversationsApi = {
   sendMessage: (id: string, content: string) =>
     API.post(`/v1/conversations/${id}/messages`, { content }),
 
+  compose: (payload: { channel: 'whatsapp' | 'email'; to: string; subject?: string; content: string }) =>
+    API.post('/v1/conversations/compose', payload),
+
   toggleAi: (id: string, enabled: boolean) =>
     API.patch(`/v1/conversations/${id}`, { ai_enabled: enabled }),
 

@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
-import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic, UserRound, Pencil, Check } from 'lucide-react'
+import { Send, Bot, BotOff, Sparkles, MessageSquare, X, CheckCheck, Download, FileText, Loader2, KanbanSquare, Paperclip, Trash2, Search, Mic, UserRound, Pencil, Check, Mail } from 'lucide-react'
 import { conversationsApi, waSyncApi, instancesApi, templatesApi, leadsApi } from '@/lib/api'
 import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
@@ -149,6 +149,115 @@ function AttachmentChip({ messageId, idx, att }: {
   )
 }
 
+function ComposeModal({ onClose, onSent }: {
+  onClose: () => void
+  onSent: (conversationId: string) => void
+}) {
+  const [channel, setChannel] = useState<'whatsapp' | 'email'>('whatsapp')
+  const [to, setTo] = useState('')
+  const [subject, setSubject] = useState('')
+  const [content, setContent] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const send = async () => {
+    if (!to.trim() || !content.trim() || sending) return
+    setSending(true)
+    try {
+      const res = await conversationsApi.compose({
+        channel, to: to.trim(),
+        subject: channel === 'email' ? subject.trim() : undefined,
+        content: content.trim(),
+      })
+      toast.success('تم الإرسال')
+      onSent(res.data?.conversation_id)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(msg || 'فشل الإرسال')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800">
+          <h3 className="font-semibold text-white font-cairo">رسالة جديدة</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {/* Channel toggle */}
+          <div className="flex gap-1 bg-gray-800 border border-gray-700 rounded-lg p-0.5">
+            {([
+              { key: 'whatsapp', label: 'واتساب', icon: MessageSquare },
+              { key: 'email', label: 'بريد إلكتروني', icon: Mail },
+            ] as const).map((c) => {
+              const Icon = c.icon
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setChannel(c.key)}
+                  className={clsx(
+                    'flex-1 flex items-center justify-center gap-1.5 text-xs py-2 rounded-md font-cairo transition-colors',
+                    channel === c.key ? 'bg-gold-primary text-gray-950 font-semibold' : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  <Icon size={14} />{c.label}
+                </button>
+              )
+            })}
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 font-cairo">{channel === 'email' ? 'البريد الإلكتروني' : 'رقم الهاتف'}</label>
+            <input
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              dir="ltr"
+              placeholder={channel === 'email' ? 'name@example.com' : '+201XXXXXXXXX'}
+              className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-gold-primary"
+            />
+          </div>
+          {channel === 'email' && (
+            <div>
+              <label className="text-xs text-gray-400 font-cairo">الموضوع</label>
+              <input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="موضوع الرسالة"
+                className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
+              />
+            </div>
+          )}
+          <div>
+            <label className="text-xs text-gray-400 font-cairo">الرسالة</label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={4}
+              placeholder="اكتب رسالتك..."
+              className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo resize-none"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-800">
+          <button onClick={onClose} className="text-sm text-gray-400 hover:text-white px-3 py-2 font-cairo">إلغاء</button>
+          <button
+            onClick={send}
+            disabled={sending || !to.trim() || !content.trim()}
+            className="flex items-center gap-1.5 text-sm bg-gold-primary text-gray-950 font-semibold rounded-lg px-4 py-2 disabled:opacity-50 hover:brightness-110 transition font-cairo"
+          >
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            إرسال
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function InboxPage() {
   const router = useRouter()
   const [openingLead, setOpeningLead] = useState(false)
@@ -163,6 +272,7 @@ export default function InboxPage() {
   const [loadingSuggestion, setLoadingSuggestion] = useState(false)
   const [sendingApproved, setSendingApproved] = useState(false)
   const [syncingPipeline, setSyncingPipeline] = useState(false)
+  const [composeOpen, setComposeOpen] = useState(false)
   // Which WhatsApp instance to show. '' = all instances (default).
   const [instanceFilter, setInstanceFilter] = useState<string>('')
   // Channel filter: '' = all, 'whatsapp', or 'email'.
@@ -480,15 +590,25 @@ export default function InboxPage() {
               <h2 className="font-semibold text-white font-cairo text-sm">صندوق الوارد</h2>
               <p className="text-xs text-gray-500">{conversations.length} محادثة</p>
             </div>
-            <button
-              onClick={handleSyncToPipeline}
-              disabled={syncingPipeline}
-              title="تحليل المحادثات وتحويل المهتمين إلى عملاء في خط الأنابيب"
-              className="flex items-center gap-1 text-[11px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 hover:bg-gold-primary/20 disabled:opacity-50 rounded-lg px-2 py-1.5 font-cairo transition-colors"
-            >
-              {syncingPipeline ? <Loader2 size={12} className="animate-spin" /> : <KanbanSquare size={12} />}
-              مزامنة للأنابيب
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setComposeOpen(true)}
+                title="بدء محادثة جديدة عبر واتساب أو البريد"
+                className="flex items-center gap-1 text-[11px] bg-gold-primary text-gray-950 hover:brightness-110 rounded-lg px-2 py-1.5 font-cairo font-semibold transition"
+              >
+                <Send size={12} />
+                رسالة جديدة
+              </button>
+              <button
+                onClick={handleSyncToPipeline}
+                disabled={syncingPipeline}
+                title="تحليل المحادثات وتحويل المهتمين إلى عملاء في خط الأنابيب"
+                className="flex items-center gap-1 text-[11px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 hover:bg-gold-primary/20 disabled:opacity-50 rounded-lg px-2 py-1.5 font-cairo transition-colors"
+              >
+                {syncingPipeline ? <Loader2 size={12} className="animate-spin" /> : <KanbanSquare size={12} />}
+                مزامنة
+              </button>
+            </div>
           </div>
           {/* Channel filter — الكل / واتساب / بريد */}
           <div className="mt-2 flex gap-1 bg-gray-800 border border-gray-700 rounded-lg p-0.5">
@@ -951,6 +1071,17 @@ export default function InboxPage() {
           conversationId={selectedId}
           onClose={() => setShowAction(false)}
           onDone={() => { mutateConvs(); mutateMsgs() }}
+        />
+      )}
+
+      {composeOpen && (
+        <ComposeModal
+          onClose={() => setComposeOpen(false)}
+          onSent={(cid) => {
+            setComposeOpen(false)
+            mutateConvs()
+            if (cid) setSelectedId(cid)
+          }}
         />
       )}
     </div>

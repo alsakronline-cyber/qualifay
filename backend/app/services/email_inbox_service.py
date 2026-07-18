@@ -188,7 +188,9 @@ async def poll_inbound_email() -> dict:
     from app.core.database import AsyncSessionLocal
     from app.core.crypto import decrypt
 
-    mailboxes = [(None, None, None, None)]  # (None*) => system defaults
+    # (tenant_id, host, port, user, pwd). tenant_id None => shared system mailbox, whose
+    # senders can't be attributed to a tenant, so we never auto-create leads from it.
+    mailboxes = [(None, None, None, None, None)]
     try:
         from app.models.models import EmailAccount
         from sqlalchemy import select
@@ -197,14 +199,17 @@ async def poll_inbound_email() -> dict:
                 select(EmailAccount).where(EmailAccount.imap_host.isnot(None))
             )).scalars().all()
         for a in accts:
-            mailboxes.append((a.imap_host, a.imap_port or 993, a.smtp_user, decrypt(a.smtp_password_enc)))
+            mailboxes.append((a.tenant_id, a.imap_host, a.imap_port or 993, a.smtp_user, decrypt(a.smtp_password_enc)))
     except Exception as e:
         logger.debug(f"listing email accounts for poll failed: {e}")
 
     messages = []
-    for host, port, user, pwd in mailboxes:
+    for tenant_id_mb, host, port, user, pwd in mailboxes:
         try:
-            messages.extend(await asyncio.to_thread(_fetch_unseen, host, port, user, pwd))
+            batch = await asyncio.to_thread(_fetch_unseen, host, port, user, pwd)
+            for m in batch:
+                m["mailbox_tenant_id"] = tenant_id_mb   # which tenant owns this inbox (if any)
+            messages.extend(batch)
         except Exception as e:
             logger.warning(f"IMAP fetch failed ({host or 'system'}): {e}")
 
@@ -213,7 +218,8 @@ async def poll_inbound_email() -> dict:
 
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
-        Lead, Conversation, ConversationStatus, Message, MessageDirection,
+        Lead, LeadSource, LeadStage, LeadStatus,
+        Conversation, ConversationStatus, Message, MessageDirection,
     )
     from sqlalchemy import select, and_
 
@@ -236,7 +242,19 @@ async def poll_inbound_email() -> dict:
                 select(Lead).where(Lead.email.ilike(addr)).order_by(Lead.created_at.desc())
             )).scalars().first()
             if not lead:
-                continue  # unknown sender — leave it in the mailbox
+                # No lead yet. If this arrived on a tenant-owned mailbox, auto-create a lead
+                # so every inbound email stays synced into that tenant's CRM (mirroring how
+                # inbound WhatsApp works). The shared system mailbox has no tenant → skip.
+                tid_mb = m.get("mailbox_tenant_id")
+                if not tid_mb:
+                    continue  # unknown sender on the shared mailbox — leave it
+                lead = Lead(
+                    tenant_id=tid_mb, source=LeadSource.inbound_email,
+                    name=m["from_name"] or None, email=addr,
+                    stage=LeadStage.new, status=LeadStatus.active,
+                )
+                db.add(lead)
+                await db.flush()
 
             conv = (await db.execute(
                 select(Conversation).where(and_(
