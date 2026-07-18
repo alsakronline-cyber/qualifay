@@ -401,16 +401,15 @@ async def _alert_missed_tenant(db, tid) -> int:
 
 async def _missed_notif_exists(db, tid, conv_id, days) -> bool:
     """True if we already raised a missed-followup for this exact conversation recently —
-    so an unanswered contact isn't re-notified on every single scan."""
-    from app.models.models import Notification, NotificationType
+    so an unanswered contact isn't re-notified on every single scan. Raw SQL because the
+    generic JSON column has no `.astext`; PG's ->> does the job."""
+    from sqlalchemy import text
     cut = datetime.utcnow() - timedelta(days=days)
-    n = (await db.execute(select(func.count(Notification.id)).where(and_(
-        Notification.tenant_id == tid,
-        Notification.type == NotificationType.missed_followup,
-        Notification.created_at >= cut,
-        Notification.data["conversation_id"].astext == str(conv_id),
-    )))).scalar() or 0
-    return n > 0
+    row = (await db.execute(text(
+        "SELECT 1 FROM notifications WHERE tenant_id = :tid AND type = 'missed_followup' "
+        "AND created_at >= :cut AND data->>'conversation_id' = :cid LIMIT 1"
+    ), {"tid": tid, "cut": cut, "cid": str(conv_id)})).first()
+    return row is not None
 
 
 async def _recent_notif(db, tid, ntype, hours):
