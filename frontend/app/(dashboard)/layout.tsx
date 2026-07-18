@@ -31,7 +31,7 @@ import {
   FlaskConical,
   Sparkles,
 } from 'lucide-react'
-import { authApi, notificationsApi } from '@/lib/api'
+import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
 import useSWR from 'swr'
 import ThemeToggle from '@/components/theme-toggle'
@@ -87,16 +87,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
 
-  // Onboarding redirect: if not done and not already on /onboarding, check lead count
+  // Onboarding redirect: send to the wizard only if onboarding truly isn't done.
+  // The local flag is a fast path; when it's missing (e.g. the user cleared browser
+  // data) we confirm against the server's onboarding_done before trapping them — so a
+  // fully set-up tenant is never forced back into onboarding.
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (pathname === '/onboarding') return
-    const done = localStorage.getItem('qualifay_onboarding_done')
-    if (!done && user) {
-      // Redirect to onboarding — backend lead count check skipped here for perf,
-      // wizard completion sets the flag so it only runs once per browser.
-      router.push('/onboarding')
-    }
+    if (!user) return
+    if (localStorage.getItem('qualifay_onboarding_done')) return
+    onboardingApi.profile()
+      .then((r) => {
+        if (r.data?.onboarding_done) {
+          localStorage.setItem('qualifay_onboarding_done', '1')  // self-heal the flag
+        } else {
+          router.push('/onboarding')
+        }
+      })
+      .catch(() => { /* on error, don't trap the user on onboarding */ })
   }, [user, pathname, router])
 
   const fetchNotifications = useCallback(async () => {

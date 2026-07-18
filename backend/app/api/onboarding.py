@@ -81,6 +81,18 @@ class AutonomyIn(BaseModel):
     level: str
 
 
+@router.post("/skip")
+async def skip_onboarding(current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Mark onboarding complete without the guided setup — so a user is never trapped on
+    the wizard (e.g. if the AI consultant is temporarily unavailable). Keeps existing
+    autonomy; leaves everything else untouched."""
+    require_admin(current_user)
+    t = await _tenant(current_user["tenant_id"], db)
+    t.onboarding_done = True
+    await db.commit()
+    return {"onboarding_done": True}
+
+
 @router.post("/autonomy")
 async def set_autonomy(body: AutonomyIn, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     require_admin(current_user)
