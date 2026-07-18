@@ -37,6 +37,8 @@ async def _run_all():
     async with AsyncSessionLocal() as db:
         tenants = (await db.execute(select(Tenant))).scalars().all()
         for t in tenants:
+            if (t.autonomy or "") == "off":
+                continue  # automation paused for this tenant — no assessment, no actions
             try:
                 await _assess_tenant(t, db)
                 ran += 1
@@ -247,6 +249,8 @@ async def _digest_all():
         tenants = (await db.execute(select(Tenant).where(Tenant.onboarding_done == True))).scalars().all()  # noqa: E712
         since = datetime.utcnow() - timedelta(hours=24)
         for t in tenants:
+            if (t.autonomy or "") == "off":
+                continue  # automation paused — skip the daily digest
             tid = t.id
             new_leads = (await db.execute(select(func.count(Lead.id)).where(and_(
                 Lead.tenant_id == tid, Lead.created_at >= since)))).scalar() or 0
@@ -298,6 +302,8 @@ async def _alert_missed_all():
     async with AsyncSessionLocal() as db:
         tenants = (await db.execute(select(Tenant))).scalars().all()
         for t in tenants:
+            if (t.autonomy or "") == "off":
+                continue  # automation paused — no missed-followup alerts either
             try:
                 total += await _alert_missed_tenant(db, t.id)
             except Exception as e:  # one tenant must not stop the rest
