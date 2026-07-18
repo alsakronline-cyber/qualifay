@@ -581,12 +581,12 @@ async def compose_message(
 
     # Send the first message.
     if channel == "email":
-        from app.services.email_service import email_service
-        if not email_service.is_configured():
-            raise HTTPException(status_code=502, detail="SMTP غير مهيأ")
+        from app.services.email_service import send_for_tenant
         subject = (body.subject or "").strip() or "رسالة من Qualifay"
         try:
-            await email_service.send(wa_jid, subject, content)
+            await send_for_tenant(db, tenant_id, wa_jid, subject, content)
+        except RuntimeError:
+            raise HTTPException(status_code=502, detail="SMTP غير مهيأ")
         except Exception as e:
             logger.error(f"compose email error: {e}")
             raise HTTPException(status_code=502, detail=f"فشل إرسال البريد: {e}")
@@ -635,12 +635,12 @@ async def send_message(
     channel = getattr(conv, "channel", None) or "whatsapp"
     if channel == "email":
         # Reply by email — wa_jid holds the address.
-        from app.services.email_service import email_service
-        if not email_service.is_configured():
-            raise HTTPException(status_code=502, detail="SMTP not configured")
+        from app.services.email_service import send_for_tenant
         subject = f"رد: {(conv.contact_name or conv.wa_jid)}"
         try:
-            await email_service.send(conv.wa_jid, subject, body.content)
+            await send_for_tenant(db, tenant_id, conv.wa_jid, subject, body.content)
+        except RuntimeError:
+            raise HTTPException(status_code=502, detail="SMTP not configured")
         except Exception as e:
             logger.error(f"send_message email error: {e}")
             raise HTTPException(status_code=502, detail=f"Email send failed: {e}")
