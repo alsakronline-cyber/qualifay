@@ -5,52 +5,68 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --gold-primary: #C9A227;
+  --gold-primary: #D4AF37;
   --gold-dark: #A87018;
   --wa-green: #25D366;
 
-  /* Dark theme (default). Space-separated RGB so Tailwind's /opacity modifiers work. */
-  --c-white: 255 255 255;
-  --c-gray-50: 249 250 251;
-  --c-gray-100: 243 244 246;
-  --c-gray-200: 229 231 235;
-  --c-gray-300: 209 213 219;
-  --c-gray-400: 156 163 175;
-  --c-gray-500: 107 114 128;
-  --c-gray-600: 75 85 99;
-  --c-gray-700: 55 65 81;
-  --c-gray-800: 31 41 55;
-  --c-gray-900: 17 24 39;
-  --c-gray-950: 3 7 18;
+  /* Dark theme (default) — a refined, slightly warm slate "ink" ramp with clear
+     elevation steps (deep bg → panels → cards → borders) that pairs with the gold.
+     Space-separated RGB so Tailwind's /opacity modifiers keep working. */
+  --c-white: 246 248 251;      /* primary text — soft white, easier on the eyes */
+  --c-gray-50: 244 246 249;
+  --c-gray-100: 231 234 240;
+  --c-gray-200: 202 209 219;
+  --c-gray-300: 167 176 189;
+  --c-gray-400: 130 140 155;   /* muted / secondary text */
+  --c-gray-500: 92 101 115;
+  --c-gray-600: 62 70 83;
+  --c-gray-700: 43 49 60;      /* borders, hover edges */
+  --c-gray-800: 30 35 44;      /* cards / raised surfaces */
+  --c-gray-900: 20 24 31;      /* app background, sidebar */
+  --c-gray-950: 12 14 19;      /* deepest background */
 
-  --toast-bg: #1f2937;
-  --toast-fg: #f9fafb;
-  --toast-border: #374151;
+  --toast-bg: #1e232c;
+  --toast-fg: #f6f8fb;
+  --toast-border: #2b313c;
+
+  --scrollbar-thumb: #3a4150;
+  --scrollbar-thumb-hover: #4c5568;
+  --selection-bg: rgba(212, 175, 55, 0.28);
 }
 
-/* Light theme — the gray ramp is mirrored so dark backgrounds become light and
-   light/white text becomes dark. Flips the whole app from one class toggle. */
+/* Light theme — the ramp is mirrored (dark surfaces → light, light text → dark) so a
+   single class on <html> flips everything. Tuned for a clean UI: soft off-white page,
+   white elevated cards, gentle borders, readable ink text. */
 .light {
-  --c-white: 17 24 39;
-  --c-gray-50: 3 7 18;
-  --c-gray-100: 17 24 39;
-  --c-gray-200: 31 41 55;
-  --c-gray-300: 55 65 81;
-  --c-gray-400: 75 85 99;
-  --c-gray-500: 107 114 128;
-  --c-gray-600: 156 163 175;
-  --c-gray-700: 209 213 219;
-  --c-gray-800: 229 231 235;
-  --c-gray-900: 249 250 251;
-  --c-gray-950: 255 255 255;
+  --c-white: 16 21 28;         /* primary text — near-black ink */
+  --c-gray-50: 12 14 19;       /* darkest — strong headings / icons */
+  --c-gray-100: 29 34 43;
+  --c-gray-200: 51 59 71;
+  --c-gray-300: 74 83 98;
+  --c-gray-400: 100 110 128;   /* muted / secondary text */
+  --c-gray-500: 138 147 161;
+  --c-gray-600: 190 196 205;
+  --c-gray-700: 220 224 230;   /* borders */
+  --c-gray-800: 236 239 242;   /* secondary surfaces, hover */
+  --c-gray-900: 255 255 255;   /* cards, sidebar (white, elevated) */
+  --c-gray-950: 245 246 249;   /* page background — soft off-white */
 
   --toast-bg: #ffffff;
   --toast-fg: #111827;
   --toast-border: #e5e7eb;
+
+  --scrollbar-thumb: #cbd2dc;
+  --scrollbar-thumb-hover: #aeb6c4;
+  --selection-bg: rgba(168, 112, 24, 0.20);
 }
 
 body {
   font-family: 'Inter', sans-serif;
+}
+
+/* Ease the flip between light and dark so it feels intentional, not jarring. */
+body, .light, :root {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 [lang="ar"] body,
@@ -58,18 +74,25 @@ body {
   font-family: 'Cairo', sans-serif;
 }
 
-/* Scrollbar styling */
+::selection {
+  background: var(--selection-bg);
+}
+
+/* Scrollbar styling — follows the active theme */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 3px;
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: var(--scrollbar-thumb-hover);
+}
+* {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }

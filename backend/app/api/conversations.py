@@ -486,6 +486,119 @@ class SendMessageRequest(BaseModel):
     content: str
 
 
+class ComposeRequest(BaseModel):
+    channel: str            # 'whatsapp' | 'email'
+    to: str                 # phone (any Egyptian format) or email address
+    subject: Optional[str] = None
+    content: str
+
+
+@router.post("/compose")
+async def compose_message(
+    body: ComposeRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Start a brand-new conversation with someone not yet on the list: normalize the
+    recipient, create the lead + conversation if needed, send the first WhatsApp/email,
+    and return the conversation id so the UI can open the thread."""
+    tenant_id = current_user["tenant_id"]
+    channel = (body.channel or "whatsapp").lower()
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="الرسالة فارغة")
+
+    from app.models.models import (
+        Lead, LeadSource, LeadStage, LeadStatus, Message, MessageDirection, WaInstance,
+    )
+
+    instance_name = "email"
+    if channel == "email":
+        addr = (body.to or "").strip().lower()
+        if "@" not in addr:
+            raise HTTPException(status_code=400, detail="بريد إلكتروني غير صالح")
+        wa_jid = addr
+    else:
+        channel = "whatsapp"
+        from app.lib.phone import normalize_egyptian_phone
+        phone = normalize_egyptian_phone(body.to)
+        if not phone:
+            raise HTTPException(status_code=400, detail="رقم هاتف غير صالح")
+        wa_jid = phone.lstrip("+") + "@s.whatsapp.net"
+        inst = (await db.execute(select(WaInstance).where(and_(
+            WaInstance.tenant_id == tenant_id, WaInstance.status.in_(["connected", "open"])
+        )))).scalars().first()
+        if not inst:
+            raise HTTPException(status_code=400, detail="لا يوجد جهاز واتساب متصل")
+        instance_name = inst.instance_name
+
+    # Find or create the lead (dedupe by email/phone within the tenant).
+    if channel == "email":
+        lead = (await db.execute(select(Lead).where(and_(
+            Lead.tenant_id == tenant_id, Lead.email.ilike(wa_jid)
+        )).order_by(Lead.created_at.desc()))).scalars().first()
+    else:
+        lead = (await db.execute(select(Lead).where(and_(
+            Lead.tenant_id == tenant_id, Lead.phone == phone
+        )).order_by(Lead.created_at.desc()))).scalars().first()
+    if not lead:
+        lead = Lead(
+            tenant_id=tenant_id, source=LeadSource.manual, name=None,
+            phone=(None if channel == "email" else phone),
+            email=(wa_jid if channel == "email" else None),
+            stage=LeadStage.new, status=LeadStatus.active,
+        )
+        db.add(lead)
+        await db.flush()
+
+    # Find or create the conversation.
+    conv = (await db.execute(select(Conversation).where(and_(
+        Conversation.tenant_id == tenant_id, Conversation.channel == channel,
+        Conversation.wa_jid == wa_jid,
+    )))).scalar_one_or_none()
+    if not conv:
+        conv = Conversation(
+            tenant_id=tenant_id, lead_id=lead.id, instance_name=instance_name,
+            wa_jid=wa_jid, channel=channel, contact_name=lead.name,
+            status=ConversationStatus.open, ai_enabled=False,
+        )
+        db.add(conv)
+        await db.flush()
+    elif not conv.lead_id:
+        conv.lead_id = lead.id
+
+    # Send the first message.
+    if channel == "email":
+        from app.services.email_service import email_service
+        if not email_service.is_configured():
+            raise HTTPException(status_code=502, detail="SMTP غير مهيأ")
+        subject = (body.subject or "").strip() or "رسالة من Qualifay"
+        try:
+            await email_service.send(wa_jid, subject, content)
+        except Exception as e:
+            logger.error(f"compose email error: {e}")
+            raise HTTPException(status_code=502, detail=f"فشل إرسال البريد: {e}")
+        msg_type = "email"
+    else:
+        try:
+            await EvolutionService().send_text(instance_name, wa_jid, content)
+        except Exception as e:
+            logger.error(f"compose whatsapp error: {e}")
+            raise HTTPException(status_code=502, detail=f"فشل إرسال واتساب: {e}")
+        msg_type = "text"
+
+    now = datetime.datetime.utcnow()
+    db.add(Message(
+        conversation_id=conv.id, direction=MessageDirection.outbound,
+        content=content, message_type=msg_type,
+    ))
+    conv.last_message = content
+    conv.last_message_at = now
+    conv.updated_at = now
+    await db.commit()
+    return {"sent": True, "conversation_id": conv.id}
+
+
 @router.post("/{conversation_id}/messages")
 async def send_message(
     conversation_id: str,
