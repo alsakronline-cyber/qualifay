@@ -562,6 +562,16 @@ async def compose_message(
         if not inst:
             raise HTTPException(status_code=400, detail="لا يوجد جهاز واتساب متصل")
         instance_name = inst.instance_name
+        # Compose is a cold first-contact send, so it respects the WhatsApp warmup/daily
+        # cap (anti-ban). Replies to existing threads are NOT capped — answering someone
+        # who messaged you is warm and safe. Only the cold outbound path is gated here.
+        from app.services.warmup_service import warmup_service
+        allowed, used, cap = await warmup_service.check_wa_limit(inst.id, db)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"تم بلوغ الحد اليومي لواتساب ({used}/{cap}). حاول غداً.",
+            )
 
     # Find or create the lead (dedupe by email/phone within the tenant).
     if channel == "email":
@@ -616,6 +626,8 @@ async def compose_message(
         except Exception as e:
             logger.error(f"compose whatsapp error: {e}")
             raise HTTPException(status_code=502, detail=f"فشل إرسال واتساب: {e}")
+        # Count this cold send against the instance's daily warmup cap.
+        await warmup_service.increment_wa_sent(inst.id, db)
         msg_type = "text"
 
     now = datetime.datetime.utcnow()
