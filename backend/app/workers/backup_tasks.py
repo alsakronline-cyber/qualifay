@@ -54,8 +54,10 @@ def run_backup():
     size = os.path.getsize(out)
     _prune()
     remote = _upload_minio(out)
-    logger.info("backup complete %s (%s bytes) minio=%s", out, size, remote)
-    return {"ok": True, "file": os.path.basename(out), "size": size, "minio": remote}
+    offsite = _upload_offsite(out)
+    logger.info("backup complete %s (%s bytes) minio=%s offsite=%s", out, size, remote, offsite)
+    return {"ok": True, "file": os.path.basename(out), "size": size,
+            "minio": remote, "offsite": offsite}
 
 
 def _prune():
@@ -84,6 +86,32 @@ def _upload_minio(path: str):
         return name
     except Exception as e:
         logger.warning("minio upload skipped: %s", e)
+        return None
+
+
+def _upload_offsite(path: str):
+    """Push the dump to an off-box S3-compatible target (B2/S3/Wasabi), if configured.
+    Best-effort: a remote failure must never fail the backup. Returns the remote key,
+    'skipped' if unconfigured, or None on error."""
+    if not (settings.BACKUP_S3_ENDPOINT and settings.BACKUP_S3_BUCKET
+            and settings.BACKUP_S3_ACCESS_KEY and settings.BACKUP_S3_SECRET_KEY):
+        return "skipped"
+    try:
+        from minio import Minio
+        ep = settings.BACKUP_S3_ENDPOINT.replace("https://", "").replace("http://", "")
+        client = Minio(
+            ep,
+            access_key=settings.BACKUP_S3_ACCESS_KEY,
+            secret_key=settings.BACKUP_S3_SECRET_KEY,
+            secure=settings.BACKUP_S3_SECURE,
+        )
+        if not client.bucket_exists(settings.BACKUP_S3_BUCKET):
+            client.make_bucket(settings.BACKUP_S3_BUCKET)
+        name = os.path.basename(path)
+        client.fput_object(settings.BACKUP_S3_BUCKET, name, path)
+        return name
+    except Exception as e:
+        logger.warning("offsite backup upload failed: %s", e)
         return None
 
 

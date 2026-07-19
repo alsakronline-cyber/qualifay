@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     MINIO_USER: str = "qualifay"
     MINIO_PASSWORD: str = ""
 
+    # Off-box backup target (S3-compatible: Backblaze B2, AWS S3, Wasabi…). Optional —
+    # when the endpoint + keys are set, nightly DB dumps are also pushed here so a lost
+    # server disk doesn't take the backups (which live on the same box in MinIO) with it.
+    BACKUP_S3_ENDPOINT: str = ""          # e.g. s3.us-west-004.backblazeb2.com  (no https://)
+    BACKUP_S3_BUCKET: str = ""
+    BACKUP_S3_ACCESS_KEY: str = ""
+    BACKUP_S3_SECRET_KEY: str = ""
+    BACKUP_S3_SECURE: bool = True         # TLS to the remote endpoint
+
     # Qdrant
     QDRANT_URL: str = "http://127.0.0.1:6333"
 
