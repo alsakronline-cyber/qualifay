@@ -35,21 +35,26 @@ celery_app.conf.update(
         "app.workers.outreach_tasks.*": {"queue": "outreach"},
     },
     beat_schedule={
+        # Daily jobs use fixed cron times, NOT plain intervals: a 86400s interval restarts
+        # its countdown on every beat recreate, so frequent redeploys can silently defer a
+        # daily job forever (this is why nightly backups never ran for 10 days). Resetting
+        # the WhatsApp daily counters is the critical one — without it, instances stay stuck
+        # at their cap and no outreach (or compose) can send.
         "reset-daily-wa-limits": {
             "task": "app.workers.outreach_tasks.reset_daily_limits",
-            "schedule": 86400.0,
+            "schedule": crontab(hour=0, minute=1),   # 00:01 Cairo — start of day
         },
         "advance-warmup-days": {
             "task": "app.workers.outreach_tasks.advance_warmup_days",
-            "schedule": 86400.0,
+            "schedule": crontab(hour=0, minute=5),
         },
         "cleanup-pool-expired": {
             "task": "app.workers.ai_tasks.cleanup_lead_pool",
-            "schedule": 86400.0,
+            "schedule": crontab(hour=4, minute=0),
         },
         "re-engage-stale-leads": {
             "task": "re_engage_stale_leads",
-            "schedule": 86400.0,
+            "schedule": crontab(hour=10, minute=0),  # daytime, within outreach hours
         },
         "run-due-scrape-schedules": {
             "task": "run_due_scrape_schedules",
@@ -65,7 +70,10 @@ celery_app.conf.update(
         },
         "nightly-db-backup": {
             "task": "backups.run",
-            "schedule": 86400.0,  # daily pg_dump → /app/backups + MinIO
+            # Fixed 03:00 Africa/Cairo — a plain 86400s interval restarts its countdown
+            # every time the beat container is recreated, so frequent redeploys can defer
+            # it indefinitely (it silently never ran for 10 days). A cron time always fires.
+            "schedule": crontab(hour=3, minute=0),
         },
         "sync-campaign-audiences": {
             "task": "campaigns.sync_audiences",
