@@ -16,8 +16,13 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 ENV BACKEND_URL=$BACKEND_URL
-# Build — ignore standalone copy failures for route-group pages missing manifests
-RUN npm run build 2>&1 | grep -v "Failed to copy traced files" || true
+# Build. Tolerate the known-benign "Failed to copy traced files" warning, but FAIL the
+# image build on a real error — otherwise a broken build silently ships a stale .next
+# (this masking previously shipped an old dashboard for a whole session).
+RUN npm run build 2>&1 | tee /tmp/build.log | grep -v "Failed to copy traced files" || true; \
+    if grep -qE "Export encountered an error|Build error occurred|exiting the build|Failed to compile" /tmp/build.log; then \
+      echo ">>> next build FAILED (see log above)"; exit 1; \
+    fi
 # Create any missing client-reference-manifest files so standalone copy succeeds
 RUN find .next/server/app -name 'page.js' 2>/dev/null | while read f; do \
       dir=$(dirname "$f"); \
