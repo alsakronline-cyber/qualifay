@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.models import WaInstance
 from app.services.evolution_service import evolution_service
 from app.services.warmup_service import get_cap_for_day
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -82,6 +82,7 @@ async def create_instance(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new WA instance in Evolution API and save to DB."""
+    require_admin(current_user)   # connecting a WhatsApp number is admin-only
     # Check if name already taken
     existing = await db.execute(
         select(WaInstance).where(WaInstance.instance_name == req.instance_name)
@@ -204,6 +205,7 @@ async def delete_instance(
     request): it deletes this instance's conversations and their messages. Even then,
     leads are kept — erase a contact's leads through the leads API, deliberately.
     """
+    require_admin(current_user)   # deleting/purging a WhatsApp channel is admin-only
     from app.models.models import Conversation
 
     result = await db.execute(
@@ -256,6 +258,7 @@ async def disconnect_instance(
     db: AsyncSession = Depends(get_db),
 ):
     """Log the WhatsApp number out (disconnect) without deleting the instance."""
+    require_admin(current_user)
     instance = (await db.execute(
         select(WaInstance).where(
             WaInstance.id == instance_id,
@@ -280,6 +283,7 @@ async def reconnect_instance(
     db: AsyncSession = Depends(get_db),
 ):
     """Re-initiate the WhatsApp connection; returns a QR to scan if one is needed."""
+    require_admin(current_user)
     instance = (await db.execute(
         select(WaInstance).where(
             WaInstance.id == instance_id,

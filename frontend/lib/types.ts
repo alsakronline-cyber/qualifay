@@ -171,11 +171,15 @@ export interface DashboardStats {
 }
 
 export interface AuthUser {
-  id: string
+  user_id?: string
+  id?: string
   email: string
-  name: string
-  tenant: Tenant
-  role: 'owner' | 'admin' | 'agent'
+  full_name?: string
+  name?: string
+  tenant_id?: string
+  tenant?: Tenant
+  is_tenant_admin?: boolean
+  role?: 'owner' | 'admin' | 'agent'
 }
 
 export interface PaginatedResponse<T> {

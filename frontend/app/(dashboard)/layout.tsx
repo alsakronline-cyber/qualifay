@@ -41,28 +41,29 @@ interface NavItem {
   label: string
   labelEn: string
   icon: React.ComponentType<{ size?: number; className?: string }>
+  adminOnly?: boolean   // hidden from non-admin (agent) members; also route-guarded
 }
 
 const navItems: NavItem[] = [
   { href: '/', label: 'الرئيسية', labelEn: 'Dashboard', icon: LayoutDashboard },
-  { href: '/activity', label: 'نشاط المساعد', labelEn: 'AI Activity', icon: Sparkles },
-  { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3 },
+  { href: '/activity', label: 'نشاط المساعد', labelEn: 'AI Activity', icon: Sparkles, adminOnly: true },
+  { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3, adminOnly: true },
   { href: '/leads', label: 'العملاء المحتملون', labelEn: 'Leads', icon: Users },
   { href: '/inbox', label: 'صندوق الوارد', labelEn: 'Inbox', icon: MessageSquare },
   { href: '/pipeline', label: 'خط الأنابيب', labelEn: 'Pipeline', icon: KanbanSquare },
-  { href: '/sequences', label: 'التسلسلات', labelEn: 'Sequences', icon: GitBranch },
+  { href: '/sequences', label: 'التسلسلات', labelEn: 'Sequences', icon: GitBranch, adminOnly: true },
   { href: '/submissions', label: 'الطلبات والحجوزات', labelEn: 'Conversions', icon: CalendarCheck },
-  { href: '/campaigns', label: 'الحملات', labelEn: 'Campaigns', icon: Megaphone },
-  { href: '/instances', label: 'واتساب', labelEn: 'WhatsApp', icon: Smartphone },
-  { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail },
+  { href: '/campaigns', label: 'الحملات', labelEn: 'Campaigns', icon: Megaphone, adminOnly: true },
+  { href: '/instances', label: 'واتساب', labelEn: 'WhatsApp', icon: Smartphone, adminOnly: true },
+  { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail, adminOnly: true },
   { href: '/templates', label: 'القوالب', labelEn: 'Templates', icon: FileText },
-  { href: '/scrape', label: 'جمع البيانات', labelEn: 'Scrape', icon: Bot },
-  { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog },
-  { href: '/webhooks', label: 'الويب هوك', labelEn: 'Webhooks', icon: Webhook },
-  { href: '/ab-tests', label: 'اختبارات A/B', labelEn: 'A/B Tests', icon: FlaskConical },
-  { href: '/monitoring', label: 'المراقبة', labelEn: 'Monitoring', icon: Activity },
-  { href: '/settings', label: 'الإعدادات', labelEn: 'Settings', icon: Settings },
-  { href: '/billing', label: 'الفوترة', labelEn: 'Billing', icon: CreditCard },
+  { href: '/scrape', label: 'جمع البيانات', labelEn: 'Scrape', icon: Bot, adminOnly: true },
+  { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog, adminOnly: true },
+  { href: '/webhooks', label: 'الويب هوك', labelEn: 'Webhooks', icon: Webhook, adminOnly: true },
+  { href: '/ab-tests', label: 'اختبارات A/B', labelEn: 'A/B Tests', icon: FlaskConical, adminOnly: true },
+  { href: '/monitoring', label: 'المراقبة', labelEn: 'Monitoring', icon: Activity, adminOnly: true },
+  { href: '/settings', label: 'الإعدادات', labelEn: 'Settings', icon: Settings, adminOnly: true },
+  { href: '/billing', label: 'الفوترة', labelEn: 'Billing', icon: CreditCard, adminOnly: true },
 ]
 
 function useAuth() {
@@ -166,6 +167,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return pathname.startsWith(href)
   }
 
+  // Role-based access: agents (non-admin) only see operational pages. Config/billing/
+  // team/etc. are admin-only. Backend also enforces this — the UI just avoids dead ends.
+  const isAdmin = !!user?.is_tenant_admin
+  const visibleNav = navItems.filter((i) => isAdmin || !i.adminOnly)
+
+  // Guard: if a non-admin navigates directly to an admin-only route, bounce to home.
+  useEffect(() => {
+    if (!user || isAdmin) return
+    const hit = navItems.find((i) => i.adminOnly && i.href !== '/' && pathname.startsWith(i.href))
+    if (hit) router.replace('/')
+  }, [user, isAdmin, pathname, router])
+
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden">
       {/* Mobile overlay */}
@@ -201,7 +214,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          {navItems.map((item) => {
+          {visibleNav.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
             return (

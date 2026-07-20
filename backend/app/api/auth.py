@@ -140,6 +140,14 @@ def require_admin(current_user: dict) -> None:
         raise HTTPException(status_code=403, detail="Admins only")
 
 
+async def require_admin_dep(current_user: dict = Depends(get_current_user)) -> dict:
+    """FastAPI dependency form — attach to admin-only endpoints so a non-admin (agent)
+    can't perform the action even by calling the API directly (defense in depth beyond
+    the UI hiding the page)."""
+    require_admin(current_user)
+    return current_user
+
+
 async def get_tenant_user(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
