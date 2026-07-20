@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.services.email_service import email_service
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -125,6 +125,7 @@ async def list_accounts(current_user: dict = Depends(get_current_user), db: Asyn
 
 @router.post("/accounts")
 async def create_account(body: AccountCreate, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)   # mailbox SMTP/IMAP credentials — admin only
     from app.models.models import EmailAccount
     from app.core.crypto import encrypt
     acc = EmailAccount(
@@ -155,6 +156,7 @@ async def _get_account(account_id, tenant_id, db):
 
 @router.patch("/accounts/{account_id}")
 async def update_account(account_id: str, body: AccountUpdate, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
     from app.core.crypto import encrypt
     acc = await _get_account(account_id, current_user["tenant_id"], db)
     data = body.dict(exclude_none=True)
@@ -168,6 +170,7 @@ async def update_account(account_id: str, body: AccountUpdate, current_user: dic
 
 @router.delete("/accounts/{account_id}")
 async def delete_account(account_id: str, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
     acc = await _get_account(account_id, current_user["tenant_id"], db)
     await db.delete(acc)
     await db.commit()

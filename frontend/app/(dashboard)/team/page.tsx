@@ -9,7 +9,14 @@ import { teamApi } from '@/lib/api'
 
 interface Member {
   id: string; email: string; full_name: string; role: string
-  is_tenant_admin: boolean; status?: string
+  is_tenant_admin: boolean; status?: string; created_at?: string
+}
+
+function joinedLabel(m: Member): string {
+  if (!m.created_at) return ''
+  const d = new Date(m.created_at)
+  const verb = m.status === 'invited' ? 'دُعِي' : 'انضم'
+  return `${verb} ${d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' })}`
 }
 
 function CopyField({ url }: { url: string }) {
@@ -141,7 +148,10 @@ export default function TeamPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-white font-cairo truncate">{m.full_name || m.email.split('@')[0]}</div>
-                  <div className="text-xs text-gray-500 truncate" dir="ltr">{m.email}</div>
+                  <div className="text-xs text-gray-500 truncate flex items-center gap-1.5" dir="ltr">
+                    <span className="truncate">{m.email}</span>
+                    {joinedLabel(m) && <span className="text-gray-600 shrink-0 font-cairo" dir="rtl">· {joinedLabel(m)}</span>}
+                  </div>
                 </div>
                 {pending ? (
                   <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border text-yellow-400 bg-yellow-500/10 border-yellow-500/30 font-cairo">
