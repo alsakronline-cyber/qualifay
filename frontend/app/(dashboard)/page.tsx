@@ -1,11 +1,5 @@
 'use client'
 
-// Opt out of static prerendering. This is an auth-gated, client-rendered page, so a
-// build-time prerender adds nothing — and it trips a Next.js route-group bug
-// ("Expected clientReferenceManifest to be defined") that fails the whole build. That
-// failure was silently swallowed by the Dockerfile, shipping a stale dashboard.
-export const dynamic = 'force-dynamic'
-
 import useSWR from 'swr'
 import Link from 'next/link'
 import { clsx } from 'clsx'
