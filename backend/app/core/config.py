@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     SERVER_IP: str = "80.225.65.148"
+    # Public base URL of the app (for building invite/accept links). Falls back to the IP.
+    APP_BASE_URL: str = ""
 
     # Database
     DATABASE_URL: str
@@ -114,6 +116,11 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_PASSWORD: str  # required — set in .env
 
     CORS_ORIGINS: List[str] = ["http://80.225.65.148", "http://localhost:3000"]
+
+    @property
+    def app_base_url_effective(self) -> str:
+        """Public base URL for building links in emails (invites). Defaults to the IP."""
+        return (self.APP_BASE_URL or f"http://{self.SERVER_IP}").rstrip("/")
 
     @property
     def cors_origins_effective(self) -> List[str]:

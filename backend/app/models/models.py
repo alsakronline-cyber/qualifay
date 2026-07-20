@@ -150,6 +150,9 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_tenant_admin = Column(Boolean, default=False)
     language = Column(String, default="ar")
+    # 'active' = can log in; 'invited' = awaiting the member to accept the invite and set
+    # their own password. Existing rows default to active.
+    status = Column(String, default="active", nullable=False, server_default="active")
     created_at = Column(DateTime, default=func.now())
 
     tenant = relationship("Tenant", back_populates="users")

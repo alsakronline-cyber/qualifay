@@ -40,13 +40,16 @@ export const authApi = {
   },
   register: (data: {
     tenant_name: string
-    tenant_slug: string
+    tenant_slug?: string
     email: string
     phone?: string
     password: string
     full_name: string
     language?: string
   }) => API.post('/v1/auth/register-tenant', data),
+  getInvite: (token: string) => API.get(`/v1/auth/invite/${token}`),
+  acceptInvite: (data: { token: string; full_name: string; password: string }) =>
+    API.post('/v1/auth/accept-invite', data),
   me: () => API.get('/v1/auth/me'),
   logout: () => API.post('/v1/auth/logout'),
   refresh: () => API.post('/v1/auth/refresh'),
@@ -364,7 +367,8 @@ export const flowsApi = {
 // ── Team ──────────────────────────────────────────────────────────────────────
 export const teamApi = {
   list: () => API.get('/v1/team'),
-  invite: (body: { email: string; full_name: string; password: string; is_admin: boolean }) => API.post('/v1/team/invite', body),
+  invite: (body: { email: string; full_name?: string; is_admin: boolean }) => API.post('/v1/team/invite', body),
+  resend: (id: string) => API.post(`/v1/team/${id}/resend`),
   update: (id: string, body: { full_name?: string; is_admin?: boolean }) => API.patch(`/v1/team/${id}`, body),
   remove: (id: string) => API.delete(`/v1/team/${id}`),
 }

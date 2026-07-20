@@ -26,7 +26,7 @@ ALGORITHM = "HS256"
 
 class RegisterTenantRequest(BaseModel):
     tenant_name: str
-    tenant_slug: str
+    tenant_slug: Optional[str] = None   # auto-derived from the company name if omitted
     email: str
     phone: Optional[str] = None
     password: str
@@ -36,6 +36,12 @@ class RegisterTenantRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    full_name: str
+    password: str
 
 
 # ─── Helpers ──────────────────────────────────────────────────
@@ -50,6 +56,23 @@ def create_access_token(data: dict, expires_minutes: int = None) -> str:
 def create_refresh_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(days=30)
     return jwt.encode({**data, "exp": expire, "type": "refresh"}, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_invite_token(user_id: str, tenant_id: str, days: int = 7) -> str:
+    """Signed, self-expiring team-invite token — no separate table needed. Single-use in
+    effect: acceptance flips the user to 'active', after which the token is rejected."""
+    expire = datetime.utcnow() + timedelta(days=days)
+    return jwt.encode(
+        {"sub": user_id, "tenant_id": tenant_id, "type": "invite", "exp": expire},
+        settings.SECRET_KEY, algorithm=ALGORITHM,
+    )
+
+
+def _decode_invite_token(token: str) -> dict:
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    if payload.get("type") != "invite":
+        raise JWTError("not an invite token")
+    return payload
 
 
 async def get_current_user(
@@ -90,6 +113,25 @@ async def get_current_user(
         "is_tenant_admin": user.is_tenant_admin,
         "language": user.language,
     }
+
+
+import re as _re
+
+
+def _slugify(text: str) -> str:
+    """A URL-safe slug from a company name. Arabic/other scripts collapse to '-', so we
+    fall back to a generic base when nothing ASCII-usable remains."""
+    s = _re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s[:40] or "tenant"
+
+
+async def _unique_tenant_slug(db: AsyncSession, base_text: str) -> str:
+    base = _slugify(base_text)
+    slug, n = base, 1
+    while (await db.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one_or_none():
+        n += 1
+        slug = f"{base}-{n}"
+    return slug
 
 
 def require_admin(current_user: dict) -> None:
@@ -139,6 +181,12 @@ async def login(
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # An invited teammate hasn't accepted yet (no real password) — block login clearly.
+    if getattr(user, "status", "active") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="لم يتم تفعيل الحساب بعد — افتح رابط الدعوة من بريدك لتعيين كلمة المرور.",
+        )
 
     token_data = {
         "sub": user.id,
@@ -166,6 +214,62 @@ async def login(
     }
 
 
+@router.get("/invite/{token}")
+async def get_invite(token: str, db: AsyncSession = Depends(get_db)):
+    """Public: validate an invite token and return who/what it's for, so the accept page
+    can greet the invitee. Does not reveal anything on an invalid/expired/used token."""
+    try:
+        payload = _decode_invite_token(token)
+    except JWTError:
+        raise HTTPException(status_code=400, detail="رابط الدعوة غير صالح أو منتهي")
+    user = (await db.execute(select(User).where(User.id == payload.get("sub")))).scalar_one_or_none()
+    if not user or getattr(user, "status", "active") != "invited":
+        raise HTTPException(status_code=400, detail="انتهت صلاحية الدعوة أو تم استخدامها")
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))).scalar_one_or_none()
+    return {
+        "email": user.email,
+        "full_name": user.full_name or "",
+        "company": tenant.name if tenant else "",
+        "role": "admin" if user.is_tenant_admin else "agent",
+    }
+
+
+@router.post("/accept-invite")
+async def accept_invite(body: AcceptInviteRequest, db: AsyncSession = Depends(get_db)):
+    """Public: the invitee sets their own name + password, activating the account. Then
+    they're auto-logged-in. Acceptance is single-use — status flips to 'active'."""
+    try:
+        payload = _decode_invite_token(body.token)
+    except JWTError:
+        raise HTTPException(status_code=400, detail="رابط الدعوة غير صالح أو منتهي")
+    if len(body.password or "") < 8:
+        raise HTTPException(status_code=400, detail="كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+    user = (await db.execute(select(User).where(User.id == payload.get("sub")))).scalar_one_or_none()
+    if not user or getattr(user, "status", "active") != "invited":
+        raise HTTPException(status_code=400, detail="انتهت صلاحية الدعوة أو تم استخدامها")
+
+    user.full_name = body.full_name.strip() or user.full_name
+    user.hashed_password = pwd_context.hash(body.password)
+    user.status = "active"
+    await db.commit()
+    await db.refresh(user)
+
+    token_data = {
+        "sub": user.id, "email": user.email, "tenant_id": user.tenant_id,
+        "is_admin": user.is_admin, "is_tenant_admin": user.is_tenant_admin,
+    }
+    return {
+        "access_token": create_access_token(token_data),
+        "refresh_token": create_refresh_token({"sub": user.id, "tenant_id": user.tenant_id}),
+        "token_type": "bearer",
+        "user": {
+            "id": user.id, "email": user.email, "full_name": user.full_name,
+            "tenant_id": user.tenant_id, "is_admin": user.is_admin,
+            "is_tenant_admin": user.is_tenant_admin, "language": user.language,
+        },
+    }
+
+
 @router.post("/register-tenant")
 async def register_tenant(
     body: RegisterTenantRequest,
@@ -180,10 +284,12 @@ async def register_tenant(
     if email_result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Check slug uniqueness
-    slug_result = await db.execute(select(Tenant).where(Tenant.slug == body.tenant_slug))
-    if slug_result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Tenant slug already taken")
+    if len(body.password or "") < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    # Slug: use the given one, else derive from the company name; ensure it's unique by
+    # appending -2, -3… on collision, so the user never has to invent one.
+    slug = await _unique_tenant_slug(db, body.tenant_slug or body.tenant_name)
 
     # Normalize + check phone uniqueness (optional field)
     phone = None
@@ -199,7 +305,7 @@ async def register_tenant(
     trial_end = datetime.utcnow() + timedelta(days=30)
 
     tenant = Tenant(
-        slug=body.tenant_slug,
+        slug=slug,
         name=body.tenant_name,
         plan=Plan.trial,
         language=body.language,
