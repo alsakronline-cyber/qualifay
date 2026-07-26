@@ -92,6 +92,24 @@ class EmailService:
 email_service = EmailService()
 
 
+async def send_system(db, to: str, subject: str, body_text: str) -> None:
+    """Platform-level email (e.g. signup verification). A brand-new tenant has no mailbox
+    of its own yet, so use the global .env SMTP if configured, otherwise fall back to any
+    configured EmailAccount as the platform sender. Raises if nothing is available."""
+    if email_service.is_configured():
+        await email_service.send(to, subject, body_text)
+        return
+    from app.models.models import EmailAccount
+    from sqlalchemy import select
+    acct = (await db.execute(
+        select(EmailAccount).where(EmailAccount.smtp_host.isnot(None))
+    )).scalars().first()
+    if acct:
+        await email_service.send_via_account(acct, to, subject, body_text)
+        return
+    raise RuntimeError("No system email sender configured")
+
+
 async def send_for_tenant(db, tenant_id: str, to: str, subject: str, body_text: str) -> None:
     """Send an email on behalf of a tenant. Prefers the tenant's own configured
     EmailAccount SMTP (e.g. Hostinger/Gmail), falling back to the global .env SMTP.

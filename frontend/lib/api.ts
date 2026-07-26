@@ -50,6 +50,8 @@ export const authApi = {
   getInvite: (token: string) => API.get(`/v1/auth/invite/${token}`),
   acceptInvite: (data: { token: string; full_name: string; password: string }) =>
     API.post('/v1/auth/accept-invite', data),
+  verifyEmail: (token: string) => API.post('/v1/auth/verify-email', { token }),
+  resendVerification: (email: string) => API.post('/v1/auth/resend-verification', { email }),
   me: () => API.get('/v1/auth/me'),
   logout: () => API.post('/v1/auth/logout'),
   refresh: () => API.post('/v1/auth/refresh'),

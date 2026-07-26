@@ -4,7 +4,7 @@ import { useState, FormEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react'
 import { authApi } from '@/lib/api'
 
 function slugify(name: string): string {
@@ -27,6 +27,9 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [sentTo, setSentTo] = useState<string | null>(null)   // set after signup → show "check email"
+  const [emailSent, setEmailSent] = useState(true)
+  const [resending, setResending] = useState(false)
 
   const handleCompanyNameChange = useCallback((v: string) => {
     setCompanyName(v)
@@ -62,10 +65,9 @@ export default function RegisterPage() {
         password,
         language: 'ar',
       })
-      const { access_token } = res.data
-      localStorage.setItem('auth_token', access_token)
-      toast.success('تم إنشاء الحساب بنجاح')
-      router.push('/onboarding')
+      // New flow: account is created but must be verified by email before login.
+      setEmailSent(res.data?.email_sent !== false)
+      setSentTo(res.data?.email || email)
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } }
       const msg = error?.response?.data?.detail || 'فشل إنشاء الحساب. حاول مجدداً.'
@@ -73,6 +75,45 @@ export default function RegisterPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function resend() {
+    if (!sentTo || resending) return
+    setResending(true)
+    try {
+      await authApi.resendVerification(sentTo)
+      toast.success('أرسلنا رابط تفعيل جديد إلى بريدك')
+    } catch { toast.error('تعذّر الإرسال') } finally { setResending(false) }
+  }
+
+  // After signup: instruct the user to confirm their email (no login until verified).
+  if (sentTo) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 pointer-events-none" />
+        <div className="relative w-full max-w-md">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl text-center">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gold-primary/15 mb-4">
+              <MailCheck size={26} className="text-gold-primary" />
+            </div>
+            <h2 className="text-xl font-bold text-white font-cairo mb-2">فعّل بريدك الإلكتروني</h2>
+            <p className="text-sm text-gray-400 font-cairo leading-relaxed">
+              {emailSent
+                ? <>أرسلنا رابط تفعيل إلى <span className="text-gold-primary" dir="ltr">{sentTo}</span>. افتحه لتفعيل حسابك ثم سجّل الدخول.</>
+                : <>تم إنشاء حسابك، لكن تعذّر إرسال بريد التفعيل. اضغط «إعادة الإرسال» أو تواصل معنا.</>}
+            </p>
+            <p className="text-xs text-gray-600 font-cairo mt-2">لم يصلك البريد؟ تحقّق من مجلد الرسائل غير المرغوبة (Spam).</p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button onClick={resend} disabled={resending}
+                className="w-full py-2.5 rounded-lg bg-gold-primary text-gray-950 font-semibold text-sm disabled:opacity-50 font-cairo">
+                {resending ? 'جارٍ الإرسال...' : 'إعادة إرسال رابط التفعيل'}
+              </button>
+              <Link href="/login" className="text-sm text-gray-400 hover:text-white font-cairo">الذهاب لتسجيل الدخول</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
