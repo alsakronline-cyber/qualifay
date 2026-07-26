@@ -240,6 +240,10 @@ export const scrapeApi = {
 
   cancel: (id: string) => API.post(`/v1/scrape/jobs/${id}/cancel`),
 
+  // Autonomous Growth plan
+  getGrowth: () => API.get('/v1/scrape/growth'),
+  setupGrowth: (body: { sources: string[]; hour_cairo?: number }) => API.post('/v1/scrape/growth', body),
+
   // Daily automatic search schedules
   createSchedule: (body: {
     source: string
