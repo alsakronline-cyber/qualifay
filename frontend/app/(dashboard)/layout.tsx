@@ -34,6 +34,7 @@ import {
   Building2,
   UsersRound,
   ScrollText,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -75,6 +76,7 @@ const navItems: NavItem[] = [
   { href: '/admin/accounts', label: 'الحسابات', labelEn: 'Accounts', icon: UsersRound, platformOnly: true },
   { href: '/admin/system', label: 'صحة النظام', labelEn: 'System', icon: Activity, platformOnly: true },
   { href: '/admin/audit', label: 'سجل الإجراءات', labelEn: 'Audit', icon: ScrollText, platformOnly: true },
+  { href: '/admin/config', label: 'حدود الخطط', labelEn: 'Plan limits', icon: SlidersHorizontal, platformOnly: true },
 ]
 
 function useAuth() {

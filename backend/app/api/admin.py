@@ -127,6 +127,58 @@ async def update_tenant(tid: str, body: TenantUpdate, current=Depends(require_pl
     return _tenant_dict(t)
 
 
+# Ordered cascade for a full tenant wipe. Children before parents (from the live FK
+# graph). lead_pool is SHARED across tenants, so we null this tenant's contribution
+# rather than delete pool rows other tenants may reference.
+_TENANT_WIPE = [
+    "UPDATE lead_pool SET contributed_by = NULL WHERE contributed_by = :tid",
+    "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE tenant_id = :tid)",
+    "DELETE FROM flow_submissions WHERE tenant_id = :tid",
+    "DELETE FROM sequence_steps WHERE sequence_id IN (SELECT id FROM sequences WHERE tenant_id = :tid)",
+    "DELETE FROM sequence_enrollments WHERE tenant_id = :tid",
+    "DELETE FROM ab_variants WHERE test_id IN (SELECT id FROM ab_tests WHERE tenant_id = :tid)",
+    "DELETE FROM consent_logs WHERE tenant_id = :tid",
+    "DELETE FROM conversations WHERE tenant_id = :tid",
+    "DELETE FROM campaigns WHERE tenant_id = :tid",
+    "DELETE FROM sequences WHERE tenant_id = :tid",
+    "DELETE FROM conversion_flows WHERE tenant_id = :tid",
+    "DELETE FROM message_templates WHERE tenant_id = :tid",
+    "DELETE FROM leads WHERE tenant_id = :tid",
+    "DELETE FROM wa_instances WHERE tenant_id = :tid",
+    "DELETE FROM ab_tests WHERE tenant_id = :tid",
+    "DELETE FROM agent_runs WHERE tenant_id = :tid",
+    "DELETE FROM agent_tasks WHERE tenant_id = :tid",
+    "DELETE FROM email_accounts WHERE tenant_id = :tid",
+    "DELETE FROM notifications WHERE tenant_id = :tid",
+    "DELETE FROM scrape_jobs WHERE tenant_id = :tid",
+    "DELETE FROM scrape_schedules WHERE tenant_id = :tid",
+    "DELETE FROM subscriptions WHERE tenant_id = :tid",
+    "DELETE FROM tenant_memories WHERE tenant_id = :tid",
+    "DELETE FROM webhook_endpoints WHERE tenant_id = :tid",
+    "DELETE FROM activity_logs WHERE tenant_id = :tid",
+    "DELETE FROM users WHERE tenant_id = :tid",
+    "DELETE FROM tenants WHERE id = :tid",
+]
+
+
+@router.delete("/tenants/{tid}")
+async def delete_tenant(tid: str, current=Depends(require_platform_admin), db: AsyncSession = Depends(get_db)):
+    """HARD-delete a company and ALL its data (irreversible). Ordered FK-safe cascade.
+    Guarded: you can't delete your own tenant (self-lockout)."""
+    from sqlalchemy import text
+    if tid == current["tenant_id"]:
+        raise HTTPException(status_code=400, detail="You can't delete your own company")
+    t = await _get_tenant(tid, db)
+    name = t.name
+    # Audit BEFORE the wipe (the tenant row is about to vanish).
+    await log_admin(db, current, "tenant.delete", "tenant", tid, name)
+    for stmt in _TENANT_WIPE:
+        await db.execute(text(stmt), {"tid": tid})
+    await db.commit()
+    logger.warning("platform admin %s hard-deleted tenant %s (%s)", current.get("email"), tid, name)
+    return {"deleted": True, "company": name}
+
+
 # ─── Users (accounts, all tenants) ────────────────────────────
 def _user_dict(u, tenant_name="") -> dict:
     return {
@@ -328,6 +380,32 @@ async def plan_breakdown(db: AsyncSession = Depends(get_db)):
     breakdown = {(p.value if p else "unknown"): n for p, n in rows}
     paying = sum(n for p, n in breakdown.items() if p not in ("trial", "unknown"))
     return {"by_plan": breakdown, "paying_tenants": paying, "trial_tenants": breakdown.get("trial", 0)}
+
+
+# ─── Editable plan limits + feature flags ─────────────────────
+@router.get("/config")
+async def get_config(db: AsyncSession = Depends(get_db)):
+    from app.services.platform_config import get_platform_config, DEFAULT_CONFIG
+    return {"config": await get_platform_config(db), "defaults": DEFAULT_CONFIG}
+
+
+class ConfigBody(BaseModel):
+    data: dict
+
+
+@router.put("/config")
+async def put_config(body: ConfigBody, current=Depends(require_platform_admin), db: AsyncSession = Depends(get_db)):
+    from app.models.models import PlatformSettings
+    row = (await db.execute(select(PlatformSettings).where(PlatformSettings.id == "singleton"))).scalar_one_or_none()
+    if not row:
+        row = PlatformSettings(id="singleton", data=body.data or {})
+        db.add(row)
+    else:
+        row.data = body.data or {}
+    await log_admin(db, current, "config.update", "config", "singleton", None, body.data)
+    await db.commit()
+    from app.services.platform_config import get_platform_config
+    return {"config": await get_platform_config(db)}
 
 
 # ─── Audit log (Phase 3) ──────────────────────────────────────

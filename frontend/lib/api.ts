@@ -372,6 +372,7 @@ export const adminApi = {
   tenants: () => API.get('/v1/admin/tenants'),
   updateTenant: (id: string, body: { plan?: string; status?: string; extend_trial_days?: number; autonomy?: string }) =>
     API.patch(`/v1/admin/tenants/${id}`, body),
+  deleteTenant: (id: string) => API.delete(`/v1/admin/tenants/${id}`),
   users: (search?: string) => API.get('/v1/admin/users', { params: search ? { search } : {} }),
   updateUser: (id: string, body: { status?: string; is_tenant_admin?: boolean; is_admin?: boolean }) =>
     API.patch(`/v1/admin/users/${id}`, body),
@@ -382,6 +383,8 @@ export const adminApi = {
   plans: () => API.get('/v1/admin/plans'),
   audit: () => API.get('/v1/admin/audit'),
   impersonate: (tenantId: string) => API.post(`/v1/admin/tenants/${tenantId}/impersonate`),
+  config: () => API.get('/v1/admin/config'),
+  saveConfig: (data: Record<string, unknown>) => API.put('/v1/admin/config', { data }),
 }
 
 // ── Team ──────────────────────────────────────────────────────────────────────

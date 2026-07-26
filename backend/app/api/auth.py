@@ -391,6 +391,11 @@ async def register_tenant(
     Register a new tenant with an admin user.
     Creates: Tenant, User (tenant_admin), Subscription (trial 30 days).
     """
+    # Feature flag: the owner can close new company signups platform-wide.
+    from app.services.platform_config import feature_enabled
+    if not await feature_enabled(db, "allow_signups"):
+        raise HTTPException(status_code=403, detail="التسجيل مغلق حالياً. تواصل معنا.")
+
     # Check email uniqueness
     email_result = await db.execute(select(User).where(User.email == body.email))
     if email_result.scalar_one_or_none():
