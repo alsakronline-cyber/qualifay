@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   Building2,
   UsersRound,
+  ScrollText,
 } from 'lucide-react'
 import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -73,6 +74,7 @@ const navItems: NavItem[] = [
   { href: '/admin/companies', label: 'الشركات', labelEn: 'Companies', icon: Building2, platformOnly: true },
   { href: '/admin/accounts', label: 'الحسابات', labelEn: 'Accounts', icon: UsersRound, platformOnly: true },
   { href: '/admin/system', label: 'صحة النظام', labelEn: 'System', icon: Activity, platformOnly: true },
+  { href: '/admin/audit', label: 'سجل الإجراءات', labelEn: 'Audit', icon: ScrollText, platformOnly: true },
 ]
 
 function useAuth() {
@@ -96,6 +98,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [pendingCount, setPendingCount] = useState(0)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+  const [impersonating, setImpersonating] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') setImpersonating(localStorage.getItem('imp_company'))
+  }, [pathname])
+
+  function exitImpersonation() {
+    const owner = localStorage.getItem('owner_token')
+    if (owner) localStorage.setItem('auth_token', owner)
+    localStorage.removeItem('owner_token')
+    localStorage.removeItem('imp_company')
+    window.location.href = '/admin/companies'   // full reload → re-fetch as owner
+  }
 
   // Onboarding redirect: send to the wizard only if onboarding truly isn't done.
   // The local flag is a fast path; when it's missing (e.g. the user cleared browser
@@ -369,6 +384,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
           </div>
         </header>
+
+        {/* Impersonation banner — visible while the owner is "viewing as" a company. */}
+        {impersonating && (
+          <div className="bg-gold-primary text-gray-950 px-4 py-2 flex items-center justify-center gap-3 text-sm font-cairo shrink-0">
+            <span>أنت تتصفّح كـ <b>{impersonating}</b> (وضع المالك)</span>
+            <button onClick={exitImpersonation} className="underline font-semibold">العودة لحساب المالك ←</button>
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">

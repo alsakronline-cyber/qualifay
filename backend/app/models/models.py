@@ -747,3 +747,21 @@ class TenantMemory(Base):
     source_lead_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+# ─── Platform admin audit trail ───────────────────────────────
+
+class AdminAudit(Base):
+    """Every action the platform owner takes in the admin console — who did what, to whom,
+    when. An accountability record for the one place that can touch all tenants."""
+    __tablename__ = "admin_audit"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    actor_user_id = Column(String, nullable=True)
+    actor_email = Column(String, nullable=True)
+    action = Column(String, nullable=False)        # e.g. tenant.suspend, user.delete, impersonate
+    target_type = Column(String, nullable=True)    # tenant | user
+    target_id = Column(String, nullable=True)
+    target_label = Column(String, nullable=True)   # human name/email for readability
+    detail = Column(JSON, nullable=True)           # the change payload
+    created_at = Column(DateTime, default=func.now(), index=True)

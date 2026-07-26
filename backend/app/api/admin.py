@@ -18,6 +18,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_platform_admin)])
 
 
+async def log_admin(db, actor, action, target_type=None, target_id=None, target_label=None, detail=None):
+    """Record an owner action to the audit trail. Caller commits."""
+    from app.models.models import AdminAudit
+    db.add(AdminAudit(
+        actor_user_id=actor.get("user_id"), actor_email=actor.get("email"),
+        action=action, target_type=target_type, target_id=target_id,
+        target_label=target_label, detail=detail or {},
+    ))
+
+
 # ─── Overview ─────────────────────────────────────────────────
 @router.get("/overview")
 async def overview(db: AsyncSession = Depends(get_db)):
@@ -94,7 +104,7 @@ async def _get_tenant(tid, db):
 
 
 @router.patch("/tenants/{tid}")
-async def update_tenant(tid: str, body: TenantUpdate, db: AsyncSession = Depends(get_db)):
+async def update_tenant(tid: str, body: TenantUpdate, current=Depends(require_platform_admin), db: AsyncSession = Depends(get_db)):
     from app.models.models import Plan
     t = await _get_tenant(tid, db)
     if body.plan is not None:
@@ -111,6 +121,8 @@ async def update_tenant(tid: str, body: TenantUpdate, db: AsyncSession = Depends
     if body.extend_trial_days is not None:
         base = t.trial_ends_at if (t.trial_ends_at and t.trial_ends_at > datetime.utcnow()) else datetime.utcnow()
         t.trial_ends_at = base + timedelta(days=int(body.extend_trial_days))
+    await log_admin(db, current, "tenant.update", "tenant", t.id, t.name,
+                    body.model_dump(exclude_none=True))
     await db.commit()
     return _tenant_dict(t)
 
@@ -188,18 +200,20 @@ async def update_user(uid: str, body: UserUpdate, current=Depends(require_platfo
         if u.id == current["user_id"] and body.is_admin is False:
             raise HTTPException(status_code=400, detail="You can't revoke your own platform admin")
         u.is_admin = body.is_admin
+    await log_admin(db, current, "user.update", "user", u.id, u.email, body.model_dump(exclude_none=True))
     await db.commit()
     return _user_dict(u)
 
 
 @router.post("/users/{uid}/set-password")
-async def set_user_password(uid: str, body: PasswordBody, db: AsyncSession = Depends(get_db)):
+async def set_user_password(uid: str, body: PasswordBody, current=Depends(require_platform_admin), db: AsyncSession = Depends(get_db)):
     u = await _get_user(uid, db)
     if len(body.password or "") < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     u.hashed_password = pwd_context.hash(body.password)
     if getattr(u, "status", "active") == "unverified":
         u.status = "active"   # setting a password for them also activates
+    await log_admin(db, current, "user.set_password", "user", u.id, u.email)
     await db.commit()
     return {"ok": True}
 
@@ -215,6 +229,7 @@ async def delete_user(uid: str, current=Depends(require_platform_admin), db: Asy
     # Clear the two FK references before deleting the row.
     await db.execute(update(Lead).where(Lead.assigned_to == uid).values(assigned_to=None))
     await db.execute(delete(Notification).where(Notification.user_id == uid))
+    await log_admin(db, current, "user.delete", "user", u.id, u.email)
     await db.delete(u)
     await db.commit()
     return {"deleted": True}
@@ -313,3 +328,39 @@ async def plan_breakdown(db: AsyncSession = Depends(get_db)):
     breakdown = {(p.value if p else "unknown"): n for p, n in rows}
     paying = sum(n for p, n in breakdown.items() if p not in ("trial", "unknown"))
     return {"by_plan": breakdown, "paying_tenants": paying, "trial_tenants": breakdown.get("trial", 0)}
+
+
+# ─── Audit log (Phase 3) ──────────────────────────────────────
+@router.get("/audit")
+async def audit_log(limit: int = Query(default=100, le=500), db: AsyncSession = Depends(get_db)):
+    from app.models.models import AdminAudit
+    rows = (await db.execute(
+        select(AdminAudit).order_by(AdminAudit.created_at.desc()).limit(limit))).scalars().all()
+    return [{
+        "id": a.id, "actor_email": a.actor_email, "action": a.action,
+        "target_type": a.target_type, "target_label": a.target_label,
+        "detail": a.detail, "created_at": a.created_at.isoformat() if a.created_at else None,
+    } for a in rows]
+
+
+# ─── Impersonation (Phase 3) ──────────────────────────────────
+@router.post("/tenants/{tid}/impersonate")
+async def impersonate_tenant(tid: str, current=Depends(require_platform_admin), db: AsyncSession = Depends(get_db)):
+    """Issue a short-lived (60-min) session as a tenant's admin, for support. The token
+    carries an 'imp_by' marker; the owner keeps their own token to return."""
+    from app.models.models import User
+    from app.api.auth import create_access_token
+    t = await _get_tenant(tid, db)
+    target = (await db.execute(select(User).where(and_(
+        User.tenant_id == tid, User.is_tenant_admin == True, User.status == "active"  # noqa: E712
+    )).order_by(User.created_at))).scalars().first()
+    if not target:
+        raise HTTPException(status_code=400, detail="No active admin on this company to impersonate")
+    token = create_access_token({
+        "sub": target.id, "email": target.email, "tenant_id": target.tenant_id,
+        "is_admin": False,   # act strictly as the tenant admin, not as platform owner
+        "is_tenant_admin": target.is_tenant_admin, "imp_by": current["user_id"],
+    }, expires_minutes=60)
+    await log_admin(db, current, "impersonate", "tenant", t.id, t.name, {"as_user": target.email})
+    await db.commit()
+    return {"access_token": token, "company": t.name, "as_email": target.email}
