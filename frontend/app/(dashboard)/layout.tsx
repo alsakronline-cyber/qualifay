@@ -30,6 +30,9 @@ import {
   Activity,
   FlaskConical,
   Sparkles,
+  ShieldCheck,
+  Building2,
+  UsersRound,
 } from 'lucide-react'
 import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -41,7 +44,8 @@ interface NavItem {
   label: string
   labelEn: string
   icon: React.ComponentType<{ size?: number; className?: string }>
-  adminOnly?: boolean   // hidden from non-admin (agent) members; also route-guarded
+  adminOnly?: boolean      // hidden from non-admin (agent) members; also route-guarded
+  platformOnly?: boolean   // platform owner (is_admin) only — the cross-tenant console
 }
 
 const navItems: NavItem[] = [
@@ -64,6 +68,10 @@ const navItems: NavItem[] = [
   { href: '/monitoring', label: 'المراقبة', labelEn: 'Monitoring', icon: Activity, adminOnly: true },
   { href: '/settings', label: 'الإعدادات', labelEn: 'Settings', icon: Settings, adminOnly: true },
   { href: '/billing', label: 'الفوترة', labelEn: 'Billing', icon: CreditCard, adminOnly: true },
+  // Platform owner console (is_admin) — cross-tenant.
+  { href: '/admin', label: 'لوحة المالك', labelEn: 'Platform', icon: ShieldCheck, platformOnly: true },
+  { href: '/admin/companies', label: 'الشركات', labelEn: 'Companies', icon: Building2, platformOnly: true },
+  { href: '/admin/accounts', label: 'الحسابات', labelEn: 'Accounts', icon: UsersRound, platformOnly: true },
 ]
 
 function useAuth() {
@@ -167,17 +175,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return pathname.startsWith(href)
   }
 
-  // Role-based access: agents (non-admin) only see operational pages. Config/billing/
-  // team/etc. are admin-only. Backend also enforces this — the UI just avoids dead ends.
+  // Role-based access: agents (non-admin) only see operational pages; config/billing/team
+  // are tenant-admin-only; the owner console is platform-admin (is_admin) only. Backend
+  // enforces all of this too — the UI just avoids dead ends.
   const isAdmin = !!user?.is_tenant_admin
-  const visibleNav = navItems.filter((i) => isAdmin || !i.adminOnly)
+  const isPlatform = !!user?.is_admin
+  const visibleNav = navItems.filter((i) =>
+    (i.platformOnly ? isPlatform : true) && (i.adminOnly ? isAdmin : true))
 
-  // Guard: if a non-admin navigates directly to an admin-only route, bounce to home.
+  // Guard: bounce anyone who directly hits a route their role can't access.
   useEffect(() => {
-    if (!user || isAdmin) return
+    if (!user) return
+    // Platform console: platform admins only.
+    if (pathname.startsWith('/admin') && !isPlatform) { router.replace('/'); return }
+    if (isAdmin) return
     const hit = navItems.find((i) => i.adminOnly && i.href !== '/' && pathname.startsWith(i.href))
     if (hit) router.replace('/')
-  }, [user, isAdmin, pathname, router])
+  }, [user, isAdmin, isPlatform, pathname, router])
 
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden">

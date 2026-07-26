@@ -116,6 +116,8 @@ class Tenant(Base):
     # How much the system runs on its own: full (autopilot) | copilot (approve+send) | manual.
     autonomy = Column(String, default="copilot")
     onboarding_done = Column(Boolean, default=False)
+    # Platform-level state: 'active' | 'suspended'. A suspended company's users can't log in.
+    status = Column(String, default="active", nullable=False, server_default="active")
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
