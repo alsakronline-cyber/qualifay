@@ -83,6 +83,18 @@ async def create_instance(
 ):
     """Create a new WA instance in Evolution API and save to DB."""
     require_admin(current_user)   # connecting a WhatsApp number is admin-only
+    # Enforce the plan's WhatsApp-instance limit (0 = unlimited).
+    from app.services.platform_config import get_plan_limit
+    from app.models.models import Tenant
+    from sqlalchemy import func as _func
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == current_user["tenant_id"]))).scalar_one_or_none()
+    limit = await get_plan_limit(db, tenant.plan.value if tenant and tenant.plan else "trial", "wa_instances")
+    if limit > 0:
+        count = (await db.execute(select(_func.count(WaInstance.id)).where(
+            WaInstance.tenant_id == current_user["tenant_id"]))).scalar() or 0
+        if count >= limit:
+            raise HTTPException(status_code=403,
+                                detail=f"خطتك تسمح بـ {limit} جهاز واتساب. رقِّ خطتك لإضافة المزيد.")
     # Check if name already taken
     existing = await db.execute(
         select(WaInstance).where(WaInstance.instance_name == req.instance_name)

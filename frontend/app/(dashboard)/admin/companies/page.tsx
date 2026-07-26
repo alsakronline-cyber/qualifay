@@ -4,7 +4,7 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Building2, Ban, Play, CalendarPlus, Users, UserRound, LogIn } from 'lucide-react'
+import { Building2, Ban, Play, CalendarPlus, Users, UserRound, LogIn, Trash2 } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 
 interface Tenant {
@@ -30,6 +30,15 @@ export default function AdminCompaniesPage() {
     setBusy(id)
     try { await adminApi.updateTenant(id, body); toast.success(ok); await mutate() }
     catch (e: unknown) { toast.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'فشل') }
+    finally { setBusy(null) }
+  }
+
+  async function hardDelete(t: Tenant) {
+    const typed = prompt(`حذف نهائي لـ «${t.name}» وكل بياناتها — لا يمكن التراجع.\nاكتب اسم الشركة للتأكيد:`)
+    if (typed !== t.name) { if (typed !== null) toast.error('الاسم غير مطابق — أُلغي الحذف'); return }
+    setBusy(t.id)
+    try { await adminApi.deleteTenant(t.id); toast.success('تم حذف الشركة نهائياً'); await mutate() }
+    catch (e: unknown) { toast.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'فشل الحذف') }
     finally { setBusy(null) }
   }
 
@@ -94,6 +103,10 @@ export default function AdminCompaniesPage() {
                     <button onClick={() => impersonate(t)} disabled={busy === t.id} title="الدخول كهذه الشركة"
                       className="flex items-center gap-1 text-xs bg-gray-800 border border-gray-700 hover:border-gold-primary/40 text-gray-300 rounded-lg px-2.5 py-1.5 font-cairo">
                       <LogIn size={13} /> دخول
+                    </button>
+                    <button onClick={() => hardDelete(t)} disabled={busy === t.id} title="حذف نهائي"
+                      className="flex items-center gap-1 text-xs bg-gray-800 border border-gray-700 hover:border-red-500/40 text-gray-400 hover:text-red-400 rounded-lg px-2 py-1.5">
+                      <Trash2 size={13} />
                     </button>
                     {suspended ? (
                       <button onClick={() => act(t.id, { status: 'active' }, 'تم تفعيل الشركة')} disabled={busy === t.id}

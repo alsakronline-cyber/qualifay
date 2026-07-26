@@ -765,3 +765,13 @@ class AdminAudit(Base):
     target_label = Column(String, nullable=True)   # human name/email for readability
     detail = Column(JSON, nullable=True)           # the change payload
     created_at = Column(DateTime, default=func.now(), index=True)
+
+
+class PlatformSettings(Base):
+    """Single-row (id='singleton') editable platform config: per-plan limits + feature
+    flags. See app.services.platform_config for defaults + accessors."""
+    __tablename__ = "platform_settings"
+
+    id = Column(String, primary_key=True, default="singleton")
+    data = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
