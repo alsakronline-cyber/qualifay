@@ -15,7 +15,10 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.models import User, Tenant, Subscription, Plan
 
+import logging
+
 router = APIRouter()
+logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -73,6 +76,40 @@ def _decode_invite_token(token: str) -> dict:
     if payload.get("type") != "invite":
         raise JWTError("not an invite token")
     return payload
+
+
+def create_verify_token(user_id: str, tenant_id: str, hours: int = 48) -> str:
+    """Signed email-verification token for a new signup (48h)."""
+    expire = datetime.utcnow() + timedelta(hours=hours)
+    return jwt.encode(
+        {"sub": user_id, "tenant_id": tenant_id, "type": "verify", "exp": expire},
+        settings.SECRET_KEY, algorithm=ALGORITHM,
+    )
+
+
+def _decode_verify_token(token: str) -> dict:
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    if payload.get("type") != "verify":
+        raise JWTError("not a verify token")
+    return payload
+
+
+async def _send_verification(db, user, base_url: str) -> bool:
+    """Email the signup verification link. Best-effort — returns whether it sent."""
+    token = create_verify_token(user.id, user.tenant_id)
+    url = f"{base_url}/verify-email?token={token}"
+    body = (
+        f"مرحباً {user.full_name or ''}،\n\n"
+        f"لتفعيل حسابك على Qualifay، اضغط الرابط التالي (صالح 48 ساعة):\n{url}\n\n"
+        f"إن لم تكن قد سجّلت، تجاهل هذه الرسالة."
+    )
+    try:
+        from app.services.email_service import send_system
+        await send_system(db, user.email, "فعّل حسابك على Qualifay", body)
+        return True
+    except Exception as e:
+        logger.warning("verification email to %s failed: %s", user.email, e)
+        return False
 
 
 async def get_current_user(
@@ -189,8 +226,14 @@ async def login(
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # An invited teammate hasn't accepted yet (no real password) — block login clearly.
-    if getattr(user, "status", "active") != "active":
+    # Block accounts that aren't active yet, with the right next step.
+    st = getattr(user, "status", "active")
+    if st == "unverified":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="لم يتم تفعيل بريدك بعد — افتح رابط التفعيل من بريدك، أو اطلب إعادة الإرسال.",
+        )
+    if st != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="لم يتم تفعيل الحساب بعد — افتح رابط الدعوة من بريدك لتعيين كلمة المرور.",
@@ -220,6 +263,51 @@ async def login(
             "language": user.language,
         },
     }
+
+
+class TokenBody(BaseModel):
+    token: str
+
+
+class EmailBody(BaseModel):
+    email: EmailStr
+
+
+@router.post("/verify-email")
+async def verify_email(body: TokenBody, db: AsyncSession = Depends(get_db)):
+    """Confirm a new signup's email → activate the account and log them in."""
+    try:
+        payload = _decode_verify_token(body.token)
+    except JWTError:
+        raise HTTPException(status_code=400, detail="رابط التفعيل غير صالح أو منتهي")
+    user = (await db.execute(select(User).where(User.id == payload.get("sub")))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="رابط التفعيل غير صالح")
+    if getattr(user, "status", "active") == "unverified":
+        user.status = "active"
+        await db.commit()
+        await db.refresh(user)
+    # Idempotent: if already active, still issue a session.
+    token_data = {"sub": user.id, "email": user.email, "tenant_id": user.tenant_id,
+                  "is_admin": user.is_admin, "is_tenant_admin": user.is_tenant_admin}
+    return {
+        "access_token": create_access_token(token_data),
+        "refresh_token": create_refresh_token({"sub": user.id, "tenant_id": user.tenant_id}),
+        "token_type": "bearer",
+        "user": {"id": user.id, "email": user.email, "full_name": user.full_name,
+                 "tenant_id": user.tenant_id, "is_tenant_admin": user.is_tenant_admin},
+    }
+
+
+@router.post("/resend-verification")
+async def resend_verification(body: EmailBody, db: AsyncSession = Depends(get_db)):
+    """Resend the signup verification email. Always returns success (no account enumeration)."""
+    user = (await db.execute(
+        select(User).where(User.email == str(body.email).strip().lower())
+    )).scalar_one_or_none()
+    if user and getattr(user, "status", "active") == "unverified":
+        await _send_verification(db, user, settings.app_base_url_effective)
+    return {"ok": True, "message": "إن كان الحساب بحاجة لتفعيل، أرسلنا رابطاً جديداً إلى بريدك."}
 
 
 @router.get("/invite/{token}")
@@ -331,6 +419,7 @@ async def register_tenant(
         is_admin=False,
         is_tenant_admin=True,
         language=body.language,
+        status="unverified",   # must confirm email before first login
     )
     db.add(user)
 
@@ -345,32 +434,15 @@ async def register_tenant(
     await db.commit()
     await db.refresh(user)
 
-    token_data = {
-        "sub": user.id,
-        "email": user.email,
-        "tenant_id": tenant.id,
-        "is_admin": False,
-        "is_tenant_admin": True,
-    }
+    # Email the verification link (no auto-login until confirmed).
+    sent = await _send_verification(db, user, settings.app_base_url_effective)
 
     return {
-        "message": "Tenant registered successfully",
-        "access_token": create_access_token(token_data),
-        "refresh_token": create_refresh_token({"sub": user.id, "tenant_id": tenant.id}),
-        "token_type": "bearer",
-        "tenant": {
-            "id": tenant.id,
-            "slug": tenant.slug,
-            "name": tenant.name,
-            "plan": tenant.plan.value,
-            "trial_ends_at": trial_end.isoformat(),
-        },
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "phone": user.phone,
-            "full_name": user.full_name,
-        },
+        "verification_required": True,
+        "email_sent": sent,
+        "email": user.email,
+        "message": "تحقّق من بريدك لتفعيل الحساب" if sent
+                   else "تم إنشاء الحساب، لكن تعذّر إرسال بريد التفعيل — استخدم «إعادة الإرسال».",
     }
 
 

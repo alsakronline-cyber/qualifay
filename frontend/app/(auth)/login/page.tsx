@@ -13,6 +13,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [needsVerify, setNeedsVerify] = useState(false)
+  const [resending, setResending] = useState(false)
+
+  async function resendVerification() {
+    if (resending || !email) return
+    setResending(true)
+    try { await authApi.resendVerification(email); toast.success('أرسلنا رابط تفعيل جديد إلى بريدك') }
+    catch { toast.error('تعذّر الإرسال') } finally { setResending(false) }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -21,18 +30,21 @@ export default function LoginPage() {
       return
     }
     setLoading(true)
+    setNeedsVerify(false)
     try {
       const res = await authApi.login(email, password)
       const { access_token } = res.data
       localStorage.setItem('auth_token', access_token)
       toast.success('تم تسجيل الدخول بنجاح')
-      router.push('/leads')
+      router.push('/')
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } } }
-      const msg =
-        error?.response?.data?.message ||
-        'فشل تسجيل الدخول. تحقق من بياناتك وحاول مجدداً.'
-      toast.error(msg)
+      const error = err as { response?: { status?: number; data?: { detail?: string; message?: string } } }
+      const detail = error?.response?.data?.detail || error?.response?.data?.message
+      // 403 + verify wording → offer to resend the activation link.
+      if (error?.response?.status === 403 && (detail || '').includes('تفعيل بريد')) {
+        setNeedsVerify(true)
+      }
+      toast.error(detail || 'فشل تسجيل الدخول. تحقق من بياناتك وحاول مجدداً.')
     } finally {
       setLoading(false)
     }
@@ -127,6 +139,16 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {needsVerify && (
+            <div className="mt-4 bg-gold-primary/10 border border-gold-primary/30 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-300 font-cairo mb-2">حسابك بحاجة لتفعيل البريد أولاً.</p>
+              <button onClick={resendVerification} disabled={resending}
+                className="text-sm font-semibold text-gold-primary hover:text-gold-dark disabled:opacity-50 font-cairo">
+                {resending ? 'جارٍ الإرسال...' : 'إعادة إرسال رابط التفعيل'}
+              </button>
+            </div>
+          )}
 
           <p className="text-center text-sm text-gray-400 mt-6 font-cairo">
             ليس لديك حساب؟{' '}
