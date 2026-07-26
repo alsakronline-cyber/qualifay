@@ -1,6 +1,6 @@
 """Scrape API — start, list, inspect, pause, cancel scrape jobs"""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
