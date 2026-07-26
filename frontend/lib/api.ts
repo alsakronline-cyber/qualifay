@@ -380,6 +380,8 @@ export const adminApi = {
   system: () => API.get('/v1/admin/system'),
   instances: () => API.get('/v1/admin/instances'),
   plans: () => API.get('/v1/admin/plans'),
+  audit: () => API.get('/v1/admin/audit'),
+  impersonate: (tenantId: string) => API.post(`/v1/admin/tenants/${tenantId}/impersonate`),
 }
 
 // ── Team ──────────────────────────────────────────────────────────────────────

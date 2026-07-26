@@ -4,7 +4,7 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Building2, Ban, Play, CalendarPlus, Users, UserRound } from 'lucide-react'
+import { Building2, Ban, Play, CalendarPlus, Users, UserRound, LogIn } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 
 interface Tenant {
@@ -31,6 +31,21 @@ export default function AdminCompaniesPage() {
     try { await adminApi.updateTenant(id, body); toast.success(ok); await mutate() }
     catch (e: unknown) { toast.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'فشل') }
     finally { setBusy(null) }
+  }
+
+  async function impersonate(t: Tenant) {
+    if (!confirm(`الدخول كـ «${t.name}»؟ ستتصفّح كمدير هذه الشركة.`)) return
+    setBusy(t.id)
+    try {
+      const r = await adminApi.impersonate(t.id)
+      localStorage.setItem('owner_token', localStorage.getItem('auth_token') || '')
+      localStorage.setItem('auth_token', r.data.access_token)
+      localStorage.setItem('imp_company', r.data.company)
+      window.location.href = '/'   // full reload → app runs as the tenant admin
+    } catch (e: unknown) {
+      toast.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'تعذّر الدخول')
+      setBusy(null)
+    }
   }
 
   return (
@@ -75,6 +90,10 @@ export default function AdminCompaniesPage() {
                     <button onClick={() => act(t.id, { extend_trial_days: 30 }, 'تم تمديد التجربة 30 يوم')} disabled={busy === t.id}
                       className="flex items-center gap-1 text-xs bg-gray-800 border border-gray-700 hover:border-gold-primary/40 text-gray-300 rounded-lg px-2.5 py-1.5 font-cairo">
                       <CalendarPlus size={13} /> +٣٠ يوم
+                    </button>
+                    <button onClick={() => impersonate(t)} disabled={busy === t.id} title="الدخول كهذه الشركة"
+                      className="flex items-center gap-1 text-xs bg-gray-800 border border-gray-700 hover:border-gold-primary/40 text-gray-300 rounded-lg px-2.5 py-1.5 font-cairo">
+                      <LogIn size={13} /> دخول
                     </button>
                     {suspended ? (
                       <button onClick={() => act(t.id, { status: 'active' }, 'تم تفعيل الشركة')} disabled={busy === t.id}
