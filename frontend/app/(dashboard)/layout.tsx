@@ -72,6 +72,7 @@ const navItems: NavItem[] = [
   { href: '/admin', label: 'لوحة المالك', labelEn: 'Platform', icon: ShieldCheck, platformOnly: true },
   { href: '/admin/companies', label: 'الشركات', labelEn: 'Companies', icon: Building2, platformOnly: true },
   { href: '/admin/accounts', label: 'الحسابات', labelEn: 'Accounts', icon: UsersRound, platformOnly: true },
+  { href: '/admin/system', label: 'صحة النظام', labelEn: 'System', icon: Activity, platformOnly: true },
 ]
 
 function useAuth() {

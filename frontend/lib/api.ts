@@ -377,6 +377,9 @@ export const adminApi = {
     API.patch(`/v1/admin/users/${id}`, body),
   setPassword: (id: string, password: string) => API.post(`/v1/admin/users/${id}/set-password`, { password }),
   deleteUser: (id: string) => API.delete(`/v1/admin/users/${id}`),
+  system: () => API.get('/v1/admin/system'),
+  instances: () => API.get('/v1/admin/instances'),
+  plans: () => API.get('/v1/admin/plans'),
 }
 
 // ── Team ──────────────────────────────────────────────────────────────────────
