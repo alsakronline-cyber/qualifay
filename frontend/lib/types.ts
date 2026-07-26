@@ -179,6 +179,7 @@ export interface AuthUser {
   tenant_id?: string
   tenant?: Tenant
   is_tenant_admin?: boolean
+  is_admin?: boolean          // platform owner
   role?: 'owner' | 'admin' | 'agent'
 }
 

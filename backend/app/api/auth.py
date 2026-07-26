@@ -185,6 +185,15 @@ async def require_admin_dep(current_user: dict = Depends(get_current_user)) -> d
     return current_user
 
 
+async def require_platform_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """PLATFORM owner gate (is_admin) — for the cross-tenant admin console. Much stronger
+    than tenant-admin: these endpoints deliberately bypass tenant scoping, so only the
+    system owner may reach them."""
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Platform admins only")
+    return current_user
+
+
 async def get_tenant_user(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -237,6 +246,13 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="لم يتم تفعيل الحساب بعد — افتح رابط الدعوة من بريدك لتعيين كلمة المرور.",
+        )
+    # Whole company suspended by the platform owner → no one on it can log in.
+    tnt = (await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))).scalar_one_or_none()
+    if tnt and getattr(tnt, "status", "active") == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="تم إيقاف حساب الشركة. يرجى التواصل مع الدعم.",
         )
 
     token_data = {

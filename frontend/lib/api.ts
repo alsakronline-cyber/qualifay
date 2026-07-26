@@ -366,6 +366,19 @@ export const flowsApi = {
     API.post('/v1/flows/submit', body),
 }
 
+// ── Platform admin (owner console, is_admin only) ──────────────────────────────
+export const adminApi = {
+  overview: () => API.get('/v1/admin/overview'),
+  tenants: () => API.get('/v1/admin/tenants'),
+  updateTenant: (id: string, body: { plan?: string; status?: string; extend_trial_days?: number; autonomy?: string }) =>
+    API.patch(`/v1/admin/tenants/${id}`, body),
+  users: (search?: string) => API.get('/v1/admin/users', { params: search ? { search } : {} }),
+  updateUser: (id: string, body: { status?: string; is_tenant_admin?: boolean; is_admin?: boolean }) =>
+    API.patch(`/v1/admin/users/${id}`, body),
+  setPassword: (id: string, password: string) => API.post(`/v1/admin/users/${id}/set-password`, { password }),
+  deleteUser: (id: string) => API.delete(`/v1/admin/users/${id}`),
+}
+
 // ── Team ──────────────────────────────────────────────────────────────────────
 export const teamApi = {
   list: () => API.get('/v1/team'),
