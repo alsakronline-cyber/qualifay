@@ -218,3 +218,98 @@ async def delete_user(uid: str, current=Depends(require_platform_admin), db: Asy
     await db.delete(u)
     await db.commit()
     return {"deleted": True}
+
+
+# ─── System health (Phase 2) ──────────────────────────────────
+@router.get("/system")
+async def system_health(db: AsyncSession = Depends(get_db)):
+    """Platform health snapshot: core dependencies + last backup + disk."""
+    from sqlalchemy import text
+    from app.core.config import settings
+    out: dict = {}
+
+    # Database — if we can run this, it's up.
+    try:
+        await db.execute(text("SELECT 1"))
+        out["database"] = "ok"
+    except Exception:
+        out["database"] = "error"
+
+    # Redis
+    try:
+        import redis.asyncio as aioredis
+        r = aioredis.from_url(settings.REDIS_URL)
+        await r.ping()
+        await r.aclose()
+        out["redis"] = "ok"
+    except Exception as e:
+        out["redis"] = f"down: {str(e)[:60]}"
+
+    # Evolution API (WhatsApp gateway)
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=6) as c:
+            resp = await c.get(f"{settings.EVOLUTION_API_URL}/")
+        out["evolution_api"] = "ok" if resp.status_code < 500 else f"http {resp.status_code}"
+    except Exception as e:
+        out["evolution_api"] = f"down: {str(e)[:60]}"
+
+    # Last backup (from the MinIO 'backups' bucket)
+    try:
+        from minio import Minio
+        ep = settings.MINIO_ENDPOINT.replace("http://", "").replace("https://", "")
+        client = Minio(ep, access_key=settings.MINIO_USER, secret_key=settings.MINIO_PASSWORD,
+                       secure=settings.MINIO_ENDPOINT.startswith("https"))
+        if client.bucket_exists("backups"):
+            objs = list(client.list_objects("backups"))
+            if objs:
+                latest = max(objs, key=lambda o: o.last_modified)
+                out["last_backup"] = {
+                    "file": latest.object_name,
+                    "at": latest.last_modified.isoformat() if latest.last_modified else None,
+                    "size_kb": round((latest.size or 0) / 1024, 1),
+                    "count": len(objs),
+                }
+            else:
+                out["last_backup"] = None
+        else:
+            out["last_backup"] = None
+    except Exception as e:
+        out["last_backup"] = {"error": str(e)[:60]}
+
+    # Disk
+    try:
+        import shutil
+        du = shutil.disk_usage("/")
+        out["disk"] = {"used_gb": round(du.used / 1e9, 1), "total_gb": round(du.total / 1e9, 1),
+                       "pct": round(du.used / du.total * 100)}
+    except Exception:
+        out["disk"] = None
+
+    return out
+
+
+# ─── Platform-wide WhatsApp instances (Phase 2) ───────────────
+@router.get("/instances")
+async def all_instances(db: AsyncSession = Depends(get_db)):
+    from app.models.models import WaInstance, Tenant
+    rows = (await db.execute(select(WaInstance).order_by(WaInstance.tenant_id))).scalars().all()
+    names = dict((await db.execute(select(Tenant.id, Tenant.name))).all())
+    return [{
+        "id": i.id, "instance_name": i.instance_name,
+        "company": names.get(i.tenant_id, ""),
+        "status": i.status, "day_of_life": i.day_of_life,
+        "daily_wa_cap": i.daily_wa_cap, "sent_today_wa": i.sent_today_wa,
+        "sent_today_email": i.sent_today_email,
+    } for i in rows]
+
+
+# ─── Plan / revenue snapshot (Phase 2) ────────────────────────
+@router.get("/plans")
+async def plan_breakdown(db: AsyncSession = Depends(get_db)):
+    from app.models.models import Tenant
+    rows = (await db.execute(
+        select(Tenant.plan, func.count(Tenant.id)).group_by(Tenant.plan))).all()
+    breakdown = {(p.value if p else "unknown"): n for p, n in rows}
+    paying = sum(n for p, n in breakdown.items() if p not in ("trial", "unknown"))
+    return {"by_plan": breakdown, "paying_tenants": paying, "trial_tenants": breakdown.get("trial", 0)}
