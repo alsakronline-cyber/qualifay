@@ -425,3 +425,120 @@ async def delete_schedule(
     await db.delete(sched)
     await db.commit()
     return {"deleted": True}
+
+
+# ──────────────────────────────────────────────────────────
+# Autonomous Growth plan — turn the onboarding profile + plan limit into scheduled,
+# multi-source scraping. The user picks which sources are ON; quantity derives from the
+# plan's monthly-lead limit, split across the chosen sources.
+# ──────────────────────────────────────────────────────────
+
+# The nine scrapeable sources (LeadSource values) offered in the Growth screen.
+GROWTH_SOURCES = [
+    "google_maps", "web_scrape", "directories", "tender", "apollo",
+    "linkedin", "facebook", "enrichment", "competitor_ads",
+]
+
+
+class GrowthSetup(BaseModel):
+    sources: List[str]
+    hour_cairo: int = Field(9, ge=0, le=23)
+
+
+async def _growth_summary(db, current_user) -> dict:
+    from app.models.models import ScrapeSchedule, Lead, LeadStage, Tenant
+    from app.services.platform_config import get_plan_limit
+    from datetime import datetime as _dt
+    tid = current_user["tenant_id"]
+    t = (await db.execute(select(Tenant).where(Tenant.id == tid))).scalar_one_or_none()
+    plan = t.plan.value if t and t.plan else "trial"
+    monthly_limit = await get_plan_limit(db, plan, "monthly_leads") or 5000
+    scheds = {s.source.value: s for s in (await db.execute(
+        select(ScrapeSchedule).where(ScrapeSchedule.tenant_id == tid))).scalars().all()}
+
+    async def cnt(*conds):
+        from sqlalchemy import and_ as _and
+        return (await db.execute(select(func.count(Lead.id)).where(_and(Lead.tenant_id == tid, *conds)))).scalar() or 0
+
+    funnel = {
+        "leads_total": await cnt(),
+        "pending_review": await cnt(Lead.stage == LeadStage.pending_review),
+        "approved": await cnt(Lead.stage.in_([LeadStage.approved, LeadStage.outreach, LeadStage.replied,
+                                              LeadStage.meeting, LeadStage.proposal, LeadStage.negotiation,
+                                              LeadStage.won])),
+        "replied": await cnt(Lead.stage == LeadStage.replied),
+        "won": await cnt(Lead.stage == LeadStage.won),
+    }
+    sources = []
+    for src in GROWTH_SOURCES:
+        s = scheds.get(src)
+        sources.append({
+            "source": src,
+            "enabled": bool(s and s.enabled),
+            "monthly_cap": s.monthly_cap if s else 0,
+            "monthly_count": (s.monthly_count or 0) if s else 0,
+            "hour_cairo": s.hour_cairo if s else 9,
+            "last_run_at": s.last_run_at.isoformat() if (s and s.last_run_at) else None,
+        })
+    return {
+        "plan": plan, "monthly_lead_limit": monthly_limit,
+        "autonomy": t.autonomy if t else "copilot",
+        "profile": {"industry": (t.tenant_profile or {}).get("industry", "") if t else "",
+                    "cities": (t.tenant_profile or {}).get("cities", "") if t else ""},
+        "sources": sources, "funnel": funnel,
+    }
+
+
+@router.get("/growth", summary="Get the autonomous growth plan + funnel")
+async def get_growth(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    return await _growth_summary(db, current_user)
+
+
+@router.post("/growth", summary="Set up scheduled scraping from the profile + plan limit")
+async def setup_growth(body: GrowthSetup, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    from app.api.auth import require_admin
+    from app.models.models import ScrapeSchedule, Tenant, LeadSource
+    from app.services.platform_config import get_plan_limit
+    require_admin(current_user)
+    tid = current_user["tenant_id"]
+    t = (await db.execute(select(Tenant).where(Tenant.id == tid))).scalar_one_or_none()
+    chosen = [s for s in body.sources if s in GROWTH_SOURCES]
+    if not chosen:
+        raise HTTPException(status_code=400, detail="اختر مصدراً واحداً على الأقل")
+
+    profile = (t.tenant_profile or {}) if t else {}
+    industry = profile.get("industry") or ""
+    cities = profile.get("cities") or profile.get("city") or ""
+    if isinstance(cities, list):
+        cities = cities[0] if cities else ""
+
+    plan = t.plan.value if t and t.plan else "trial"
+    monthly_limit = await get_plan_limit(db, plan, "monthly_leads") or 5000
+    per_source = max(monthly_limit // len(chosen), 30)   # split the monthly quota
+    daily = max(per_source // 26, 5)                     # ~26 active days/mo, min 5/run
+
+    existing = {s.source.value: s for s in (await db.execute(
+        select(ScrapeSchedule).where(ScrapeSchedule.tenant_id == tid))).scalars().all()}
+
+    for src in GROWTH_SOURCES:
+        s = existing.get(src)
+        if src in chosen:
+            cfg = {"max_results": int(daily)}
+            if industry:
+                cfg["industry"] = industry
+                cfg["query"] = industry
+            if cities:
+                cfg["location"] = cities
+            if s:
+                s.enabled = True; s.config = cfg
+                s.hour_cairo = body.hour_cairo; s.monthly_cap = int(per_source)
+            else:
+                db.add(ScrapeSchedule(
+                    tenant_id=tid, source=LeadSource(src), config=cfg,
+                    hour_cairo=body.hour_cairo, monthly_cap=int(per_source),
+                    enabled=True, monthly_count=0,
+                ))
+        elif s:
+            s.enabled = False   # turning a source off pauses its schedule (kept for history)
+    await db.commit()
+    return await _growth_summary(db, current_user)

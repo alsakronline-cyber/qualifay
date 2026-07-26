@@ -35,6 +35,7 @@ import {
   UsersRound,
   ScrollText,
   SlidersHorizontal,
+  Rocket,
 } from 'lucide-react'
 import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -52,6 +53,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/', label: 'الرئيسية', labelEn: 'Dashboard', icon: LayoutDashboard },
+  { href: '/growth', label: 'النمو التلقائي', labelEn: 'Autonomous Growth', icon: Rocket, adminOnly: true },
   { href: '/activity', label: 'نشاط المساعد', labelEn: 'AI Activity', icon: Sparkles, adminOnly: true },
   { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3, adminOnly: true },
   { href: '/leads', label: 'العملاء المحتملون', labelEn: 'Leads', icon: Users },
