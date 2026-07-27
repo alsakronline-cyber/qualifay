@@ -175,6 +175,10 @@ class Lead(Base):
     email = Column(String, nullable=True)
     # WhatsApp reachability: NULL = not checked yet, True/False = verified via Evolution.
     wa_reachable = Column(Boolean, nullable=True)
+    # "Is this a real, reachable business?" gate (Autonomous Growth Phase 2).
+    # NULL = not checked yet; False = junk identity or no contact channel — never
+    # auto-approved even in full-autonomy mode; True = has a real identity + a way to reach it.
+    verified_real = Column(Boolean, nullable=True)
     company = Column(String, nullable=True)
     industry = Column(String, nullable=True)
     company_size = Column(String, nullable=True)

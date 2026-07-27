@@ -25,6 +25,97 @@ def run_async(coro):
     return asyncio.run(_wrapped())
 
 
+# ── Phase 2: real-lead verification + autonomy routing (pure, unit-testable) ──
+
+# Placeholder identities that scrapers frequently emit for a row with no real business.
+_JUNK_IDENTITY = {
+    "", "n/a", "na", "none", "null", "test", "unknown", "-", "--", ".",
+    "غير معروف", "لا يوجد", "بدون اسم", "بدون",
+}
+
+
+def is_junk_identity(name, company) -> bool:
+    """A real lead needs a real business/person identity. Reject empty, placeholder,
+    or non-alphabetic (phone-number-as-name) values so junk never reaches outreach."""
+    ident = (company or name or "").strip().lower()
+    if not ident or ident in _JUNK_IDENTITY:
+        return True
+    if len(ident) < 2:
+        return True
+    # No letters at all (digits/punctuation only) → not a real name.
+    if not any(ch.isalpha() for ch in ident):
+        return True
+    return False
+
+
+def has_contact_channel(phone, email, website) -> bool:
+    """Reachable = at least one channel we can actually use for outreach. A lead with
+    no phone, no valid email, and no website can't be contacted — it isn't actionable."""
+    if phone and str(phone).strip():
+        return True
+    if email and "@" in str(email) and "." in str(email).split("@")[-1]:
+        return True
+    if website and str(website).strip():
+        return True
+    return False
+
+
+def verify_real_lead(*, name, company, phone, email, website):
+    """Return (is_real, reason_ar). A lead is 'real' when it has a genuine identity AND
+    a way to reach it. Unverified leads are never auto-approved (see resolve_route)."""
+    if is_junk_identity(name, company):
+        return False, "لا يوجد اسم أو شركة حقيقي"
+    if not has_contact_channel(phone, email, website):
+        return False, "لا توجد وسيلة تواصل (هاتف/إيميل/موقع)"
+    return True, "عميل حقيقي وقابل للتواصل"
+
+
+def resolve_route(*, autonomy, auto_approve, verified_real, score, min_score) -> str:
+    """Decide a lead's destination after BANT. Returns 'archived' | 'approved' | 'pending_review'.
+
+    - Below the tenant's BANT threshold → archived (unchanged behavior).
+    - Full autonomy AND a verified-real lead → approved (auto outreach).
+    - Everything else (copilot / manual / off, or any unverified lead) → pending_review,
+      so a human approves both the lead and the message.
+
+    An unverified lead is NEVER auto-approved even in full mode — a junk or unreachable
+    row must not trigger automated messaging. Back-compat: when autonomy is unset, the
+    legacy auto_approve boolean maps to full/copilot."""
+    if score < min_score:
+        return "archived"
+    mode = (autonomy or "").strip().lower() or ("full" if auto_approve else "copilot")
+    if mode == "full" and verified_real:
+        return "approved"
+    return "pending_review"
+
+
+async def _find_duplicate(db, lead):
+    """Find an earlier live lead in the same tenant that already represents this business,
+    so we don't re-qualify and double-contact it. Matches on phone, email, or company+city."""
+    from app.models.models import Lead, LeadStatus
+    from sqlalchemy import select, and_, or_, func as _f
+
+    conds = []
+    if lead.phone:
+        conds.append(Lead.phone == lead.phone)
+    if lead.email:
+        conds.append(_f.lower(Lead.email) == lead.email.strip().lower())
+    if lead.company and lead.city:
+        conds.append(and_(
+            _f.lower(Lead.company) == lead.company.strip().lower(),
+            _f.lower(Lead.city) == lead.city.strip().lower(),
+        ))
+    if not conds:
+        return None
+    q = (select(Lead).where(
+        Lead.tenant_id == lead.tenant_id,
+        Lead.id != lead.id,
+        Lead.status != LeadStatus.duplicate,
+        or_(*conds),
+    ).order_by(Lead.created_at.asc()).limit(1))
+    return (await db.execute(q)).scalar_one_or_none()
+
+
 @celery_app.task(bind=True, max_retries=3, queue="ai")
 def qualify_lead(self, lead_id: str):
     """
@@ -46,7 +137,7 @@ def qualify_lead(self, lead_id: str):
 
 async def _qualify_lead(lead_id: str):
     from app.core.database import AsyncSessionLocal
-    from app.models.models import Lead, Tenant, Notification, NotificationType, LeadStage
+    from app.models.models import Lead, Tenant, Notification, NotificationType, LeadStage, LeadStatus
     from app.services.ai_service import ai_service
     from app.services.lead_pool_service import lead_pool_service
     from sqlalchemy import select
@@ -63,6 +154,18 @@ async def _qualify_lead(lead_id: str):
         tenant = t_result.scalar_one_or_none()
         if not tenant:
             return {"error": "tenant_not_found"}
+
+        # Phase 2 dedup: if an earlier live lead already represents this business (same
+        # phone / email / company+city), mark this one a duplicate rather than
+        # re-qualifying and risking a second outreach to the same company.
+        dupe = await _find_duplicate(db, lead)
+        if dupe:
+            lead.status = LeadStatus.duplicate
+            lead.stage = LeadStage.archived
+            lead.ai_notes = f"[Dedup] نسخة مكررة من عميل موجود: {dupe.company or dupe.name or dupe.id}."
+            await db.commit()
+            logger.info(f"Lead {lead_id} marked duplicate of {dupe.id}")
+            return {"duplicate_of": dupe.id}
 
         lead_dict = {
             "id": lead.id,
@@ -110,6 +213,14 @@ async def _qualify_lead(lead_id: str):
             "city": lead.city,
         })
 
+        # Phase 2: verify the (now-enriched) lead is a real, reachable business.
+        # This gate decides eligibility for auto-approval below.
+        is_real, real_reason = verify_real_lead(
+            name=lead.name, company=lead.company,
+            phone=lead.phone, email=lead.email, website=lead.website,
+        )
+        lead.verified_real = is_real
+
         # Step 3: BANT score
         bant = await ai_service.score_bant(lead_dict)
         lead.bant_score = bant.get("score", 0)
@@ -130,44 +241,57 @@ async def _qualify_lead(lead_id: str):
             logger.warning(f"Lead {lead_id} -> pending_review (BANT scoring failed)")
             return {"pending_review": True, "reason": "scoring_failed"}
 
-        # Step 4: Archive or pending_review
-        if lead.bant_score < min_score:
+        # Step 4: Route by BANT threshold + verification + autonomy mode.
+        route = resolve_route(
+            autonomy=tenant.autonomy, auto_approve=tenant.auto_approve,
+            verified_real=is_real, score=lead.bant_score, min_score=min_score,
+        )
+
+        if route == "archived":
             lead.stage = LeadStage.archived
             lead.ai_notes = f"[BANT] Score {lead.bant_score} below threshold {min_score}. {bant.get('reason', '')}"
             await db.commit()
             logger.info(f"Lead {lead_id} archived: BANT score {lead.bant_score} < {min_score}")
             return {"archived": True, "reason": f"BANT score {lead.bant_score} below threshold"}
 
-        lead.stage = LeadStage.pending_review
-        lead.ai_notes = f"[BANT score: {lead.bant_score}] {bant.get('reason', '')}"
+        # A high-scoring but unverified lead is parked for review with the reason, so the
+        # user can enrich/fix it — it's never silently auto-messaged.
+        verify_note = "" if is_real else f" ⚠️ {real_reason} — بحاجة لمراجعة قبل التواصل."
+        lead.stage = LeadStage.approved if route == "approved" else LeadStage.pending_review
+        lead.ai_notes = f"[BANT score: {lead.bant_score}] {bant.get('reason', '')}{verify_note}"
 
         # Step 5: Notify tenant
-        notif = Notification(
+        if route == "approved":
+            title = "Lead auto-approved for outreach"
+            msg = f"Lead '{lead.company or lead.name}' (BANT {lead.bant_score}) was auto-approved and queued."
+        else:
+            title = "New Lead Ready for Review"
+            msg = f"Lead '{lead.company or lead.name}' qualified with BANT score {lead.bant_score}."
+        db.add(Notification(
             tenant_id=lead.tenant_id,
             type=NotificationType.leads_ready,
-            title="New Lead Ready for Review",
-            message=f"Lead '{lead.company or lead.name}' qualified with BANT score {lead.bant_score}.",
-            data={"lead_id": lead_id, "bant_score": lead.bant_score, "stage": "pending_review"},
-        )
-        db.add(notif)
+            title=title, message=msg,
+            data={"lead_id": lead_id, "bant_score": lead.bant_score,
+                  "stage": lead.stage.value, "verified_real": is_real},
+        ))
         await db.commit()
 
-        # Step 6: Auto-approve if tenant setting enabled
-        if tenant.auto_approve and lead.bant_score >= min_score:
-            lead.stage = LeadStage.approved
-            await db.commit()
+        # Step 6: If routed to approved (full autonomy + verified), start outreach.
+        if route == "approved":
             from app.workers.outreach_tasks import process_approved_lead
             process_approved_lead.apply_async(args=[lead_id], queue="outreach")
-            logger.info(f"Lead {lead_id} auto-approved and queued for outreach")
+            logger.info(f"Lead {lead_id} auto-approved (full autonomy) and queued for outreach")
 
-        # Step 7: Contribute to pool
-        if lead.bant_score >= 60 and tenant.contribute_to_pool:
+        # Step 7: Contribute to pool — only real, well-scored leads keep pool quality high.
+        if lead.bant_score >= 60 and tenant.contribute_to_pool and is_real:
             await lead_pool_service.contribute(lead_id, db)
 
         return {
             "lead_id": lead_id,
             "bant_score": lead.bant_score,
+            "verified_real": is_real,
             "stage": lead.stage.value,
+            "route": route,
         }
 
 
