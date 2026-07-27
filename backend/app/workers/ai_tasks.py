@@ -89,6 +89,24 @@ def resolve_route(*, autonomy, auto_approve, verified_real, score, min_score) ->
     return "pending_review"
 
 
+async def _generate_greeting_draft(lead, tenant):
+    """Copilot mode: pre-write the personalized first-contact greeting so the user can
+    read/edit/approve it in the review queue (they approve BOTH the lead and its message).
+    Uses the same AIDA writer + Arabic handling as the actual send, so the draft is exactly
+    what would go out. Best-effort: any failure just leaves the lead with no draft."""
+    from app.services.ai_service import ai_service, tenant_context_str
+    brand = tenant_context_str(tenant.tenant_profile or {})
+    text = await ai_service.write_aida_message({
+        "name": lead.name, "company": lead.company, "industry": lead.industry,
+        "city": lead.city, "language": lead.language,
+    }, context=brand)
+    if text and lead.language == "ar":
+        arabic = sum(1 for c in text if "؀" <= c <= "ۿ")
+        if arabic < len(text) * 0.3:
+            text = await ai_service.translate_arabic(text, direction="en_to_ar")
+    return text
+
+
 async def _find_duplicate(db, lead):
     """Find an earlier live lead in the same tenant that already represents this business,
     so we don't re-qualify and double-contact it. Matches on phone, email, or company+city."""
@@ -281,6 +299,20 @@ async def _qualify_lead(lead_id: str):
             from app.workers.outreach_tasks import process_approved_lead
             process_approved_lead.apply_async(args=[lead_id], queue="outreach")
             logger.info(f"Lead {lead_id} auto-approved (full autonomy) and queued for outreach")
+
+        # Phase 3 (copilot): pre-draft the greeting so the review card shows a message the
+        # user can approve or edit. Only for copilot + verified-real leads; manual mode
+        # surfaces the lead with no draft, full mode already sent above.
+        elif route == "pending_review" and is_real and (tenant.autonomy or "copilot").strip().lower() == "copilot":
+            try:
+                draft = await _generate_greeting_draft(lead, tenant)
+                if draft:
+                    raw = dict(lead.raw_data or {})
+                    raw["draft_message"] = draft
+                    lead.raw_data = raw
+                    await db.commit()
+            except Exception as e:
+                logger.warning(f"greeting draft failed for {lead_id}: {e}")
 
         # Step 7: Contribute to pool — only real, well-scored leads keep pool quality high.
         if lead.bant_score >= 60 and tenant.contribute_to_pool and is_real:

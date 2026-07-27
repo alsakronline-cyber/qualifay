@@ -26,11 +26,12 @@ def run_async(coro):
 
 
 @celery_app.task(bind=True, max_retries=2, queue="outreach")
-def process_approved_lead(self, lead_id: str, template_id: str = None):
-    """Send initial outreach to an approved lead. If template_id is given, the message
-    is the rendered template ({{vars}} filled from the lead); otherwise AI writes AIDA copy."""
+def process_approved_lead(self, lead_id: str, template_id: str = None, override_text: str = None):
+    """Send initial outreach to an approved lead. Precedence for the message body:
+    override_text (a human-approved/edited copilot draft) → template_id (rendered) →
+    AI-written AIDA copy."""
     try:
-        return run_async(_process_approved_lead(lead_id, template_id))
+        return run_async(_process_approved_lead(lead_id, template_id, override_text))
     except Exception as exc:
         logger.error(f"process_approved_lead failed for {lead_id}: {exc}")
         raise self.retry(exc=exc, countdown=60)
@@ -88,7 +89,7 @@ async def _supervise_send(db, tenant_id, text, autonomy, brand, first_contact=Fa
         return True, text, "supervisor-error-failopen"
 
 
-async def _process_approved_lead(lead_id: str, template_id: str = None):
+async def _process_approved_lead(lead_id: str, template_id: str = None, override_text: str = None):
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
         Lead, WaInstance, Conversation, Message,
@@ -119,7 +120,7 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
         # (many LinkedIn leads are email-only), else there's no way to reach them.
         if not lead.phone:
             if lead.email:
-                return await _send_email_outreach(db, lead, template)
+                return await _send_email_outreach(db, lead, template, override_text)
             logger.warning(f"Lead {lead_id} has no phone or email")
             return {"error": "no_contact"}
 
@@ -172,24 +173,30 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
             # Retry tomorrow
             raise process_approved_lead.retry(countdown=86400)
 
-        # Step 3: Message — active A/B test variant wins, else template, else AI AIDA copy.
+        # Step 3: Message — a human-approved copilot draft wins, else active A/B variant,
+        # else template, else AI AIDA copy.
         ab_used = False
-        from app.services.ab_service import assign_variant
-        ab = await assign_variant(db, lead.tenant_id, "whatsapp", lead)
-        if ab:
-            _variant, message_text, _subject = ab
-            ab_used = True
-        elif template:
-            from app.services.template_render import render_for_lead
-            message_text = render_for_lead(template.body, lead)
+        if override_text:
+            # The user already read and approved (or edited) this exact text — send it verbatim.
+            message_text = override_text
+            ab_used = True   # also skips the re-translation step below
         else:
-            _brand, _ = await _tenant_ctx(db, lead.tenant_id)
-            message_text = await ai_service.write_aida_message({
-                "name": lead.name, "company": lead.company, "industry": lead.industry,
-                "city": lead.city, "language": lead.language,
-            }, context=_brand)
+            from app.services.ab_service import assign_variant
+            ab = await assign_variant(db, lead.tenant_id, "whatsapp", lead)
+            if ab:
+                _variant, message_text, _subject = ab
+                ab_used = True
+            elif template:
+                from app.services.template_render import render_for_lead
+                message_text = render_for_lead(template.body, lead)
+            else:
+                _brand, _ = await _tenant_ctx(db, lead.tenant_id)
+                message_text = await ai_service.write_aida_message({
+                    "name": lead.name, "company": lead.company, "industry": lead.industry,
+                    "city": lead.city, "language": lead.language,
+                }, context=_brand)
 
-        # Step 4: Translate if Arabic (templates/AB variants are already authored in-language).
+        # Step 4: Translate if Arabic (templates/AB variants/approved drafts are already in-language).
         if not template and not ab_used and lead.language == "ar" and message_text:
             # Check if already Arabic
             arabic_chars = sum(1 for c in message_text if "؀" <= c <= "ۿ")
@@ -263,9 +270,10 @@ async def _process_approved_lead(lead_id: str, template_id: str = None):
         return {"sent": True, "lead_id": lead_id, "conversation_id": conv.id}
 
 
-async def _send_email_outreach(db, lead, template=None):
+async def _send_email_outreach(db, lead, template=None, override_text=None):
     """Email outreach for a lead with no WhatsApp number. Same consent + AIDA copy as
-    WhatsApp, capped per-tenant per-day to protect sender reputation."""
+    WhatsApp, capped per-tenant per-day to protect sender reputation. A human-approved
+    copilot draft (override_text) is used verbatim as the body when present."""
     from datetime import date, datetime
     from app.models.models import LeadStage
     from app.services.ai_service import ai_service
@@ -299,11 +307,14 @@ async def _send_email_outreach(db, lead, template=None):
             logger.info(f"Email cap/pause hit for tenant {lead.tenant_id} ({used}/{cap})")
             raise process_approved_lead.retry(countdown=86400)
 
-    # Active A/B test variant wins, else template, else AI AIDA copy.
+    # A human-approved copilot draft wins, else active A/B variant, else template, else AI copy.
     from app.services.ab_service import assign_variant
-    ab = await assign_variant(db, lead.tenant_id, "email", lead)
     _default_subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
-    if ab:
+    ab = None if override_text else await assign_variant(db, lead.tenant_id, "email", lead)
+    if override_text:
+        body = override_text
+        subject = _default_subject
+    elif ab:
         _variant, body, ab_subject = ab
         subject = ab_subject or _default_subject
     elif template:

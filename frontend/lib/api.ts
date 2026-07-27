@@ -77,7 +77,8 @@ export const leadsApi = {
 
   update: (id: string, data: Record<string, unknown>) => API.patch(`/v1/leads/${id}`, data),
 
-  approve: (id: string) => API.post(`/v1/leads/${id}/approve`),
+  approve: (id: string, message?: string) =>
+    API.post(`/v1/leads/${id}/approve`, message ? { message } : {}),
 
   reject: (id: string, reason?: string) =>
     API.post(`/v1/leads/${id}/reject`, { reason }),
