@@ -105,10 +105,10 @@ function LeadsContent() {
   )
   const poolLeads: Lead[] = Array.isArray(poolData) ? poolData : (poolData?.items || poolData?.leads || [])
 
-  const handleApprove = useCallback(async (id: string) => {
+  const handleApprove = useCallback(async (id: string, message?: string) => {
     try {
-      await leadsApi.approve(id)
-      toast.success('تم قبول العميل المحتمل')
+      await leadsApi.approve(id, message)
+      toast.success(message ? 'تم قبول العميل وإرسال الرسالة' : 'تم قبول العميل المحتمل')
       mutateReview()
     } catch { toast.error('فشل قبول العميل') }
   }, [mutateReview])

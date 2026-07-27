@@ -92,6 +92,8 @@ def _lead_dict(lead: Lead) -> dict:
         "pool_contributed": lead.pool_contributed,
         "assigned_to": lead.assigned_to,
         "ai_notes": lead.ai_notes,
+        "verified_real": getattr(lead, "verified_real", None),
+        "draft_message": (lead.raw_data or {}).get("draft_message") if lead.raw_data else None,
         "notes": (lead.raw_data or {}).get("notes") if lead.raw_data else None,
         "last_contacted_at": lead.last_contacted_at.isoformat() if getattr(lead, "last_contacted_at", None) else None,
         "created_at": lead.created_at.isoformat() if lead.created_at else None,
@@ -418,13 +420,21 @@ async def get_lead(
     return _lead_dict(lead)
 
 
+class ApproveRequest(BaseModel):
+    # Copilot: the user can approve the AI-drafted greeting as-is, or edit it first.
+    # When present, this exact text is sent instead of regenerating copy at send time.
+    message: Optional[str] = None
+
+
 @router.post("/{lead_id}/approve")
 async def approve_lead(
     lead_id: str,
+    body: Optional[ApproveRequest] = None,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve a lead and queue outreach."""
+    """Approve a lead and queue outreach. In copilot mode the request may carry the
+    (possibly edited) greeting the user approved; that text is sent verbatim."""
     result = await db.execute(
         select(Lead).where(
             and_(Lead.id == lead_id, Lead.tenant_id == current_user["tenant_id"])
@@ -434,11 +444,18 @@ async def approve_lead(
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
+    override_text = (body.message or "").strip() if body and body.message else None
     lead.stage = LeadStage.approved
+    # Persist the approved text so the review card and audit reflect what was sent.
+    if override_text:
+        raw = dict(lead.raw_data or {})
+        raw["draft_message"] = override_text
+        lead.raw_data = raw
     await db.commit()
 
     from app.workers.outreach_tasks import process_approved_lead
-    task = process_approved_lead.apply_async(args=[lead_id], queue="outreach")
+    task = process_approved_lead.apply_async(
+        args=[lead_id], kwargs={"override_text": override_text}, queue="outreach")
 
     try:
         from app.workers.webhook_tasks import emit

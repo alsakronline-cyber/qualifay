@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { clsx } from 'clsx'
-import { CheckCircle, XCircle, UserCheck, ChevronDown, ChevronUp, Bot } from 'lucide-react'
+import { CheckCircle, XCircle, UserCheck, ChevronDown, ChevronUp, Bot, MessageSquare, AlertTriangle } from 'lucide-react'
 import type { Lead, LeadSource } from '@/lib/types'
 
 interface LeadReviewCardProps {
   lead: Lead
-  onApprove: (id: string) => void
+  onApprove: (id: string, message?: string) => void
   onReject: (id: string, reason?: string) => void
   onTakeManually: (id: string) => void
 }
@@ -69,6 +69,8 @@ export default function LeadReviewCard({
   const [rejectReason, setRejectReason] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState<'approve' | 'reject' | 'manual' | null>(null)
+  const [draft, setDraft] = useState(lead.draft_message || '')
+  const hasDraft = Boolean(lead.draft_message)
 
   const score = lead.bant_score ?? 0
   const scoreColor =
@@ -78,7 +80,8 @@ export default function LeadReviewCard({
 
   async function handleApprove() {
     setLoading('approve')
-    await onApprove(lead.id)
+    // In copilot mode the card carries an AI-drafted greeting; send the (edited) text.
+    await onApprove(lead.id, hasDraft ? (draft.trim() || undefined) : undefined)
     setLoading(null)
   }
 
@@ -163,6 +166,31 @@ export default function LeadReviewCard({
         <p className="text-xs text-gray-500 italic line-clamp-2 font-cairo">{lead.bant_reason}</p>
       )}
 
+      {/* Unverified warning — a lead the system couldn't confirm as real/reachable */}
+      {lead.verified_real === false && (
+        <div className="flex items-start gap-1.5 text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 font-cairo">
+          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+          <span>لم يتم التأكد من أن هذا العميل حقيقي أو قابل للتواصل — راجع البيانات قبل القبول.</span>
+        </div>
+      )}
+
+      {/* AI-drafted greeting (copilot) — editable, sent verbatim on approve */}
+      {hasDraft && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-xs text-gold-primary font-cairo">
+            <MessageSquare size={13} />
+            <span>رسالة الترحيب المقترحة (عدّلها إن أردت)</span>
+          </div>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={4}
+            dir="auto"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo leading-relaxed resize-y"
+          />
+        </div>
+      )}
+
       {/* Reject reason input */}
       {rejectMode && (
         <input
@@ -191,7 +219,7 @@ export default function LeadReviewCard({
           ) : (
             <CheckCircle size={15} />
           )}
-          قبول
+          {hasDraft ? 'قبول وإرسال' : 'قبول'}
         </button>
 
         <button

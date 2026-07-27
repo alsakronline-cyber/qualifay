@@ -66,6 +66,8 @@ export interface Lead {
   status: LeadStatus
   language: string
   ai_notes?: string
+  verified_real?: boolean | null
+  draft_message?: string | null
   assigned_to?: string
   created_at: string
   updated_at?: string
