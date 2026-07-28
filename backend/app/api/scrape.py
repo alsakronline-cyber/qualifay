@@ -446,9 +446,10 @@ class GrowthSetup(BaseModel):
 
 
 async def _growth_summary(db, current_user) -> dict:
-    from app.models.models import ScrapeSchedule, Lead, LeadStage, Tenant
+    from app.models.models import ScrapeSchedule, Lead, LeadStage, LeadStatus, Tenant
     from app.services.platform_config import get_plan_limit
-    from datetime import datetime as _dt
+    from sqlalchemy import text as _text
+    from datetime import datetime as _dt, timedelta as _td
     tid = current_user["tenant_id"]
     t = (await db.execute(select(Tenant).where(Tenant.id == tid))).scalar_one_or_none()
     plan = t.plan.value if t and t.plan else "trial"
@@ -460,6 +461,13 @@ async def _growth_summary(db, current_user) -> dict:
         from sqlalchemy import and_ as _and
         return (await db.execute(select(func.count(Lead.id)).where(_and(Lead.tenant_id == tid, *conds)))).scalar() or 0
 
+    # Copilot drafts sitting in the review queue waiting for the owner to approve/edit.
+    drafts_ready = (await db.execute(_text(
+        "SELECT COUNT(*) FROM leads WHERE tenant_id = :tid AND stage = 'pending_review' "
+        "AND raw_data->>'draft_message' IS NOT NULL"
+    ), {"tid": tid})).scalar() or 0
+    scraped_24h = await cnt(Lead.created_at >= (_dt.utcnow() - _td(hours=24)))
+
     funnel = {
         "leads_total": await cnt(),
         "pending_review": await cnt(Lead.stage == LeadStage.pending_review),
@@ -468,6 +476,13 @@ async def _growth_summary(db, current_user) -> dict:
                                               LeadStage.won])),
         "replied": await cnt(Lead.stage == LeadStage.replied),
         "won": await cnt(Lead.stage == LeadStage.won),
+        # Phase 2/3 signals from the hardened pipeline.
+        "verified": await cnt(Lead.verified_real == True),   # noqa: E712
+        "unverified": await cnt(Lead.verified_real == False),  # noqa: E712
+        "duplicates": await cnt(Lead.status == LeadStatus.duplicate),
+        "archived": await cnt(Lead.stage == LeadStage.archived),
+        "drafts_ready": drafts_ready,
+        "scraped_24h": scraped_24h,
     }
     sources = []
     for src in GROWTH_SOURCES:

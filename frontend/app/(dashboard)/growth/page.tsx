@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Rocket, MapPin, Search, Building2, FileText, Users, Briefcase, Facebook, Sparkles, Megaphone, Clock, Zap, CheckCheck, Send, MessageSquareReply, Trophy, Play } from 'lucide-react'
+import { Rocket, MapPin, Search, Building2, FileText, Users, Briefcase, Facebook, Sparkles, Megaphone, Clock, Zap, CheckCheck, Send, MessageSquareReply, Trophy, Play, ShieldCheck, ShieldAlert, Copy, MessageSquare, Download } from 'lucide-react'
 import { scrapeApi } from '@/lib/api'
 
 interface SourceRow { source: string; enabled: boolean; monthly_cap: number; monthly_count: number; hour_cairo: number; last_run_at: string | null }
@@ -13,7 +13,11 @@ interface Growth {
   plan: string; monthly_lead_limit: number; autonomy: string
   profile: { industry: string; cities: string }
   sources: SourceRow[]
-  funnel: { leads_total: number; pending_review: number; approved: number; replied: number; won: number }
+  funnel: {
+    leads_total: number; pending_review: number; approved: number; replied: number; won: number
+    verified: number; unverified: number; duplicates: number; archived: number
+    drafts_ready: number; scraped_24h: number
+  }
 }
 
 const SOURCE_META: Record<string, { label: string; icon: React.ComponentType<{ size?: number; className?: string }> }> = {
@@ -157,6 +161,50 @@ export default function GrowthPage() {
           <Stat label="صفقات مربوحة" value={data.funnel.won} icon={Trophy} color="text-green-400" />
         </div>
       </div>
+
+      {/* Pipeline quality signals (Phase 2/3) */}
+      <div>
+        <h2 className="text-sm font-bold text-white font-cairo mb-2">جودة الأنبوب</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <Stat label="مُتحقَّق منه" value={data.funnel.verified} icon={ShieldCheck} color="text-green-400" />
+          <Stat label="غير مُتحقَّق" value={data.funnel.unverified} icon={ShieldAlert} color="text-yellow-400" />
+          <Stat label="مكرَّر" value={data.funnel.duplicates} icon={Copy} color="text-gray-400" />
+          <Stat label="مسودّات جاهزة" value={data.funnel.drafts_ready} icon={MessageSquare} color="text-gold-primary" />
+          <Stat label="جُمِع خلال ٢٤س" value={data.funnel.scraped_24h} icon={Download} color="text-sky-400" />
+        </div>
+        {data.funnel.drafts_ready > 0 && (
+          <Link href="/leads" className="mt-2 inline-flex items-center gap-1.5 text-xs text-gold-primary hover:underline font-cairo">
+            <MessageSquare size={12} /> {data.funnel.drafts_ready} رسالة ترحيب بانتظار موافقتك ←
+          </Link>
+        )}
+      </div>
+
+      {/* Per-source throughput */}
+      {data.sources.some((s) => s.enabled) && (
+        <div>
+          <h2 className="text-sm font-bold text-white font-cairo mb-2">إنتاجية المصادر هذا الشهر</h2>
+          <div className="space-y-1.5">
+            {data.sources.filter((s) => s.enabled).map((s) => {
+              const meta = SOURCE_META[s.source] || { label: s.source, icon: Search }
+              const Icon = meta.icon
+              const pct = s.monthly_cap ? Math.min((s.monthly_count / s.monthly_cap) * 100, 100) : 0
+              return (
+                <div key={s.source} className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-lg p-2.5">
+                  <Icon size={15} className="text-gold-primary shrink-0" />
+                  <span className="text-sm text-white font-cairo w-28 shrink-0 truncate">{meta.label}</span>
+                  <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-gold-primary rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-400 font-cairo w-20 text-left shrink-0">{s.monthly_count}/{s.monthly_cap}</span>
+                  <span className="text-[10px] text-gray-500 font-cairo w-24 text-left shrink-0">
+                    {s.last_run_at ? new Date(s.last_run_at).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' }) : 'لم يعمل بعد'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
