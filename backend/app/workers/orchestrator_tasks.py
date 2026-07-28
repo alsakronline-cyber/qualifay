@@ -124,6 +124,35 @@ async def _assess_tenant(t, db):
             Message.created_at >= since,
         )))).scalar() or 0
 
+    # ── 5) Autonomous Growth source health ────────────────────────────────────
+    # If the tenant turned Growth on but the running sources produced nothing in 48h,
+    # something is off (bad targeting, blocked scrapers, empty niche) — surface it once
+    # so the owner isn't left wondering why no leads are arriving.
+    from app.models.models import ScrapeSchedule
+    enabled_srcs = (await db.execute(select(ScrapeSchedule).where(and_(
+        ScrapeSchedule.tenant_id == tid, ScrapeSchedule.enabled == True,  # noqa: E712
+    )))).scalars().all()
+    metrics["growth_sources_active"] = len(enabled_srcs)
+    if enabled_srcs:
+        recent_cut = now - timedelta(hours=48)
+        scraped_48h = (await db.execute(select(func.count(Lead.id)).where(and_(
+            Lead.tenant_id == tid, Lead.created_at >= recent_cut,
+        )))).scalar() or 0
+        metrics["scraped_48h"] = scraped_48h
+        # Only flag if at least one source has actually run in that window (so we don't
+        # alarm on a schedule that simply hasn't hit its Cairo hour yet).
+        ran_recently = any(s.last_run_at and s.last_run_at >= recent_cut for s in enabled_srcs)
+        if scraped_48h == 0 and ran_recently and not await _recent_notif(
+                db, tid, NotificationType.system, hours=24):
+            db.add(Notification(
+                tenant_id=tid, type=NotificationType.system,
+                title="🔍 مصادر النمو لم تجلب عملاء",
+                message=f"{len(enabled_srcs)} مصدر مُفعَّل يعمل لكن لم يصل أي عميل خلال ٤٨ ساعة — "
+                        f"راجع استهداف المجال/المدن في صفحة النمو التلقائي.",
+                data={"sources_active": len(enabled_srcs), "link": "/growth", "source": "orchestrator"},
+            ))
+            actions.append({"type": "notify_growth_dry", "detail": f"{len(enabled_srcs)} sources, 0 leads/48h"})
+
     # ── Log the decision cycle ────────────────────────────────────────────────
     status = "acted" if any(a["type"].startswith(("reengage", "notify")) for a in actions) else \
              ("alerted" if actions else "idle")
