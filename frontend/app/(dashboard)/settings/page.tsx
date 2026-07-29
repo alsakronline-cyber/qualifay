@@ -1,12 +1,116 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send } from 'lucide-react'
-import { authApi, agentApi, emailApi } from '@/lib/api'
+import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles } from 'lucide-react'
+import { authApi, agentApi, emailApi, onboardingApi } from '@/lib/api'
 import type { AuthUser } from '@/lib/types'
+
+// The editable business-brief fields the AI collects during onboarding. `long` = textarea.
+const PROFILE_FIELDS: { key: string; label: string; long?: boolean; placeholder?: string }[] = [
+  { key: 'business_name', label: 'اسم النشاط' },
+  { key: 'industry', label: 'المجال' },
+  { key: 'sells', label: 'ماذا تبيع / تقدّم', long: true },
+  { key: 'value_prop', label: 'لماذا يختارك العملاء', long: true },
+  { key: 'ideal_customer', label: 'العميل المثالي', long: true },
+  { key: 'pain_points', label: 'مشاكل العملاء التي تحلّها', long: true },
+  { key: 'price_range', label: 'نطاق الأسعار' },
+  { key: 'cities', label: 'المدن المستهدفة', placeholder: 'القاهرة، الإسكندرية…' },
+  { key: 'monthly_lead_target', label: 'هدف العملاء الشهري' },
+  { key: 'team_size', label: 'حجم الفريق' },
+  { key: 'tone', label: 'نبرة الرسائل', placeholder: 'ودّي / رسمي / مباشر…' },
+  { key: 'website', label: 'الموقع الإلكتروني' },
+]
+
+function CompanyProfilePanel() {
+  const { data, mutate } = useSWR('onboarding/profile', () => onboardingApi.profile().then((r) => r.data))
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  useEffect(() => {
+    if (data?.profile) {
+      const p = data.profile as Record<string, unknown>
+      const next: Record<string, string> = {}
+      for (const f of PROFILE_FIELDS) next[f.key] = p[f.key] != null ? String(p[f.key]) : ''
+      setForm(next)
+    }
+  }, [data])
+
+  async function save() {
+    setSaving(true)
+    try {
+      await onboardingApi.updateProfile(form)
+      toast.success('تم حفظ بيانات الشركة')
+      mutate()
+    } catch { toast.error('فشل الحفظ') }
+    finally { setSaving(false) }
+  }
+
+  async function startOver() {
+    if (!window.confirm('سيتم مسح بيانات شركتك الحالية وإعادة الإعداد مع المساعد الذكي من البداية. هل تريد المتابعة؟')) return
+    setResetting(true)
+    try {
+      await onboardingApi.reset()
+      // Clear the cached "done" flag so the layout re-opens the wizard.
+      try { localStorage.removeItem('qualifay_onboarding_done') } catch {}
+      toast.success('يبدأ الإعداد من جديد…')
+      window.location.href = '/onboarding'
+    } catch { toast.error('تعذّر إعادة التعيين'); setResetting(false) }
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Building2 size={18} className="text-gold-primary" />
+        <h2 className="text-base font-semibold text-white font-cairo">بيانات الشركة</h2>
+      </div>
+      <p className="text-xs text-gray-500 font-cairo -mt-2">
+        هذه البيانات جمعها المساعد الذكي عند التسجيل، ويستخدمها النظام في كتابة رسائل التواصل. عدّلها في أي وقت.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {PROFILE_FIELDS.map((f) => (
+          <div key={f.key} className={clsx(f.long && 'sm:col-span-2')}>
+            <label className="block text-sm text-gray-300 font-cairo mb-1.5">{f.label}</label>
+            {f.long ? (
+              <textarea
+                rows={2} dir="auto" value={form[f.key] || ''} placeholder={f.placeholder}
+                onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo resize-y"
+              />
+            ) : (
+              <input
+                type="text" dir="auto" value={form[f.key] || ''} placeholder={f.placeholder}
+                onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap pt-1">
+        <button
+          onClick={save} disabled={saving}
+          className="flex items-center gap-2 bg-gradient-to-r from-gold-primary to-gold-dark text-gray-950 font-semibold px-5 py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-all font-cairo text-sm"
+        >
+          {saving ? <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" /> : <Save size={15} />}
+          حفظ بيانات الشركة
+        </button>
+        <button
+          onClick={startOver} disabled={resetting}
+          className="flex items-center gap-2 border border-gold-primary/40 text-gold-primary hover:bg-gold-primary/10 font-semibold px-4 py-2.5 rounded-lg disabled:opacity-50 transition-all font-cairo text-sm"
+        >
+          {resetting ? <span className="w-4 h-4 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" /> : <Sparkles size={15} />}
+          البدء من جديد مع الذكاء الاصطناعي
+        </button>
+      </div>
+    </div>
+  )
+}
 
 interface AgentTask {
   id: string
@@ -360,6 +464,8 @@ export default function SettingsPage() {
           حفظ التغييرات
         </button>
       </div>
+
+      <CompanyProfilePanel />
 
       {/* Plan info */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">

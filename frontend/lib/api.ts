@@ -293,6 +293,8 @@ export const campaignsApi = {
 // ── AI Setup Consultant (onboarding) ──────────────────────────────────────────
 export const onboardingApi = {
   profile: () => API.get('/v1/onboarding/profile'),
+  updateProfile: (profile: Record<string, unknown>) => API.patch('/v1/onboarding/profile', { profile }),
+  reset: () => API.post('/v1/onboarding/reset', {}),
   chat: (messages: { role: string; content: string }[]) => API.post('/v1/onboarding/chat', { messages }),
   build: () => API.post('/v1/onboarding/build', {}),
   setAutonomy: (level: string) => API.post('/v1/onboarding/autonomy', { level }),

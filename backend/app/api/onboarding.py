@@ -44,6 +44,57 @@ async def get_profile(current_user: dict = Depends(get_current_user), db: AsyncS
     }
 
 
+# The business-brief fields the owner may edit directly (mirrors what the AI interview
+# extracts). Internal keys like _build_draft are deliberately excluded so a manual edit
+# can never clobber generated state.
+EDITABLE_PROFILE_FIELDS = frozenset({
+    "business_name", "industry", "sells", "value_prop", "ideal_customer",
+    "pain_points", "price_range", "cities", "current_sources",
+    "monthly_lead_target", "team_size", "tone", "website", "description",
+})
+
+
+def _public_profile(profile: dict) -> dict:
+    """Strip internal keys (prefixed with _) before returning a profile to the client."""
+    return {k: v for k, v in (profile or {}).items() if not k.startswith("_")}
+
+
+class ProfileUpdate(BaseModel):
+    profile: Dict[str, Any]
+
+
+@router.patch("/profile", summary="Edit the company profile directly (no AI needed)")
+async def update_profile(body: ProfileUpdate, current_user: dict = Depends(get_current_user),
+                         db: AsyncSession = Depends(get_db)):
+    """Let the tenant admin correct/update any business-brief field the AI collected,
+    at any time after onboarding. Only whitelisted fields are written; empty values clear
+    a field. The updated brief immediately flows into outreach copy (tenant_context_str)."""
+    require_admin(current_user)
+    t = await _tenant(current_user["tenant_id"], db)
+    prof = dict(t.tenant_profile or {})
+    for k, v in (body.profile or {}).items():
+        if k in EDITABLE_PROFILE_FIELDS:
+            prof[k] = (v.strip() if isinstance(v, str) else v)
+    t.tenant_profile = prof
+    await db.commit()
+    return {"profile": _public_profile(prof)}
+
+
+@router.post("/reset", summary="Start the AI setup over from scratch")
+async def reset_onboarding(current_user: dict = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    """Wipe the collected business profile and re-open the AI interview so the owner can
+    redo their setup from scratch. Does NOT delete already-generated templates/sequences/
+    campaigns (those are additive and can be managed on their own screens) — it only clears
+    the profile brief and the onboarding flag so the wizard runs again."""
+    require_admin(current_user)
+    t = await _tenant(current_user["tenant_id"], db)
+    t.tenant_profile = {}
+    t.onboarding_done = False
+    await db.commit()
+    return {"onboarding_done": False, "profile": {}}
+
+
 @router.post("/chat")
 async def chat(body: ChatIn, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """One interview turn. Merges any newly-extracted fields into the tenant profile."""
