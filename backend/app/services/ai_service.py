@@ -269,7 +269,7 @@ If a field cannot be determined, use null. Do NOT invent data."""
             for m in history[-10:]
         ])
 
-        lang_instruction = "Respond in the same language as the customer." if language == "auto" else f"Respond in {'Arabic' if language == 'ar' else 'English'}."
+        lang_instruction = "Respond in the same language as the customer." if language == "auto" else _lang_instruction(language)
 
         brand = f"\nYou represent this business — stay on-brand and specific to it:\n{tenant_context}\n" if tenant_context else ""
         system = f"""You are a professional B2B sales assistant for an Egyptian company.
@@ -279,7 +279,6 @@ Rules:
 - Never claim to be AI unless directly asked
 - If booking/demo requested: confirm interest and say a human will follow up shortly
 - If complaint: acknowledge, apologize briefly, escalate to human
-- For Arabic: use formal Egyptian business Arabic (فصحى مبسطة)
 - Return ONLY the reply text, no labels or quotes"""
 
         messages = [{"role": "system", "content": system}]
@@ -291,14 +290,16 @@ Rules:
         reply = await self._groq(messages, max_tokens=300)
         return reply if reply else None
 
-    async def write_aida_message(self, lead: dict, context: str = "") -> str:
+    async def write_aida_message(self, lead: dict, context: str = "", language: str = "ar") -> str:
         """
-        Write an AIDA-format outreach message using OR fast.
+        Write an AIDA-format outreach message using OR fast, in the tenant's chosen output
+        language (ar = فصحى | en = English | masri = عامية مصرية).
         Returns outreach message string (max 3 sentences).
         """
-        system = """You are a B2B copywriter specializing in WhatsApp outreach for Egyptian businesses.
+        system = f"""You are a B2B copywriter specializing in WhatsApp outreach for Egyptian businesses.
 Write a short, personalised outreach message using the AIDA framework (Attention, Interest, Desire, Action).
 Rules:
+- {_lang_instruction(language)}
 - Maximum 3 sentences
 - No emojis unless the brand context suggests it
 - Sound human, not robotic
@@ -734,6 +735,16 @@ If there is no useful lesson, return {"kind":"none","content":""}."""
         if not isinstance(out, dict) or out.get("kind") in (None, "none", "") or not out.get("content"):
             return {}
         return out
+
+
+def _lang_instruction(language: str) -> str:
+    """The one place that defines how each output-language choice is phrased to the model.
+    ar = formal simplified Arabic · en = English · masri = Egyptian colloquial (عامية مصرية)."""
+    if language == "en":
+        return "Write in professional English."
+    if language == "masri":
+        return "اكتب بالعامية المصرية الدارجة (اللهجة المصرية) بأسلوب ودّي واحترافي، وليس بالفصحى."
+    return "اكتب بالعربية الفصحى المبسّطة المناسبة للأعمال في مصر."
 
 
 def tenant_context_str(profile: dict) -> str:

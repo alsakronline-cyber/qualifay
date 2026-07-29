@@ -48,14 +48,15 @@ async def _load_template(db, tenant_id, template_id):
 
 
 async def _tenant_ctx(db, tenant_id):
-    """Return (brand_context, autonomy) for a tenant — brand context is injected into AI
-    copy so it's on-brand; autonomy gates whether the system sends on its own."""
+    """Return (brand_context, autonomy, ai_language) for a tenant — brand context is injected
+    into AI copy so it's on-brand; autonomy gates whether the system sends on its own;
+    ai_language is the language the AI should write in (ar | en | masri)."""
     from app.models.models import Tenant
     from app.services.ai_service import tenant_context_str
     from sqlalchemy import select
     t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
     if not t:
-        return "", "copilot"
+        return "", "copilot", "ar"
     brand = tenant_context_str(t.tenant_profile or {})
     # Fold in what we've learned about this tenant's market (adaptive memory).
     try:
@@ -65,7 +66,7 @@ async def _tenant_ctx(db, tenant_id):
             brand = (brand + "\n\n" + mem) if brand else mem
     except Exception:
         pass
-    return brand, (t.autonomy or "copilot")
+    return brand, (t.autonomy or "copilot"), (t.ai_language or "ar")
 
 
 async def _supervise_send(db, tenant_id, text, autonomy, brand, first_contact=False):
@@ -190,21 +191,16 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
                 from app.services.template_render import render_for_lead
                 message_text = render_for_lead(template.body, lead)
             else:
-                _brand, _ = await _tenant_ctx(db, lead.tenant_id)
+                _brand, _, _ai_lang = await _tenant_ctx(db, lead.tenant_id)
+                # Generate directly in the tenant's chosen output language — no separate
+                # translation pass needed.
                 message_text = await ai_service.write_aida_message({
                     "name": lead.name, "company": lead.company, "industry": lead.industry,
                     "city": lead.city, "language": lead.language,
-                }, context=_brand)
-
-        # Step 4: Translate if Arabic (templates/AB variants/approved drafts are already in-language).
-        if not template and not ab_used and lead.language == "ar" and message_text:
-            # Check if already Arabic
-            arabic_chars = sum(1 for c in message_text if "؀" <= c <= "ۿ")
-            if arabic_chars < len(message_text) * 0.3:
-                message_text = await ai_service.translate_arabic(message_text, direction="en_to_ar")
+                }, context=_brand, language=_ai_lang)
 
         # Step 4b: Supervisor gate — first-contact anti-ban + (full autopilot) brand check.
-        _brand2, _autonomy2 = await _tenant_ctx(db, lead.tenant_id)
+        _brand2, _autonomy2, _ = await _tenant_ctx(db, lead.tenant_id)
         ok, message_text, _reason = await _supervise_send(
             db, lead.tenant_id, message_text, _autonomy2, _brand2, first_contact=True)
         if not ok:
@@ -322,16 +318,12 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
         body = render_for_lead(template.body, lead)
         subject = render_for_lead(template.subject or "", lead) or _default_subject
     else:
-        _brand, _ = await _tenant_ctx(db, lead.tenant_id)
+        _brand, _, _ai_lang = await _tenant_ctx(db, lead.tenant_id)
         body = await ai_service.write_aida_message({
             "name": lead.name, "company": lead.company, "industry": lead.industry,
             "city": lead.city, "language": lead.language,
-        }, context=_brand)
-        if lead.language == "ar" and body:
-            arabic = sum(1 for c in body if "؀" <= c <= "ۿ")
-            if arabic < len(body) * 0.3:
-                body = await ai_service.translate_arabic(body, direction="en_to_ar")
-        subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
+        }, context=_brand, language=_ai_lang)
+        subject = "بخصوص التعاون معكم" if _ai_lang in ("ar", "masri") else f"Quick note for {lead.company or lead.name or 'you'}"
 
     try:
         if account:
@@ -544,7 +536,7 @@ async def _handle_inbound_message(webhook_data: dict):
 
         # Step 9: Queue AI reply if enabled — but never auto-reply in 'manual' autonomy
         # (the owner handles all conversations themselves).
-        _, _autonomy = await _tenant_ctx(db, conv.tenant_id)
+        _, _autonomy, _ = await _tenant_ctx(db, conv.tenant_id)
         if conv.ai_enabled and _autonomy != "manual" and not intent_data.get("requires_human", True):
             send_ai_reply.apply_async(
                 args=[
@@ -640,12 +632,14 @@ async def _send_ai_reply(
 
         # Brand context so the reply sounds like this business (on-brand).
         conv = (await db.execute(select(Conversation).where(Conversation.id == conversation_id))).scalar_one_or_none()
-        _brand, _autonomy = ("", "copilot")
+        _brand, _autonomy, _ai_lang = ("", "copilot", "ar")
         if conv:
-            _brand, _autonomy = await _tenant_ctx(db, conv.tenant_id)
+            _brand, _autonomy, _ai_lang = await _tenant_ctx(db, conv.tenant_id)
 
-        # Generate reply
-        reply = await ai_service.generate_wa_reply(message, contact_name, history, language, tenant_context=_brand)
+        # Generate reply — the tenant's chosen output language wins over the auto-detected
+        # one, unless they left it on the default (then match the customer via `language`).
+        reply_lang = _ai_lang if _ai_lang in ("ar", "en", "masri") else language
+        reply = await ai_service.generate_wa_reply(message, contact_name, history, reply_lang, tenant_context=_brand)
         if not reply:
             logger.warning(f"AI returned empty reply for conversation {conversation_id}")
             return {"sent": False, "reason": "empty_reply"}

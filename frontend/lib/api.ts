@@ -295,6 +295,9 @@ export const onboardingApi = {
   profile: () => API.get('/v1/onboarding/profile'),
   updateProfile: (profile: Record<string, unknown>) => API.patch('/v1/onboarding/profile', { profile }),
   reset: () => API.post('/v1/onboarding/reset', {}),
+  getLanguage: () => API.get('/v1/onboarding/language'),
+  setLanguage: (ai_language: string, ui_language?: string) =>
+    API.post('/v1/onboarding/language', { ai_language, ui_language }),
   chat: (messages: { role: string; content: string }[]) => API.post('/v1/onboarding/chat', { messages }),
   build: () => API.post('/v1/onboarding/build', {}),
   setAutonomy: (level: string) => API.post('/v1/onboarding/autonomy', { level }),

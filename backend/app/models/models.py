@@ -103,7 +103,12 @@ class Tenant(Base):
     slug = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
     plan = Column(SAEnum(Plan), default=Plan.trial, nullable=False)
+    # UI language / direction: "ar" (RTL Arabic) | "en" (LTR English).
     language = Column(String, default="ar")
+    # Language the AI GENERATES outreach/replies in: "ar" (فصحى) | "en" | "masri" (عامية مصرية).
+    # Kept separate from `language` so a user can run an Arabic UI but message leads in
+    # Egyptian colloquial, or an English UI while still writing Arabic copy.
+    ai_language = Column(String, default="ar")
     trial_ends_at = Column(DateTime, nullable=True)
     auto_approve = Column(Boolean, default=False)
     min_bant_score = Column(Integer, default=50)
