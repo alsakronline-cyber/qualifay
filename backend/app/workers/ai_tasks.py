@@ -96,15 +96,11 @@ async def _generate_greeting_draft(lead, tenant):
     what would go out. Best-effort: any failure just leaves the lead with no draft."""
     from app.services.ai_service import ai_service, tenant_context_str
     brand = tenant_context_str(tenant.tenant_profile or {})
-    text = await ai_service.write_aida_message({
+    # Draft in the tenant's chosen output language (ar فصحى | en | masri عامية).
+    return await ai_service.write_aida_message({
         "name": lead.name, "company": lead.company, "industry": lead.industry,
         "city": lead.city, "language": lead.language,
-    }, context=brand)
-    if text and lead.language == "ar":
-        arabic = sum(1 for c in text if "؀" <= c <= "ۿ")
-        if arabic < len(text) * 0.3:
-            text = await ai_service.translate_arabic(text, direction="en_to_ar")
-    return text
+    }, context=brand, language=(tenant.ai_language or "ar"))
 
 
 async def _find_duplicate(db, lead):

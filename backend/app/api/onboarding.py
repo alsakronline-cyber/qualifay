@@ -80,6 +80,42 @@ async def update_profile(body: ProfileUpdate, current_user: dict = Depends(get_c
     return {"profile": _public_profile(prof)}
 
 
+UI_LANGS = ("ar", "en")
+AI_LANGS = ("ar", "en", "masri")
+
+
+class LanguageIn(BaseModel):
+    # One user-facing choice drives both. "masri" keeps the UI Arabic (RTL) but makes the
+    # AI write in Egyptian colloquial.
+    ai_language: str          # ar | en | masri
+    ui_language: Optional[str] = None   # ar | en; derived from ai_language when omitted
+
+
+@router.get("/language", summary="Get the tenant's UI + AI output language")
+async def get_language(current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    t = await _tenant(current_user["tenant_id"], db)
+    return {"ui_language": t.language or "ar", "ai_language": t.ai_language or "ar"}
+
+
+@router.post("/language", summary="Set the tenant's UI + AI output language")
+async def set_language(body: LanguageIn, current_user: dict = Depends(get_current_user),
+                       db: AsyncSession = Depends(get_db)):
+    """Choose the language the system UI shows and the language the AI writes messages in.
+    AI: ar (فصحى) | en (English) | masri (عامية مصرية). UI: ar (RTL) | en (LTR) — colloquial
+    uses the Arabic UI."""
+    require_admin(current_user)
+    if body.ai_language not in AI_LANGS:
+        raise HTTPException(status_code=400, detail=f"ai_language must be one of {AI_LANGS}")
+    ui = body.ui_language or ("en" if body.ai_language == "en" else "ar")
+    if ui not in UI_LANGS:
+        raise HTTPException(status_code=400, detail=f"ui_language must be one of {UI_LANGS}")
+    t = await _tenant(current_user["tenant_id"], db)
+    t.ai_language = body.ai_language
+    t.language = ui
+    await db.commit()
+    return {"ui_language": t.language, "ai_language": t.ai_language}
+
+
 @router.post("/reset", summary="Start the AI setup over from scratch")
 async def reset_onboarding(current_user: dict = Depends(get_current_user),
                            db: AsyncSession = Depends(get_db)):

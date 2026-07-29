@@ -4,9 +4,71 @@ import { useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles } from 'lucide-react'
+import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles, Languages } from 'lucide-react'
 import { authApi, agentApi, emailApi, onboardingApi } from '@/lib/api'
 import type { AuthUser } from '@/lib/types'
+import { useLang, type AiLang, type UiLang } from '@/lib/i18n'
+
+function LanguagePanel() {
+  const { t, lang, aiLang, setLang } = useLang()
+  const [choice, setChoice] = useState<AiLang>(aiLang)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { setChoice(aiLang) }, [aiLang])
+
+  // One user choice sets both: colloquial keeps the Arabic (RTL) UI but writes عامية.
+  const options: { value: AiLang; label: string }[] = [
+    { value: 'ar', label: t('lang.ar') },
+    { value: 'en', label: t('lang.en') },
+    { value: 'masri', label: t('lang.masri') },
+  ]
+
+  async function save() {
+    setSaving(true)
+    try {
+      const ui: UiLang = choice === 'en' ? 'en' : 'ar'
+      await onboardingApi.setLanguage(choice, ui)
+      setLang(ui, choice)
+      toast.success(t('lang.saved'))
+    } catch { toast.error('!') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Languages size={18} className="text-gold-primary" />
+        <h2 className="text-base font-semibold text-white font-cairo">{t('lang.title')}</h2>
+      </div>
+      <p className="text-xs text-gray-500 font-cairo -mt-2">{t('lang.desc')}</p>
+      <div>
+        <label className="block text-sm text-gray-300 font-cairo mb-2">{t('lang.ai')}</label>
+        <div className="grid grid-cols-3 gap-2">
+          {options.map((o) => (
+            <button
+              key={o.value} onClick={() => setChoice(o.value)}
+              className={clsx(
+                'rounded-lg border py-2.5 text-sm font-semibold transition-colors font-cairo',
+                choice === o.value
+                  ? 'border-gold-primary bg-gold-primary/10 text-gold-primary'
+                  : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600'
+              )}
+            >{o.label}</button>
+          ))}
+        </div>
+        <p className="text-[11px] text-gray-500 font-cairo mt-2">
+          {t('lang.ui')}: {choice === 'en' ? t('lang.en') : t('lang.ar')}
+        </p>
+      </div>
+      <button
+        onClick={save} disabled={saving || choice === aiLang}
+        className="flex items-center gap-2 bg-gradient-to-r from-gold-primary to-gold-dark text-gray-950 font-semibold px-5 py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-all font-cairo text-sm"
+      >
+        {saving ? <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" /> : <Save size={15} />}
+        {t('lang.save')}
+      </button>
+    </div>
+  )
+}
 
 // The editable business-brief fields the AI collects during onboarding. `long` = textarea.
 const PROFILE_FIELDS: { key: string; label: string; long?: boolean; placeholder?: string }[] = [
@@ -401,6 +463,7 @@ function EmailPanel() {
 }
 
 export default function SettingsPage() {
+  const { t } = useLang()
   const { data: user } = useSWR<AuthUser>(
     'auth/me',
     () => authApi.me().then((r) => r.data)
@@ -412,14 +475,15 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">الإعدادات</h1>
-        <p className="text-gray-400 text-sm mt-1">Settings</p>
+        <h1 className="text-2xl font-bold text-white font-cairo">{t('settings.title')}</h1>
       </div>
 
+      <LanguagePanel />
+
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-        <h2 className="text-base font-semibold text-white font-cairo">معلومات الحساب</h2>
+        <h2 className="text-base font-semibold text-white font-cairo">{t('settings.account')}</h2>
         <div>
-          <label className="block text-sm text-gray-300 font-cairo mb-1.5">الاسم</label>
+          <label className="block text-sm text-gray-300 font-cairo mb-1.5">{t('settings.name')}</label>
           <input
             type="text"
             value={name}
@@ -428,7 +492,7 @@ export default function SettingsPage() {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-300 font-cairo mb-1.5">البريد الإلكتروني</label>
+          <label className="block text-sm text-gray-300 font-cairo mb-1.5">{t('settings.email')}</label>
           <input
             type="email"
             value={user?.email || ''}
@@ -438,7 +502,7 @@ export default function SettingsPage() {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-300 font-cairo mb-1.5">اسم المشروع</label>
+          <label className="block text-sm text-gray-300 font-cairo mb-1.5">{t('settings.project')}</label>
           <input
             type="text"
             value={user?.tenant?.name || ''}
@@ -461,7 +525,7 @@ export default function SettingsPage() {
           ) : (
             <Save size={15} />
           )}
-          حفظ التغييرات
+          {t('settings.save')}
         </button>
       </div>
 
@@ -469,16 +533,15 @@ export default function SettingsPage() {
 
       {/* Plan info */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
-        <h2 className="text-base font-semibold text-white font-cairo">الخطة الحالية</h2>
+        <h2 className="text-base font-semibold text-white font-cairo">{t('settings.plan')}</h2>
         <div className="flex items-center gap-3">
           <span className="text-2xl font-bold text-gold-primary capitalize">{user?.tenant?.plan || '—'}</span>
-          <span className="text-sm text-gray-500 font-cairo">خطتك الحالية</span>
         </div>
         <a
           href="/billing"
           className="inline-flex items-center text-sm text-gold-primary hover:text-gold-dark transition-colors font-cairo"
         >
-          ترقية الخطة ←
+          {t('settings.upgrade')}
         </a>
       </div>
 

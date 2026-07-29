@@ -41,6 +41,7 @@ import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
 import useSWR from 'swr'
 import ThemeToggle from '@/components/theme-toggle'
+import { LanguageProvider, useLang } from '@/lib/i18n'
 
 interface NavItem {
   href: string
@@ -94,9 +95,20 @@ function useAuth() {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Provide the language context to the whole dashboard, then render the shell (which
+  // consumes it). The provider must sit above the consumer, hence this thin wrapper.
+  return (
+    <LanguageProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </LanguageProvider>
+  )
+}
+
+function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useAuth()
+  const { lang } = useLang()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
@@ -268,8 +280,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   className={clsx(active ? 'text-gold-primary' : 'text-gray-400 group-hover:text-white')}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium font-cairo leading-none">{item.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{item.labelEn}</div>
+                  <div className="text-sm font-medium font-cairo leading-none">{lang === 'en' ? item.labelEn : item.label}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{lang === 'en' ? item.label : item.labelEn}</div>
                 </div>
                 {item.href === '/leads' && pendingCount > 0 && (
                   <span className="text-xs bg-gold-primary text-gray-950 font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
