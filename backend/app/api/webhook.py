@@ -382,7 +382,8 @@ async def email_unsubscribe(
     db: AsyncSession = Depends(get_db),
 ):
     """Unsubscribe a lead via JWT token from email footer."""
-    from jose import JWTError, jwt
+    import jwt
+    from jwt import PyJWTError as JWTError
     from app.models.models import Lead, LeadStatus
 
     try:
