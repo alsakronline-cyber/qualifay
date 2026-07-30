@@ -140,6 +140,15 @@ async def get_current_user(
     if not user:
         raise credentials_exception
 
+    # Re-check account state on every request, not just at login: a token minted before
+    # the account/company was suspended must stop working immediately, not linger until it
+    # expires. Mirrors the checks in login().
+    if getattr(user, "status", "active") != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
+    tnt = (await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))).scalar_one_or_none()
+    if tnt and getattr(tnt, "status", "active") == "suspended":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Company account is suspended")
+
     return {
         "user_id": user.id,
         "tenant_id": user.tenant_id,

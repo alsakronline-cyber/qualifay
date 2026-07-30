@@ -16,12 +16,7 @@ STALE_DAYS = 3          # a 'replied' lead untouched this long is going cold
 REVIEW_NUDGE_MIN = 1    # notify once this many leads await review
 
 
-def run_async(coro):
-    async def _wrapped():
-        from app.core.database import engine
-        await engine.dispose()
-        return await coro
-    return asyncio.run(_wrapped())
+from app.workers._loop import run_async
 
 
 @celery_app.task(name="orchestrator.run")

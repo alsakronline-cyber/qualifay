@@ -8,21 +8,12 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
+from app.workers._loop import run_async as _run_async
+
+
 def run_async(coro):
-    # Dispose the shared async DB engine pool first: each Celery task runs in a new
-    # event loop, and pooled asyncpg connections bound to a prior (closed) loop cause
-    # "Future attached to a different loop" errors. Isolated to the Celery process.
-    async def _wrapped():
-        from app.core.database import engine
-        await engine.dispose()
-        # Rebuild AI SDK clients so their httpx pools bind to THIS loop, not a closed one.
-        try:
-            from app.services.ai_service import ai_service
-            ai_service.reset()
-        except Exception:
-            pass
-        return await coro
-    return asyncio.run(_wrapped())
+    # These tasks call the AI service, so rebuild its SDK clients for the fresh loop.
+    return _run_async(coro, reset_ai=True)
 
 
 @celery_app.task(bind=True, max_retries=2, queue="outreach")

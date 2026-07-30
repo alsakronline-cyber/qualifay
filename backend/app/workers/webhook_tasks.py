@@ -46,12 +46,7 @@ def assert_safe_url(url: str):
             raise UnsafeWebhookURL(f"host resolves to a non-public address ({ip})")
 
 
-def run_async(coro):
-    async def _wrapped():
-        from app.core.database import engine
-        await engine.dispose()
-        return await coro
-    return asyncio.run(_wrapped())
+from app.workers._loop import run_async
 
 
 def _subscribed(events, event: str) -> bool:

@@ -6,12 +6,7 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
-def run_async(coro):
-    async def _wrapped():
-        from app.core.database import engine
-        await engine.dispose()
-        return await coro
-    return asyncio.run(_wrapped())
+from app.workers._loop import run_async
 
 
 @celery_app.task(name="poll_inbound_email", queue="default")
