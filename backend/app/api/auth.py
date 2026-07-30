@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from jose import JWTError, jwt
+# PyJWT (actively maintained) replaces python-jose, which dragged in the ecdsa (unfixable
+# Minerva CVE) and pyasn1 advisory chains. HS256 + same secret/claims → existing tokens
+# stay valid. JWTError is aliased to PyJWT's base error so existing handlers are unchanged.
+import jwt
+from jwt import PyJWTError as JWTError
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from typing import Optional
