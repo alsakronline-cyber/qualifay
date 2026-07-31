@@ -10,8 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.api.auth import get_current_user, require_admin
 from app.services.ai_service import ai_service
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _start_auto_scraping(db, tenant):
+    """Kick off zero-touch scraping the moment onboarding completes — best-effort so a hiccup
+    here never blocks the user from finishing setup."""
+    try:
+        from app.api.scrape import activate_growth_defaults
+        await activate_growth_defaults(db, tenant)
+    except Exception as e:
+        logger.warning("auto-scraping activation failed for tenant %s: %s", tenant.id, e)
 
 AUTONOMY_LEVELS = ("full", "copilot", "manual", "off")
 
@@ -177,6 +189,7 @@ async def skip_onboarding(current_user: dict = Depends(get_current_user), db: As
     t = await _tenant(current_user["tenant_id"], db)
     t.onboarding_done = True
     await db.commit()
+    await _start_auto_scraping(db, t)
     return {"onboarding_done": True}
 
 
@@ -287,4 +300,5 @@ async def apply(body: ApplyIn, current_user: dict = Depends(get_current_user), d
     t.onboarding_done = True
 
     await db.commit()
+    await _start_auto_scraping(db, t)
     return {"applied": True, "created": created, "autonomy": t.autonomy}
