@@ -509,32 +509,32 @@ async def get_growth(db: AsyncSession = Depends(get_db), current_user=Depends(ge
     return await _growth_summary(db, current_user)
 
 
-@router.post("/growth", summary="Set up scheduled scraping from the profile + plan limit")
-async def setup_growth(body: GrowthSetup, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    from app.api.auth import require_admin
-    from app.models.models import ScrapeSchedule, Tenant, LeadSource
-    from app.services.platform_config import get_plan_limit
-    require_admin(current_user)
-    tid = current_user["tenant_id"]
-    t = (await db.execute(select(Tenant).where(Tenant.id == tid))).scalar_one_or_none()
-    chosen = [s for s in body.sources if s in GROWTH_SOURCES]
-    if not chosen:
-        raise HTTPException(status_code=400, detail="اختر مصدراً واحداً على الأقل")
+# Keyless, ban-safe server-side sources enabled automatically at signup (no per-tenant API
+# key needed). LinkedIn/Facebook/enrichment/competitor_ads stay off until their keys or the
+# browser extension are set up.
+DEFAULT_AUTO_SOURCES = ["google_maps", "apollo", "directories", "tender"]
 
-    profile = (t.tenant_profile or {}) if t else {}
+
+async def apply_growth(db, tenant, chosen, hour_cairo: int = 9, disable_unchosen: bool = False):
+    """Create/enable ScrapeSchedules for `chosen` sources, sized from the plan's monthly
+    limit and seeded from the tenant profile (industry/cities). Idempotent. Shared by the
+    manual /growth endpoint and the automatic onboarding activation. Returns chosen list."""
+    from app.models.models import ScrapeSchedule, LeadSource
+    from app.services.platform_config import get_plan_limit
+    chosen = [s for s in chosen if s in GROWTH_SOURCES]
+    if not chosen:
+        return []
+    profile = (tenant.tenant_profile or {}) if tenant else {}
     industry = profile.get("industry") or ""
     cities = profile.get("cities") or profile.get("city") or ""
     if isinstance(cities, list):
         cities = cities[0] if cities else ""
-
-    plan = t.plan.value if t and t.plan else "trial"
+    plan = tenant.plan.value if tenant and tenant.plan else "trial"
     monthly_limit = await get_plan_limit(db, plan, "monthly_leads") or 5000
     per_source = max(monthly_limit // len(chosen), 30)   # split the monthly quota
     daily = max(per_source // 26, 5)                     # ~26 active days/mo, min 5/run
-
     existing = {s.source.value: s for s in (await db.execute(
-        select(ScrapeSchedule).where(ScrapeSchedule.tenant_id == tid))).scalars().all()}
-
+        select(ScrapeSchedule).where(ScrapeSchedule.tenant_id == tenant.id))).scalars().all()}
     for src in GROWTH_SOURCES:
         s = existing.get(src)
         if src in chosen:
@@ -546,14 +546,66 @@ async def setup_growth(body: GrowthSetup, db: AsyncSession = Depends(get_db), cu
                 cfg["location"] = cities
             if s:
                 s.enabled = True; s.config = cfg
-                s.hour_cairo = body.hour_cairo; s.monthly_cap = int(per_source)
+                s.hour_cairo = hour_cairo; s.monthly_cap = int(per_source)
             else:
                 db.add(ScrapeSchedule(
-                    tenant_id=tid, source=LeadSource(src), config=cfg,
-                    hour_cairo=body.hour_cairo, monthly_cap=int(per_source),
+                    tenant_id=tenant.id, source=LeadSource(src), config=cfg,
+                    hour_cairo=hour_cairo, monthly_cap=int(per_source),
                     enabled=True, monthly_count=0,
                 ))
-        elif s:
+        elif s and disable_unchosen:
             s.enabled = False   # turning a source off pauses its schedule (kept for history)
     await db.commit()
+    return chosen
+
+
+async def queue_default_linkedin_task(db, tenant):
+    """Auto-queue a recurring LinkedIn discovery task from the profile so the browser
+    extension has work to run unattended — the user never creates a task by hand. No-op if
+    one already exists or the profile has no industry yet."""
+    from app.models.models import AgentTask, AgentPlatform
+    profile = tenant.tenant_profile or {}
+    industry = (profile.get("industry") or "").strip()
+    if not industry:
+        return
+    cities = profile.get("cities") or profile.get("city") or ""
+    if isinstance(cities, list):
+        cities = cities[0] if cities else ""
+    exists = (await db.execute(select(func.count(AgentTask.id)).where(
+        AgentTask.tenant_id == tenant.id, AgentTask.type == "linkedin_search"))).scalar() or 0
+    if exists:
+        return
+    db.add(AgentTask(
+        tenant_id=tenant.id, platform=AgentPlatform.linkedin, type="linkedin_search",
+        params={"query": f"{industry} {cities}".strip(), "location": cities or "Egypt",
+                "max_results": 20},
+        status="pending", recurring=True, interval_minutes=720,   # twice a day
+    ))
+    await db.commit()
+
+
+async def activate_growth_defaults(db, tenant, hour_cairo: int = 9):
+    """Zero-touch scraping at signup: enable the keyless server-side sources and queue a
+    recurring LinkedIn task, so scraping starts without the user ever visiting /growth.
+    Never overrides a tenant that already configured Growth themselves."""
+    from app.models.models import ScrapeSchedule
+    if (getattr(tenant, "autonomy", "") or "") == "off":
+        return   # automation paused by the user — don't auto-start scraping
+    already = (await db.execute(select(func.count(ScrapeSchedule.id)).where(
+        ScrapeSchedule.tenant_id == tenant.id))).scalar() or 0
+    if not already:
+        await apply_growth(db, tenant, DEFAULT_AUTO_SOURCES, hour_cairo)
+    await queue_default_linkedin_task(db, tenant)
+
+
+@router.post("/growth", summary="Set up scheduled scraping from the profile + plan limit")
+async def setup_growth(body: GrowthSetup, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    from app.api.auth import require_admin
+    from app.models.models import Tenant
+    require_admin(current_user)
+    t = (await db.execute(select(Tenant).where(Tenant.id == current_user["tenant_id"]))).scalar_one_or_none()
+    chosen = [s for s in body.sources if s in GROWTH_SOURCES]
+    if not chosen:
+        raise HTTPException(status_code=400, detail="اختر مصدراً واحداً على الأقل")
+    await apply_growth(db, t, chosen, body.hour_cairo, disable_unchosen=True)
     return await _growth_summary(db, current_user)
