@@ -59,19 +59,26 @@ class TendersScraper(BaseScraper):
         sources = config.get("sources", ["ungm", "ppo", "dgmarket"])
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
 
-        if "ungm" in sources:
-            async for lead in self._scrape_ungm(keywords, cutoff):
-                yield lead
-            await self.delay()
-
-        if "ppo" in sources:
-            async for lead in self._scrape_ppo(keywords, cutoff):
-                yield lead
-            await self.delay()
-
-        if "dgmarket" in sources:
-            async for lead in self._scrape_dgmarket(keywords, cutoff):
-                yield lead
+        # Each source is isolated: a slow/blocked/erroring feed (e.g. the PPO HTML portal
+        # hanging, or a malformed RSS) logs and is skipped rather than aborting the whole
+        # tender job and losing the other sources' results.
+        source_fns = {
+            "ungm": self._scrape_ungm,
+            "ppo": self._scrape_ppo,
+            "dgmarket": self._scrape_dgmarket,
+        }
+        for i, key in enumerate(["ungm", "ppo", "dgmarket"]):
+            if key not in sources:
+                continue
+            try:
+                async for lead in source_fns[key](keywords, cutoff):
+                    yield lead
+            except BlockedError as e:
+                logger.warning(f"tender source '{key}' blocked: {e}")
+            except Exception as e:
+                logger.warning(f"tender source '{key}' failed: {e}")
+            if i < 2:
+                await self.delay()
 
     # ──────────────────────────────────────────────
     # UNGM — RSS feed
@@ -85,7 +92,7 @@ class TendersScraper(BaseScraper):
             "Accept": "application/rss+xml,application/xml,text/xml,*/*",
         }
 
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=30) as client:
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15) as client:
             for attempt in range(self.max_retries):
                 try:
                     resp = await client.get(rss_url)
@@ -174,9 +181,10 @@ class TendersScraper(BaseScraper):
         if keywords:
             params["TenderSubject"] = keywords[0]
 
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=30) as client:
+        MAX_PPO_PAGES = 10   # safety cap so a slow/looping portal can't run unbounded
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15) as client:
             page = 1
-            while True:
+            while page <= MAX_PPO_PAGES:
                 params["pageIndex"] = page
                 for attempt in range(self.max_retries):
                     try:
@@ -256,7 +264,7 @@ class TendersScraper(BaseScraper):
             "Accept": "application/rss+xml,application/xml,text/xml,*/*",
         }
 
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=30) as client:
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15) as client:
             for attempt in range(self.max_retries):
                 try:
                     resp = await client.get(rss_url)
