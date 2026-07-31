@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_MODEL_REASONING: str = "meta-llama/llama-3.3-70b-instruct:free"
     OPENROUTER_MODEL_FAST: str = "meta-llama/llama-3.3-70b-instruct"
+    # OpenRouter's free tier is no longer available on this account — every ":free" model
+    # returns 404 ("unavailable for free"). So OpenRouter is OFF by default and Groq (which
+    # works on the free tier) is primary for the fast + reasoning paths. Re-enable by setting
+    # OPENROUTER_ENABLED=true AND a valid (likely paid) model slug in the two vars above.
+    OPENROUTER_ENABLED: bool = False
 
     # Scraping
     GOOGLE_MAPS_API_KEY: str = ""

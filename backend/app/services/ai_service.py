@@ -46,54 +46,48 @@ class AIService:
             logger.warning(f"Groq failed: {e} — falling back to OpenRouter fast")
             return await self._or_fast(messages, max_tokens)
 
-    async def _or_reason(self, messages: list, max_tokens: int = 1024) -> str:
-        """Call OpenRouter DeepSeek-R1 reasoning model, fallback to fast on error."""
+    async def _groq_only(self, messages: list, max_tokens: int) -> str:
+        """Call Groq and return its text, or "" on failure. No cross-fallback — used as the
+        terminal provider so the fallback chains can't loop."""
         try:
-            resp = await self.openrouter.chat.completions.create(
-                model=settings.OPENROUTER_MODEL_REASONING,
+            resp = await self.groq.chat.completions.create(
+                model=settings.GROQ_MODEL_REALTIME,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=0.3,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
-            logger.warning(f"OR reasoning model failed: {e} — falling back to Groq")
+            logger.error(f"Groq call failed: {e}")
+            return ""
+
+    async def _or_reason(self, messages: list, max_tokens: int = 1024) -> str:
+        """Reasoning path. OpenRouter free tier is unavailable, so Groq is primary unless
+        OPENROUTER_ENABLED is set (then try OpenRouter first, Groq as fallback)."""
+        if settings.OPENROUTER_ENABLED:
             try:
-                resp = await self.groq.chat.completions.create(
-                    model=settings.GROQ_MODEL_REALTIME,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=0.3,
+                resp = await self.openrouter.chat.completions.create(
+                    model=settings.OPENROUTER_MODEL_REASONING,
+                    messages=messages, max_tokens=max_tokens, temperature=0.3,
                 )
                 return resp.choices[0].message.content.strip()
-            except Exception as e2:
-                logger.warning(f"Groq reasoning fallback failed: {e2} — trying OR fast")
-                return await self._or_fast(messages, max_tokens)
+            except Exception as e:
+                logger.warning(f"OR reasoning model failed: {e} — falling back to Groq")
+        return await self._groq_only(messages, max_tokens)
 
     async def _or_fast(self, messages: list, max_tokens: int = 512) -> str:
-        """Call OpenRouter Llama-3.3-70B fast model; fall back to Groq if the free tier
-        is rate-limited/unavailable, so callers get real output instead of a static stub."""
-        try:
-            resp = await self.openrouter.chat.completions.create(
-                model=settings.OPENROUTER_MODEL_FAST,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=0.3,
-            )
-            return resp.choices[0].message.content.strip()
-        except Exception as e:
-            logger.warning(f"OR fast model failed: {e} — falling back to Groq")
+        """Fast/batch path. OpenRouter free tier is unavailable, so Groq is primary unless
+        OPENROUTER_ENABLED is set (then try OpenRouter first, Groq as fallback)."""
+        if settings.OPENROUTER_ENABLED:
             try:
-                resp = await self.groq.chat.completions.create(
-                    model=settings.GROQ_MODEL_REALTIME,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=0.3,
+                resp = await self.openrouter.chat.completions.create(
+                    model=settings.OPENROUTER_MODEL_FAST,
+                    messages=messages, max_tokens=max_tokens, temperature=0.3,
                 )
                 return resp.choices[0].message.content.strip()
-            except Exception as e2:
-                logger.error(f"Groq fallback also failed: {e2}")
-                return ""
+            except Exception as e:
+                logger.warning(f"OR fast model failed: {e} — falling back to Groq")
+        return await self._groq_only(messages, max_tokens)
 
     def _parse_json(self, text: str, fallback: dict) -> dict:
         """Parse JSON from LLM response, stripping markdown fences. Returns fallback on failure."""
