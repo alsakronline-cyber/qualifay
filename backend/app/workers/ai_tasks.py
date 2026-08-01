@@ -599,6 +599,21 @@ async def _sync_wa_to_pipeline_async(tenant_id: str):
 
 # ─── Browser-extension agent ingest (LinkedIn contacts / Facebook buyer intent) ─────
 
+def _profile_extras(item: dict) -> dict:
+    """Rich LinkedIn profile fields the extension now captures (about/experience/education/
+    skills/location) — bounded and cleaned before persisting to a lead's raw_data."""
+    out = {}
+    for k in ("about", "location"):
+        v = item.get(k)
+        if v:
+            out[k] = str(v)[:2000]
+    for k in ("experience", "education", "skills"):
+        v = item.get(k)
+        if isinstance(v, list) and v:
+            out[k] = [str(x)[:300] for x in v[:25]]
+    return out
+
+
 @celery_app.task(name="ingest_agent_leads", queue="ai")
 def ingest_agent_leads(tenant_id: str, task_id: str, platform: str, items: list):
     """Background: turn what the browser extension scraped into qualified leads.
@@ -683,7 +698,14 @@ async def _ingest_agent_leads_async(tenant_id: str, task_id: str, platform: str,
                         if email and not lead.email:
                             lead.email = email
                             gained_contact = True
-                        lead.ai_notes = ((lead.ai_notes or "").strip() + " [contact info enriched via extension]").strip()
+                        extras = _profile_extras(item)
+                        if extras:
+                            raw = dict(lead.raw_data or {})
+                            raw.update(extras)
+                            lead.raw_data = raw
+                        if item.get("title") and not lead.industry:
+                            lead.industry = item["title"]
+                        lead.ai_notes = ((lead.ai_notes or "").strip() + " [profile enriched via extension]").strip()
                         await db.commit()
                         created += 1
                         if gained_contact:
@@ -699,8 +721,9 @@ async def _ingest_agent_leads_async(tenant_id: str, task_id: str, platform: str,
                         new_lead = Lead(
                             tenant_id=tenant_id, source=LeadSource.linkedin,
                             name=name, company=item.get("company"), industry=item.get("title"),
+                            city=item.get("location"),
                             phone=phone, email=email, linkedin_url=url, stage=LeadStage.new,
-                            raw_data={"via": "browser_extension"},
+                            raw_data={"via": "browser_extension", **_profile_extras(item)},
                         )
                         db.add(new_lead)
                         await db.commit()

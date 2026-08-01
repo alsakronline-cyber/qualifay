@@ -72,9 +72,15 @@
       name: result.name,
       title: result.title || null,
       company: result.company || null,
+      location: result.location || null,
       phone: (result.phones && result.phones[0]) || null,
       email: (result.emails && result.emails[0]) || null,
       url: result.profileUrl || null,
+      // Rich profile data (safe, from the user's own session).
+      about: result.about || null,
+      experience: result.experience || [],
+      education: result.education || [],
+      skills: result.skills || [],
     }];
   }
 

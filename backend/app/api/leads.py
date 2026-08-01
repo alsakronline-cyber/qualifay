@@ -94,6 +94,9 @@ def _lead_dict(lead: Lead) -> dict:
         "ai_notes": lead.ai_notes,
         "verified_real": getattr(lead, "verified_real", None),
         "draft_message": (lead.raw_data or {}).get("draft_message") if lead.raw_data else None,
+        "profile": {k: (lead.raw_data or {}).get(k)
+                    for k in ("about", "experience", "education", "skills")
+                    if (lead.raw_data or {}).get(k)} or None,
         "notes": (lead.raw_data or {}).get("notes") if lead.raw_data else None,
         "last_contacted_at": lead.last_contacted_at.isoformat() if getattr(lead, "last_contacted_at", None) else None,
         "created_at": lead.created_at.isoformat() if lead.created_at else None,
