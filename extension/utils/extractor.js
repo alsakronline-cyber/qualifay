@@ -37,6 +37,42 @@ window.LeadListExtractor = (() => {
     return el ? (el.innerText || el.textContent || '').trim() : '';
   }
 
+  // ── Rich profile sections (experience / education / skills / about) ──────────
+  // LinkedIn's profile sections are anchored by a stable id ("experience", "education",
+  // "skills", "about") inside an <section>; the surrounding CSS classes rotate but the
+  // anchor id doesn't, so we navigate from the id to its section. Text is duplicated for
+  // screen readers, with the VISIBLE copy in span[aria-hidden="true"] — we read those and
+  // dedupe, which sidesteps both the class churn and the a11y duplication.
+  function llSectionEl(anchorId) {
+    const a = document.getElementById(anchorId);
+    return a ? a.closest('section') : null;
+  }
+  function llVisibleLines(el, max) {
+    const out = [], seen = new Set();
+    el.querySelectorAll('span[aria-hidden="true"]').forEach((s) => {
+      const t = (s.innerText || s.textContent || '').trim();
+      if (t && !seen.has(t) && out.length < max) { seen.add(t); out.push(t); }
+    });
+    return out;
+  }
+  function sectionBlob(anchorId, maxLen) {
+    const sec = llSectionEl(anchorId);
+    return sec ? llVisibleLines(sec, 60).join(' ').slice(0, maxLen).trim() : '';
+  }
+  function sectionListItems(anchorId, maxItems, linesPerItem) {
+    const sec = llSectionEl(anchorId);
+    if (!sec) return [];
+    let lis = sec.querySelectorAll('li.artdeco-list__item, li.pvs-list__paged-list-item');
+    if (!lis.length) lis = sec.querySelectorAll('ul > li');
+    const n = linesPerItem || 3, items = [];
+    for (const li of lis) {
+      const lines = llVisibleLines(li, n);
+      if (lines.length) items.push(lines.slice(0, n).join(' — '));
+      if (items.length >= maxItems) break;
+    }
+    return items;
+  }
+
   function extractProfileData() {
     const data = {
       name: '',
@@ -142,6 +178,13 @@ window.LeadListExtractor = (() => {
     const pageText = getPageText();
     data.emails = extractEmails(pageText);
     data.phones = extractPhones(pageText);
+
+    // Rich sections — the same fields the server-side scraper libraries pull, captured here
+    // safely from the user's own logged-in session (no bans, no stored credentials).
+    data.about = sectionBlob('about', 1500);
+    data.experience = sectionListItems('experience', 6, 3);
+    data.education = sectionListItems('education', 4, 2);
+    data.skills = sectionListItems('skills', 25, 1).map((s) => s.split(' — ')[0]);
 
     return data;
   }
