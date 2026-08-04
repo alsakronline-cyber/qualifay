@@ -533,6 +533,17 @@ async def apply_growth(db, tenant, chosen, hour_cairo: int = 9, disable_unchosen
     monthly_limit = await get_plan_limit(db, plan, "monthly_leads") or 5000
     per_source = max(monthly_limit // len(chosen), 30)   # split the monthly quota
     daily = max(per_source // 26, 5)                     # ~26 active days/mo, min 5/run
+
+    # AI-expand the broad industry/region into concrete "<niche> in <city>" queries the
+    # scrapers can actually use (best-effort; a broad raw query finds almost nothing).
+    expanded = []
+    if industry:
+        try:
+            from app.services.ai_service import ai_service
+            expanded = await ai_service.expand_search_queries(industry, cities or "Egypt")
+        except Exception:
+            expanded = []
+
     existing = {s.source.value: s for s in (await db.execute(
         select(ScrapeSchedule).where(ScrapeSchedule.tenant_id == tenant.id))).scalars().all()}
     for src in GROWTH_SOURCES:
@@ -544,6 +555,8 @@ async def apply_growth(db, tenant, chosen, hour_cairo: int = 9, disable_unchosen
                 cfg["query"] = industry
             if cities:
                 cfg["location"] = cities
+            if expanded:
+                cfg["queries"] = expanded   # rotated daily by the beat (run_due_scrape_schedules)
             if s:
                 s.enabled = True; s.config = cfg
                 s.hour_cairo = hour_cairo; s.monthly_cap = int(per_source)
