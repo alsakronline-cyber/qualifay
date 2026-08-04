@@ -376,6 +376,11 @@ async def _run_due_scrape_schedules_async():
                 continue
 
             cfg = dict(sched.config or {})
+            # Rotate through AI-expanded concrete queries so each day targets a different
+            # niche/city instead of scraping the same broad term forever.
+            qs = cfg.get("queries")
+            if isinstance(qs, list) and qs:
+                cfg["query"] = qs[today.toordinal() % len(qs)]
             cfg["_schedule_id"] = sched.id  # so run_scrape_job can bump the counter
             job = ScrapeJob(
                 tenant_id=sched.tenant_id,
