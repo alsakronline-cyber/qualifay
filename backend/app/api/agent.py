@@ -77,6 +77,12 @@ class IngestItem(BaseModel):
     url: Optional[str] = None   # profile_url (LinkedIn) or post_url (Facebook)
     text: Optional[str] = None  # post text (Facebook) — used for AI intent classification
     location: Optional[str] = None
+    # Rich LinkedIn profile fields (extension v2.1.0+) — must be declared here or model_dump()
+    # in /ingest silently drops them before they reach the qualification pipeline.
+    about: Optional[str] = None
+    experience: Optional[List[str]] = None
+    education: Optional[List[str]] = None
+    skills: Optional[List[str]] = None
 
 
 class IngestRequest(BaseModel):
