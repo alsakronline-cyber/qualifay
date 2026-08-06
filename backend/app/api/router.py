@@ -26,6 +26,7 @@ from app.api import (
     onboarding,
     agent_runs,
     admin,
+    sales,
 )
 
 api_router = APIRouter()
@@ -53,3 +54,4 @@ api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaign
 api_router.include_router(onboarding.router, prefix="/onboarding", tags=["Onboarding"])
 api_router.include_router(agent_runs.router, prefix="/agent-runs", tags=["Agent Activity"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Platform Admin"])
+api_router.include_router(sales.router, prefix="/sales/docs", tags=["Sales Documents"])
