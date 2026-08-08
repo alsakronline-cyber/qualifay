@@ -437,6 +437,7 @@ export const salesApi = {
   update: (id: string, data: Record<string, unknown>) => API.put(`/v1/sales/docs/${id}`, data),
   remove: (id: string) => API.delete(`/v1/sales/docs/${id}`),
   convert: (id: string) => API.post(`/v1/sales/docs/${id}/convert`, {}),
+  pdf: (id: string) => API.get(`/v1/sales/docs/${id}/pdf`, { responseType: 'blob' }),
 }
 
 export default API

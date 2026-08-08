@@ -4,10 +4,11 @@ One model (SalesDoc + SalesDocLine) backs all four types; totals are computed se
 the numbers can never drift from the lines. `convert` creates the next document in the flow,
 copying the lines. Everything is tenant-scoped.
 """
+import html as _html
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -230,6 +231,104 @@ async def delete_doc(doc_id: str, current_user=Depends(get_current_user),
     await db.delete(d)
     await db.commit()
     return {"deleted": True, "id": doc_id}
+
+
+_PDF_TITLE = {"inquiry": ("INQUIRY", "طلب عرض سعر"), "quotation": ("QUOTATION", "عرض سعر"),
+              "sales_order": ("SALES ORDER", "أمر بيع"), "invoice": ("INVOICE", "فاتورة")}
+
+
+def _pdf_html(d: SalesDoc, seller: dict) -> str:
+    """Self-contained professional A4 HTML rendered to PDF by Chromium (mirrors /doc-print)."""
+    e = _html.escape
+    cur = d.currency or "EGP"
+    money = lambda n: f"{(n or 0):,.2f} {cur}"
+    dt = lambda x: x.strftime("%d/%m/%Y") if x else "—"
+    en, ar = _PDF_TITLE.get(d.doc_type.value, ("DOCUMENT", "مستند"))
+    due_label = {"quotation": "Valid Until", "invoice": "Due Date"}.get(d.doc_type.value, "Required Date")
+
+    seller_lines = "".join(f"<div>{e(v)}</div>" for v in [
+        seller.get("address"), " · ".join([x for x in [seller.get("phone"), seller.get("email")] if x]),
+        seller.get("website"), (f"Tax ID: {seller.get('tax_id')}" if seller.get("tax_id") else "")] if v)
+    cust_lines = "".join(f"<div>{e(v)}</div>" for v in [
+        (d.customer_name if d.customer_company and d.customer_name else ""),
+        d.customer_address, " · ".join([x for x in [d.customer_phone, d.customer_email] if x]),
+        (f"Tax ID: {d.customer_tax_id}" if d.customer_tax_id else "")] if v)
+    rows = "".join(
+        f"<tr><td>{e(ln.description or '')}</td><td class='r'>{ln.quantity:g}</td>"
+        f"<td class='r'>{money(ln.unit_price)}</td>"
+        f"<td class='r'>{(str(ln.discount_pct)+'%') if ln.discount_pct else '—'}</td>"
+        f"<td class='r'>{money(ln.line_total)}</td></tr>"
+        for ln in sorted(d.lines, key=lambda x: x.position or 0))
+    disc_row = (f"<tr><td class='muted'>Discount</td><td class='r'>− {money(d.discount_total)}</td></tr>"
+                if (d.discount_total or 0) > 0 else "")
+    notes = (f"<div style='margin-bottom:10px'><div class='muted' style='font-weight:700'>Notes</div>"
+             f"<div style='font-size:13px;white-space:pre-wrap'>{e(d.notes)}</div></div>") if d.notes else ""
+    terms = (f"<div><div class='muted' style='font-weight:700'>Terms &amp; Conditions</div>"
+             f"<div style='font-size:12px;white-space:pre-wrap;color:#374151'>{e(d.terms)}</div></div>") if d.terms else ""
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+      * {{ font-family:'Noto Sans Arabic','Noto Sans','Segoe UI',sans-serif; }}
+      body {{ color:#111827; margin:0; padding:24px; }}
+      .row {{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }}
+      .muted {{ color:#6b7280; font-size:12px; line-height:1.6; }}
+      table {{ width:100%; border-collapse:collapse; margin-top:10px; }}
+      th {{ background:#111827; color:#fff; font-size:12px; padding:9px 10px; text-align:left; }}
+      th.r,td.r {{ text-align:right; }}
+      td {{ padding:9px 10px; border-bottom:1px solid #e5e7eb; font-size:13px; }}
+      .tot td {{ border:none; padding:4px 10px; }}
+    </style></head><body>
+      <div class="row" style="border-bottom:2px solid #111827;padding-bottom:16px">
+        <div><div style="font-size:22px;font-weight:800">{e(seller.get('name') or '—')}</div>
+          <div class="muted" style="margin-top:4px">{seller_lines}</div></div>
+        <div style="text-align:right"><div style="font-size:26px;font-weight:800;letter-spacing:1px">{en}</div>
+          <div style="font-size:15px">{ar}</div>
+          <div class="muted" style="margin-top:8px"><div><b>No:</b> {e(d.number)}</div>
+          <div><b>Date:</b> {dt(d.issue_date)}</div>
+          {f'<div><b>{due_label}:</b> {dt(d.due_date)}</div>' if d.due_date else ''}</div></div>
+      </div>
+      <div style="margin-top:20px"><div class="muted" style="font-weight:700">BILL TO</div>
+        <div style="font-weight:700;font-size:15px">{e(d.customer_company or d.customer_name or '—')}</div>
+        <div class="muted">{cust_lines}</div></div>
+      <table><thead><tr><th style="width:48%">Description</th><th class="r">Qty</th>
+        <th class="r">Unit Price</th><th class="r">Disc%</th><th class="r">Amount</th></tr></thead>
+        <tbody>{rows}</tbody></table>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <table style="width:300px" class="tot"><tbody>
+          <tr><td class="muted">Subtotal</td><td class="r">{money(d.subtotal)}</td></tr>
+          {disc_row}
+          <tr><td class="muted">VAT ({d.tax_rate:g}%)</td><td class="r">{money(d.tax_total)}</td></tr>
+          <tr style="border-top:2px solid #111827"><td style="font-weight:800;font-size:15px;padding-top:8px">TOTAL</td>
+            <td class="r" style="font-weight:800;font-size:15px;padding-top:8px">{money(d.grand_total)}</td></tr>
+        </tbody></table></div>
+      <div style="margin-top:28px;border-top:1px solid #e5e7eb;padding-top:16px">{notes}{terms}</div>
+      <div style="text-align:center;margin-top:36px;font-size:11px;color:#9ca3af">Generated by Qualifay · {e(d.number)}</div>
+    </body></html>"""
+
+
+async def _html_to_pdf(html_str: str) -> bytes:
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(args=["--no-sandbox"])
+        try:
+            page = await browser.new_page()
+            await page.set_content(html_str, wait_until="networkidle")
+            return await page.pdf(format="A4", print_background=True,
+                                  margin={"top": "10mm", "bottom": "10mm", "left": "8mm", "right": "8mm"})
+        finally:
+            await browser.close()
+
+
+@router.get("/{doc_id}/pdf", summary="Download the document as a PDF")
+async def doc_pdf(doc_id: str, current_user=Depends(get_current_user),
+                  db: AsyncSession = Depends(get_db)):
+    tid = current_user["tenant_id"]
+    d = await _load(db, tid, doc_id)
+    seller = await _seller(db, tid)
+    try:
+        pdf = await _html_to_pdf(_pdf_html(d, seller))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{d.number}.pdf"'})
 
 
 @router.post("/{doc_id}/convert", summary="Convert to the next document in the flow")
