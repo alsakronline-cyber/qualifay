@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, Save, ArrowRightLeft, Printer, ArrowRight } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowRightLeft, Printer, ArrowRight, FileDown } from 'lucide-react'
 import { salesApi } from '@/lib/api'
 import { DOC_LABEL, STATUS_LABEL } from '../page'
 
@@ -103,6 +103,18 @@ export default function DocEditor() {
     catch { toast.error('فشل الحذف') }
   }
 
+  const [pdfing, setPdfing] = useState(false)
+  async function downloadPdf() {
+    setPdfing(true)
+    try {
+      const r = await salesApi.pdf(id)
+      const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url; a.download = `${number || 'document'}.pdf`; a.click()
+      URL.revokeObjectURL(url)
+    } catch { toast.error('فشل إنشاء PDF') } finally { setPdfing(false) }
+  }
+
   if (loading) return <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" /></div>
 
   const inp = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo'
@@ -114,8 +126,13 @@ export default function DocEditor() {
         <Link href="/documents" className="flex items-center gap-1 text-sm text-gray-400 hover:text-white font-cairo"><ArrowRight size={15} /> المستندات</Link>
         <div className="flex items-center gap-2 flex-wrap">
           {!isNew && (
+            <button onClick={downloadPdf} disabled={pdfing}
+              className="flex items-center gap-1.5 border border-gray-700 text-gray-200 hover:bg-gray-800 text-sm px-3 py-2 rounded-lg disabled:opacity-50 font-cairo">
+              {pdfing ? <span className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" /> : <FileDown size={15} />} تنزيل PDF</button>
+          )}
+          {!isNew && (
             <Link href={`/doc-print/${id}`} target="_blank"
-              className="flex items-center gap-1.5 border border-gray-700 text-gray-200 hover:bg-gray-800 text-sm px-3 py-2 rounded-lg font-cairo"><Printer size={15} /> طباعة / PDF</Link>
+              className="flex items-center gap-1.5 border border-gray-700 text-gray-200 hover:bg-gray-800 text-sm px-3 py-2 rounded-lg font-cairo"><Printer size={15} /> طباعة</Link>
           )}
           {!isNew && CONVERT_NEXT[form.doc_type] && (
             <button onClick={convert} className="flex items-center gap-1.5 border border-gold-primary/40 text-gold-primary hover:bg-gold-primary/10 text-sm px-3 py-2 rounded-lg font-cairo">
