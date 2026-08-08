@@ -430,4 +430,13 @@ export const monitoringApi = {
   runBackup: () => API.post('/v1/monitoring/backups/run', {}),
 }
 
+export const salesApi = {
+  list: (params?: { doc_type?: string; status?: string }) => API.get('/v1/sales/docs', { params }),
+  get: (id: string) => API.get(`/v1/sales/docs/${id}`),
+  create: (data: Record<string, unknown>) => API.post('/v1/sales/docs', data),
+  update: (id: string, data: Record<string, unknown>) => API.put(`/v1/sales/docs/${id}`, data),
+  remove: (id: string) => API.delete(`/v1/sales/docs/${id}`),
+  convert: (id: string) => API.post(`/v1/sales/docs/${id}/convert`, {}),
+}
+
 export default API

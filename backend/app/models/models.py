@@ -784,3 +784,80 @@ class PlatformSettings(Base):
     id = Column(String, primary_key=True, default="singleton")
     data = Column(JSON, default=dict)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+# ─── Sales documents (Inquiry → Quotation → Sales Order → Invoice) ────────────
+class SalesDocType(str, enum.Enum):
+    inquiry = "inquiry"
+    quotation = "quotation"
+    sales_order = "sales_order"
+    invoice = "invoice"
+
+
+class SalesDocStatus(str, enum.Enum):
+    draft = "draft"
+    sent = "sent"
+    accepted = "accepted"
+    rejected = "rejected"
+    paid = "paid"
+    cancelled = "cancelled"
+
+
+class SalesDoc(Base):
+    """One record covers all four document types (they share ~90% of fields). Converting a
+    quotation → order → invoice creates a new row copying the lines, linked via converted_from_id."""
+    __tablename__ = "sales_docs"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    doc_type = Column(SAEnum(SalesDocType), nullable=False, default=SalesDocType.quotation)
+    number = Column(String, nullable=False)          # e.g. QUO-2026-0001 (per tenant, per type)
+    status = Column(SAEnum(SalesDocStatus), default=SalesDocStatus.draft)
+
+    # Bill-to: link an existing lead OR type the customer details directly.
+    lead_id = Column(String, ForeignKey("leads.id"), nullable=True)
+    customer_name = Column(String, nullable=True)
+    customer_company = Column(String, nullable=True)
+    customer_email = Column(String, nullable=True)
+    customer_phone = Column(String, nullable=True)
+    customer_address = Column(Text, nullable=True)
+    customer_tax_id = Column(String, nullable=True)   # Egyptian Tax Registration No.
+
+    issue_date = Column(DateTime, default=func.now())
+    due_date = Column(DateTime, nullable=True)         # invoice due / quotation valid-until
+    currency = Column(String, default="EGP")
+
+    # Money (computed server-side from the lines and stored). Discount at the document level;
+    # per-line discount lives on the line. Egyptian VAT default 14%, editable per document.
+    discount_type = Column(String, default="amount")  # amount | percent
+    discount_value = Column(Float, default=0.0)
+    tax_rate = Column(Float, default=14.0)
+    subtotal = Column(Float, default=0.0)
+    discount_total = Column(Float, default=0.0)
+    tax_total = Column(Float, default=0.0)
+    grand_total = Column(Float, default=0.0)
+
+    notes = Column(Text, nullable=True)
+    terms = Column(Text, nullable=True)
+    converted_from_id = Column(String, ForeignKey("sales_docs.id"), nullable=True)
+
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    lines = relationship("SalesDocLine", back_populates="doc",
+                         cascade="all, delete-orphan", order_by="SalesDocLine.position")
+
+
+class SalesDocLine(Base):
+    __tablename__ = "sales_doc_lines"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    doc_id = Column(String, ForeignKey("sales_docs.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, default=0)
+    description = Column(Text, nullable=False)
+    quantity = Column(Float, default=1.0)
+    unit_price = Column(Float, default=0.0)
+    discount_pct = Column(Float, default=0.0)          # per-line discount %
+    line_total = Column(Float, default=0.0)            # qty * unit_price * (1 - discount_pct/100)
+
+    doc = relationship("SalesDoc", back_populates="lines")
