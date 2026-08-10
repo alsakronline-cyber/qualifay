@@ -19,6 +19,9 @@ kombu==5.4.0
 
 # Auth & Security
 PyJWT==2.10.1   # replaced python-jose (dropped ecdsa/pyasn1 advisory chains)
+# Explicit now: was pulled transitively by python-jose[cryptography]. app.core.crypto (Fernet)
+# uses it to decrypt stored SMTP passwords — dropping it broke all EmailAccount email sending.
+cryptography==43.0.3
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-dotenv==1.2.2
