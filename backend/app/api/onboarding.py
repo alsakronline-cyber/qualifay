@@ -67,6 +67,7 @@ EDITABLE_PROFILE_FIELDS = frozenset({
     "default_payment_terms", "default_terms",
     # Seller header fields shown on printed documents.
     "tax_id", "address", "phone", "email",
+    "logo",   # company logo (data URI) shown on documents/PDFs
 })
 
 

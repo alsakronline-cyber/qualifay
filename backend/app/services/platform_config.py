@@ -6,8 +6,8 @@ from sqlalchemy import select
 # A limit of 0 means "unlimited".
 DEFAULT_CONFIG = {
     "plan_limits": {
-        "trial":   {"wa_instances": 1, "monthly_leads": 500},
-        "starter": {"wa_instances": 1, "monthly_leads": 500},
+        "trial":   {"wa_instances": 3, "monthly_leads": 500},
+        "starter": {"wa_instances": 3, "monthly_leads": 500},
         "growth":  {"wa_instances": 3, "monthly_leads": 5000},
         "agency":  {"wa_instances": 0, "monthly_leads": 0},
     },

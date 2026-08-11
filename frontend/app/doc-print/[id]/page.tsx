@@ -12,7 +12,7 @@ const DOC_TITLE: Record<string, { ar: string; en: string }> = {
   invoice: { ar: 'فاتورة', en: 'INVOICE' },
 }
 interface Line { description: string; quantity: number; unit_price: number; discount_pct: number; line_total: number }
-interface Seller { name: string; address?: string; phone?: string; email?: string; website?: string; tax_id?: string }
+interface Seller { name: string; address?: string; phone?: string; email?: string; website?: string; tax_id?: string; logo?: string }
 interface Doc {
   doc_type: string; number: string; status: string; currency: string
   customer_name?: string; customer_company?: string; customer_email?: string; customer_phone?: string
@@ -67,6 +67,10 @@ export default function DocPrint() {
         {/* Header: seller + doc title */}
         <div className="row" style={{ borderBottom: '2px solid #111827', paddingBottom: 16 }}>
           <div>
+            {s.logo && s.logo.startsWith('data:image/') && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.logo} alt="logo" style={{ maxHeight: 64, maxWidth: 220, marginBottom: 8 }} />
+            )}
             <div style={{ fontSize: 22, fontWeight: 800 }}>{s.name || '—'}</div>
             <div className="muted" style={{ marginTop: 4, lineHeight: 1.6 }}>
               {s.address && <div>{s.address}</div>}

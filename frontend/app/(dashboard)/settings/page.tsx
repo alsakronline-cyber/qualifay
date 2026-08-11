@@ -4,10 +4,79 @@ import { useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles, Languages } from 'lucide-react'
+import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles, Languages, ImagePlus } from 'lucide-react'
 import { authApi, agentApi, emailApi, onboardingApi } from '@/lib/api'
 import type { AuthUser } from '@/lib/types'
 import { useLang, type AiLang, type UiLang } from '@/lib/i18n'
+
+// Downscale an uploaded image to a compact PNG data URI (keeps the profile JSON small).
+function downscaleToDataUri(file: File, maxW = 240): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = () => {
+      const img = new window.Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.width)
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/png'))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function LogoPanel() {
+  const { data, mutate } = useSWR('onboarding/logo', () => onboardingApi.profile().then((r) => r.data))
+  const [saving, setSaving] = useState(false)
+  const logo: string | undefined = data?.profile?.logo
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast.error('اختر ملف صورة'); return }
+    setSaving(true)
+    try {
+      const uri = await downscaleToDataUri(file, 240)
+      await onboardingApi.updateProfile({ logo: uri })
+      toast.success('تم حفظ الشعار')
+      mutate()
+    } catch { toast.error('فشل رفع الشعار') } finally { setSaving(false); e.target.value = '' }
+  }
+  async function removeLogo() {
+    setSaving(true)
+    try { await onboardingApi.updateProfile({ logo: '' }); toast.success('تم حذف الشعار'); mutate() }
+    catch { toast.error('فشل') } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <ImagePlus size={18} className="text-gold-primary" />
+        <h2 className="text-base font-semibold text-white font-cairo">شعار الشركة</h2>
+      </div>
+      <p className="text-xs text-gray-500 font-cairo -mt-2">يظهر أعلى المستندات (عروض الأسعار والفواتير).</p>
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="w-40 h-20 rounded-lg border border-gray-700 bg-gray-800 flex items-center justify-center overflow-hidden">
+          {logo && logo.startsWith('data:image/')
+            ? <img src={logo} alt="logo" className="max-h-20 max-w-40 object-contain" />
+            : <span className="text-xs text-gray-500 font-cairo">لا يوجد شعار</span>}
+        </div>
+        <label className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white text-sm px-4 py-2 rounded-lg cursor-pointer font-cairo">
+          {saving ? <span className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" /> : <ImagePlus size={15} />}
+          رفع شعار
+          <input type="file" accept="image/*" onChange={onFile} disabled={saving} className="hidden" />
+        </label>
+        {logo && <button onClick={removeLogo} disabled={saving} className="flex items-center gap-1.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm px-3 py-2 rounded-lg disabled:opacity-50 font-cairo"><Trash2 size={14} /> حذف</button>}
+      </div>
+    </div>
+  )
+}
 
 function LanguagePanel() {
   const { t, lang, aiLang, setLang } = useLang()
@@ -536,6 +605,8 @@ export default function SettingsPage() {
           {t('settings.save')}
         </button>
       </div>
+
+      <LogoPanel />
 
       <CompanyProfilePanel />
 
