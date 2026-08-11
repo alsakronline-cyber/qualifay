@@ -63,6 +63,10 @@ EDITABLE_PROFILE_FIELDS = frozenset({
     "business_name", "industry", "sells", "value_prop", "ideal_customer",
     "pain_points", "price_range", "cities", "current_sources",
     "monthly_lead_target", "team_size", "tone", "website", "description",
+    # Document defaults — pre-fill every new sales document (editable per document).
+    "default_payment_terms", "default_terms",
+    # Seller header fields shown on printed documents.
+    "tax_id", "address", "phone", "email",
 })
 
 

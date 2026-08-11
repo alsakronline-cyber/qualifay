@@ -84,6 +84,14 @@ const PROFILE_FIELDS: { key: string; label: string; long?: boolean; placeholder?
   { key: 'team_size', label: 'حجم الفريق' },
   { key: 'tone', label: 'نبرة الرسائل', placeholder: 'ودّي / رسمي / مباشر…' },
   { key: 'website', label: 'الموقع الإلكتروني' },
+  // Shown as the seller header on printed documents / PDFs.
+  { key: 'address', label: 'عنوان الشركة (للمستندات)' },
+  { key: 'phone', label: 'هاتف الشركة (للمستندات)' },
+  { key: 'email', label: 'بريد الشركة (للمستندات)' },
+  { key: 'tax_id', label: 'الرقم الضريبي (للمستندات)' },
+  // Auto-fill every new sales document (editable per document).
+  { key: 'default_payment_terms', label: 'شروط الدفع الافتراضية', long: true, placeholder: 'مثال: الدفع خلال 30 يوماً' },
+  { key: 'default_terms', label: 'الشروط والأحكام الافتراضية', long: true },
 ]
 
 function CompanyProfilePanel() {

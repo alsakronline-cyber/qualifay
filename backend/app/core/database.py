@@ -71,6 +71,7 @@ _ENSURE_COLUMNS = [
     ("tenants", "status", "VARCHAR DEFAULT 'active'"),
     ("leads", "verified_real", "BOOLEAN"),
     ("tenants", "ai_language", "VARCHAR DEFAULT 'ar'"),
+    ("sales_docs", "payment_terms", "TEXT"),
 ]
 
 # Enum values added to native PG enums after they were first created. create_all()

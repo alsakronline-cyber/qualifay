@@ -18,7 +18,7 @@ interface Doc {
   customer_name?: string; customer_company?: string; customer_email?: string; customer_phone?: string
   customer_address?: string; customer_tax_id?: string; issue_date?: string; due_date?: string
   subtotal: number; discount_total: number; tax_rate: number; tax_total: number; grand_total: number
-  notes?: string; terms?: string; lines: Line[]; seller?: Seller
+  payment_terms?: string; notes?: string; terms?: string; lines: Line[]; seller?: Seller
 }
 
 export default function DocPrint() {
@@ -131,9 +131,10 @@ export default function DocPrint() {
           </table>
         </div>
 
-        {/* Notes + terms */}
-        {(doc.notes || doc.terms) && (
+        {/* Payment terms + notes + terms */}
+        {(doc.payment_terms || doc.notes || doc.terms) && (
           <div style={{ marginTop: 28, borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
+            {doc.payment_terms && <div style={{ marginBottom: 10 }}><div className="muted" style={{ fontWeight: 700 }}>Payment Terms</div><div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{doc.payment_terms}</div></div>}
             {doc.notes && <div style={{ marginBottom: 10 }}><div className="muted" style={{ fontWeight: 700 }}>Notes</div><div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{doc.notes}</div></div>}
             {doc.terms && <div><div className="muted" style={{ fontWeight: 700 }}>Terms &amp; Conditions</div><div style={{ fontSize: 12, whiteSpace: 'pre-wrap', color: '#374151' }}>{doc.terms}</div></div>}
           </div>
