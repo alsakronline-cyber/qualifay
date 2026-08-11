@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, ArrowRightLeft, Printer, ArrowRight, FileDown } from 'lucide-react'
-import { salesApi } from '@/lib/api'
+import { salesApi, onboardingApi } from '@/lib/api'
 import { DOC_LABEL, STATUS_LABEL } from '../page'
 
 interface Line { description: string; quantity: number; unit_price: number; discount_pct: number; line_total?: number }
@@ -14,14 +14,15 @@ interface Form {
   discount_type: string; discount_value: number
   customer_name: string; customer_company: string; customer_email: string
   customer_phone: string; customer_address: string; customer_tax_id: string
-  issue_date: string; due_date: string; notes: string; terms: string; lines: Line[]
+  issue_date: string; due_date: string; payment_terms: string; notes: string; terms: string; lines: Line[]
 }
 
 const BLANK: Form = {
   doc_type: 'quotation', status: 'draft', currency: 'EGP', tax_rate: 14,
   discount_type: 'amount', discount_value: 0,
   customer_name: '', customer_company: '', customer_email: '', customer_phone: '',
-  customer_address: '', customer_tax_id: '', issue_date: '', due_date: '', notes: '', terms: '',
+  customer_address: '', customer_tax_id: '', issue_date: '', due_date: '',
+  payment_terms: '', notes: '', terms: '',
   lines: [{ description: '', quantity: 1, unit_price: 0, discount_pct: 0 }],
 }
 const CONVERT_NEXT: Record<string, string> = { inquiry: 'quotation', quotation: 'sales_order', sales_order: 'invoice' }
@@ -49,7 +50,16 @@ export default function DocEditor() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (isNew) return
+    if (isNew) {
+      // Pre-fill payment terms + T&C from the company defaults so new documents aren't blank.
+      onboardingApi.profile().then((r) => {
+        const p = (r.data?.profile || {}) as Record<string, string>
+        if (p.default_payment_terms || p.default_terms) {
+          setForm((f) => ({ ...f, payment_terms: p.default_payment_terms || '', terms: p.default_terms || '' }))
+        }
+      }).catch(() => {})
+      return
+    }
     salesApi.get(id).then((r) => {
       const d = r.data
       setNumber(d.number)
@@ -60,7 +70,7 @@ export default function DocEditor() {
         customer_email: d.customer_email || '', customer_phone: d.customer_phone || '',
         customer_address: d.customer_address || '', customer_tax_id: d.customer_tax_id || '',
         issue_date: d.issue_date ? d.issue_date.slice(0, 10) : '', due_date: d.due_date ? d.due_date.slice(0, 10) : '',
-        notes: d.notes || '', terms: d.terms || '',
+        payment_terms: d.payment_terms || '', notes: d.notes || '', terms: d.terms || '',
         lines: (d.lines || []).map((l: Line) => ({ description: l.description, quantity: l.quantity, unit_price: l.unit_price, discount_pct: l.discount_pct })),
       })
     }).catch(() => toast.error('تعذّر تحميل المستند')).finally(() => setLoading(false))
@@ -226,8 +236,10 @@ export default function DocEditor() {
         </div>
       </div>
 
-      {/* Notes + terms */}
+      {/* Payment terms + notes + T&C */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2"><label className="block text-xs text-gray-400 font-cairo mb-1">شروط الدفع</label>
+          <input value={form.payment_terms} onChange={(e) => set('payment_terms', e.target.value)} className={inp} dir="auto" placeholder="مثال: الدفع خلال 30 يوماً · 50% مقدماً و50% عند التسليم" /></div>
         <div><label className="block text-xs text-gray-400 font-cairo mb-1">ملاحظات</label>
           <textarea rows={3} value={form.notes} onChange={(e) => set('notes', e.target.value)} className={inp} dir="auto" /></div>
         <div><label className="block text-xs text-gray-400 font-cairo mb-1">الشروط والأحكام</label>

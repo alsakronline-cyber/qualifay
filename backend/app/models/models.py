@@ -837,6 +837,7 @@ class SalesDoc(Base):
     tax_total = Column(Float, default=0.0)
     grand_total = Column(Float, default=0.0)
 
+    payment_terms = Column(Text, nullable=True)   # e.g. "Net 30", "50% advance / 50% on delivery"
     notes = Column(Text, nullable=True)
     terms = Column(Text, nullable=True)
     converted_from_id = Column(String, ForeignKey("sales_docs.id"), nullable=True)
