@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, Save, ArrowRightLeft, Printer, ArrowRight, FileDown } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowRightLeft, Printer, ArrowRight, FileDown, Upload } from 'lucide-react'
 import { salesApi, onboardingApi } from '@/lib/api'
 import { DOC_LABEL, STATUS_LABEL } from '../page'
 
@@ -27,6 +27,27 @@ const BLANK: Form = {
 }
 const CONVERT_NEXT: Record<string, string> = { inquiry: 'quotation', quotation: 'sales_order', sales_order: 'invoice' }
 const round2 = (n: number) => Math.round(n * 100) / 100
+
+// Parse pasted / uploaded rows into line items. Accepts comma OR tab separated:
+//   description, quantity, unit_price, [discount%]   — or   description, unit_price
+// Skips blank lines and an optional header row.
+function parseItems(text: string): Line[] {
+  const out: Line[] = []
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line) continue
+    const p = line.split(/[,\t;]/).map((x) => x.trim())
+    const desc = p[0]
+    if (!desc) continue
+    if (/^(description|الوصف|item|البند|صنف)$/i.test(desc)) continue  // header
+    const nums = p.slice(1).map((x) => parseFloat(x.replace(/[^\d.\-]/g, '')))
+    let quantity = 1, unit_price = 0, discount_pct = 0
+    if (p.length >= 3) { quantity = nums[0] || 1; unit_price = nums[1] || 0; discount_pct = nums[2] || 0 }
+    else if (p.length === 2) { unit_price = nums[0] || 0 }
+    out.push({ description: desc, quantity, unit_price, discount_pct })
+  }
+  return out
+}
 
 function calc(lines: Line[], dType: string, dVal: number, tax: number) {
   let subtotal = 0
@@ -80,6 +101,26 @@ export default function DocEditor() {
   const setLine = (i: number, patch: Partial<Line>) => setForm((f) => ({ ...f, lines: f.lines.map((l, j) => j === i ? { ...l, ...patch } : l) }))
   const addLine = () => setForm((f) => ({ ...f, lines: [...f.lines, { description: '', quantity: 1, unit_price: 0, discount_pct: 0 }] }))
   const delLine = (i: number) => setForm((f) => ({ ...f, lines: f.lines.filter((_, j) => j !== i) }))
+
+  const [importOpen, setImportOpen] = useState(false)
+  const [importText, setImportText] = useState('')
+  function applyImport() {
+    const parsed = parseItems(importText)
+    if (!parsed.length) return toast.error('لم يتم العثور على بنود صالحة')
+    // Replace an empty starter row, otherwise append.
+    setForm((f) => {
+      const base = f.lines.filter((l) => l.description.trim())
+      return { ...f, lines: [...base, ...parsed] }
+    })
+    setImportText(''); setImportOpen(false)
+    toast.success(`تمت إضافة ${parsed.length} بند`)
+  }
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    const text = await file.text()
+    setImportText((t) => (t ? t + '\n' : '') + text)
+    e.target.value = ''
+  }
 
   const totals = useMemo(() => calc(form.lines, form.discount_type, form.discount_value, form.tax_rate), [form])
 
@@ -208,7 +249,26 @@ export default function DocEditor() {
             </tbody>
           </table>
         </div>
-        <button onClick={addLine} className="flex items-center gap-1 text-sm text-gold-primary hover:underline font-cairo mt-1"><Plus size={14} /> إضافة بند</button>
+        <div className="flex items-center gap-4 mt-1">
+          <button onClick={addLine} className="flex items-center gap-1 text-sm text-gold-primary hover:underline font-cairo"><Plus size={14} /> إضافة بند</button>
+          <button onClick={() => setImportOpen((v) => !v)} className="flex items-center gap-1 text-sm text-gray-300 hover:text-white font-cairo"><Upload size={14} /> استيراد قائمة أصناف</button>
+        </div>
+        {importOpen && (
+          <div className="mt-2 border border-gray-700 rounded-lg p-3 space-y-2 bg-gray-800/40">
+            <p className="text-xs text-gray-400 font-cairo">الصق الأصناف (سطر لكل صنف): <span className="text-gray-300">الوصف، الكمية، السعر، الخصم%</span> — أو ارفع ملف CSV.</p>
+            <textarea rows={5} value={importText} onChange={(e) => setImportText(e.target.value)} dir="auto"
+              placeholder={'كرسي مكتب, 10, 800, 5\nمكتب خشبي, 3, 1500\nطاولة اجتماعات, 1200'}
+              className={`${inp} font-mono text-xs leading-relaxed`} />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={applyImport} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-1.5 rounded-lg font-cairo"><Plus size={14} /> إضافة للبنود</button>
+              <label className="flex items-center gap-1.5 border border-gray-700 text-gray-200 hover:bg-gray-800 text-sm px-3 py-1.5 rounded-lg cursor-pointer font-cairo">
+                <Upload size={14} /> رفع CSV
+                <input type="file" accept=".csv,.txt,text/csv" onChange={onImportFile} className="hidden" />
+              </label>
+              <button onClick={() => { setImportOpen(false); setImportText('') }} className="text-xs text-gray-500 hover:text-gray-300 font-cairo">إلغاء</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Totals + discount/tax */}

@@ -552,11 +552,17 @@ async def _handle_inbound_message(webhook_data: dict):
                 from app.services.notification_service import notify
                 from app.models.models import NotificationType
                 who = (lead.company or lead.name) if lead else (push_name or "عميل")
+                contact_phone = (lead.phone if lead and lead.phone else phone) or ""
+                summary = intent_data.get("summary") or content[:80]
+                # Put the customer's name + phone right in the alert so the owner can act
+                # without opening the app.
+                msg = who + (f" · {contact_phone}" if contact_phone else "") + f"\n{summary}"
                 await notify(
                     db, conv.tenant_id, NotificationType.leads_ready,
                     title="🔥 عميل مهتم الآن",
-                    message=f"{who}: {intent_data.get('summary') or content[:80]}",
+                    message=msg,
                     data={"conversation_id": conv.id, "lead_id": lead.id if lead else None,
+                          "contact_name": who, "contact_phone": contact_phone,
                           "intent": intent_data.get("intent"), "source": "hot_lead"},
                     urgent=True,
                 )
