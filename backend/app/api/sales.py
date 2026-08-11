@@ -133,7 +133,8 @@ async def _seller(db, tenant_id: str) -> dict:
     return {"name": p.get("business_name") or (t.name if t else ""),
             "industry": p.get("industry", ""), "website": p.get("website", ""),
             "tax_id": p.get("tax_id", ""), "address": p.get("address", ""),
-            "phone": p.get("phone", ""), "email": p.get("email", "")}
+            "phone": p.get("phone", ""), "email": p.get("email", ""),
+            "logo": p.get("logo", "")}
 
 
 def _apply(doc: SalesDoc, body: DocIn):
@@ -247,6 +248,9 @@ def _pdf_html(d: SalesDoc, seller: dict) -> str:
     money = lambda n: f"{(n or 0):,.2f} {cur}"
     dt = lambda x: x.strftime("%d/%m/%Y") if x else "—"
     en, ar = _PDF_TITLE.get(d.doc_type.value, ("DOCUMENT", "مستند"))
+    logo = seller.get("logo") or ""
+    logo_html = (f'<img src="{logo}" style="max-height:64px;max-width:220px;margin-bottom:8px" />'
+                 if logo.startswith("data:image/") else "")
     due_label = {"quotation": "Valid Until", "invoice": "Due Date"}.get(d.doc_type.value, "Required Date")
 
     seller_lines = "".join(f"<div>{e(v)}</div>" for v in [
@@ -282,7 +286,8 @@ def _pdf_html(d: SalesDoc, seller: dict) -> str:
       .tot td {{ border:none; padding:4px 10px; }}
     </style></head><body>
       <div class="row" style="border-bottom:2px solid #111827;padding-bottom:16px">
-        <div><div style="font-size:22px;font-weight:800">{e(seller.get('name') or '—')}</div>
+        <div>{logo_html}
+          <div style="font-size:22px;font-weight:800">{e(seller.get('name') or '—')}</div>
           <div class="muted" style="margin-top:4px">{seller_lines}</div></div>
         <div style="text-align:right"><div style="font-size:26px;font-weight:800;letter-spacing:1px">{en}</div>
           <div style="font-size:15px">{ar}</div>

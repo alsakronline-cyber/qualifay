@@ -3,7 +3,7 @@ Inbox sync service — pulls existing chats from Evolution API into Conversation
 Called when a WA instance connects (connection.update event with state=open).
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
@@ -99,6 +99,8 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
         conv_map = {c.wa_jid: c for c in existing_result.scalars()}
 
         synced = 0
+        # Only sync the last ~30 days of activity on connect (not the whole history).
+        sync_cutoff = datetime.utcnow() - timedelta(days=30)
         for chat in chats:
             jid = chat.get("id") or chat.get("remoteJid") or chat.get("jid", "")
             if not jid or jid.endswith("@g.us") or jid.endswith("@lid") or jid.startswith("cmr") or "newsletter" in jid or not jid.split("@")[0].isdigit():  # skip groups, device IDs, channels, and non-numeric JIDs
@@ -135,6 +137,11 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                     last_at = datetime.utcfromtimestamp(int(raw_ts))
                 except (ValueError, TypeError, OSError):
                     last_at = None
+
+            # Skip chats whose last activity is older than the 30-day sync window. Chats with
+            # no resolvable timestamp are kept (can't tell their age — err toward including).
+            if last_at and last_at < sync_cutoff:
+                continue
 
             if not conv:
                 conv = Conversation(
