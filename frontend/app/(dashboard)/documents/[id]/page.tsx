@@ -115,11 +115,22 @@ export default function DocEditor() {
     setImportText(''); setImportOpen(false)
     toast.success(`تمت إضافة ${parsed.length} بند`)
   }
+  const [importing, setImporting] = useState(false)
   async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
-    const text = await file.text()
-    setImportText((t) => (t ? t + '\n' : '') + text)
-    e.target.value = ''
+    setImporting(true)
+    try {
+      // CSV and Excel are parsed server-side (openpyxl) so both work the same way.
+      const fd = new FormData(); fd.append('file', file)
+      const r = await salesApi.parseItems(fd)
+      const items: Line[] = r.data?.items || []
+      if (!items.length) { toast.error('لم يتم العثور على بنود في الملف'); return }
+      setForm((f) => ({ ...f, lines: [...f.lines.filter((l) => l.description.trim()), ...items] }))
+      toast.success(`تمت إضافة ${items.length} بند`)
+      setImportOpen(false)
+    } catch (e2: unknown) {
+      toast.error((e2 as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'فشل قراءة الملف')
+    } finally { setImporting(false); e.target.value = '' }
   }
 
   const totals = useMemo(() => calc(form.lines, form.discount_type, form.discount_value, form.tax_rate), [form])
@@ -255,15 +266,15 @@ export default function DocEditor() {
         </div>
         {importOpen && (
           <div className="mt-2 border border-gray-700 rounded-lg p-3 space-y-2 bg-gray-800/40">
-            <p className="text-xs text-gray-400 font-cairo">الصق الأصناف (سطر لكل صنف): <span className="text-gray-300">الوصف، الكمية، السعر، الخصم%</span> — أو ارفع ملف CSV.</p>
+            <p className="text-xs text-gray-400 font-cairo">الصق الأصناف (سطر لكل صنف): <span className="text-gray-300">الوصف، الكمية، السعر، الخصم%</span> — أو ارفع ملف Excel/CSV.</p>
             <textarea rows={5} value={importText} onChange={(e) => setImportText(e.target.value)} dir="auto"
               placeholder={'كرسي مكتب, 10, 800, 5\nمكتب خشبي, 3, 1500\nطاولة اجتماعات, 1200'}
               className={`${inp} font-mono text-xs leading-relaxed`} />
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={applyImport} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-1.5 rounded-lg font-cairo"><Plus size={14} /> إضافة للبنود</button>
-              <label className="flex items-center gap-1.5 border border-gray-700 text-gray-200 hover:bg-gray-800 text-sm px-3 py-1.5 rounded-lg cursor-pointer font-cairo">
-                <Upload size={14} /> رفع CSV
-                <input type="file" accept=".csv,.txt,text/csv" onChange={onImportFile} className="hidden" />
+              <label className="flex items-center gap-1.5 border border-gray-700 text-gray-200 hover:bg-gray-800 text-sm px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-50 font-cairo">
+                {importing ? <span className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" /> : <Upload size={14} />} رفع Excel/CSV
+                <input type="file" accept=".csv,.txt,.xlsx,.xlsm,text/csv" onChange={onImportFile} disabled={importing} className="hidden" />
               </label>
               <button onClick={() => { setImportOpen(false); setImportText('') }} className="text-xs text-gray-500 hover:text-gray-300 font-cairo">إلغاء</button>
             </div>
