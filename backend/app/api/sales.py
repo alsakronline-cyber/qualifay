@@ -8,7 +8,7 @@ import html as _html
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -172,6 +172,61 @@ def _apply(doc: SalesDoc, body: DocIn):
 
 
 # ── endpoints ───────────────────────────────────────────────────────────────
+_ITEM_HEADERS = {"description", "الوصف", "item", "البند", "صنف", "اسم الصنف", "بيان"}
+
+
+def _rows_to_items(rows: list) -> list:
+    """Map spreadsheet/CSV rows -> line items. Columns: description, quantity, unit_price,
+    discount%. A 2-column row is read as (description, unit_price)."""
+    def num(v):
+        try:
+            return float(str(v).replace(",", "").replace("%", "").strip())
+        except (ValueError, TypeError):
+            return 0.0
+    out = []
+    for r in rows:
+        cells = [("" if c is None else str(c)).strip() for c in (r or [])]
+        while cells and cells[-1] == "":
+            cells.pop()
+        if not cells or not cells[0]:
+            continue
+        desc = cells[0]
+        if desc.lower() in _ITEM_HEADERS:
+            continue
+        if len(cells) >= 3:
+            qty, price, disc = (num(cells[1]) or 1.0), num(cells[2]), num(cells[3]) if len(cells) > 3 else 0.0
+        elif len(cells) == 2:
+            qty, price, disc = 1.0, num(cells[1]), 0.0
+        else:
+            qty, price, disc = 1.0, 0.0, 0.0
+        out.append({"description": desc[:500], "quantity": qty, "unit_price": price, "discount_pct": disc})
+    return out[:500]
+
+
+@router.post("/parse-items", summary="Parse an uploaded CSV/Excel item list into line items")
+async def parse_items(file: UploadFile = File(...), current_user=Depends(get_current_user)):
+    name = (file.filename or "").lower()
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="الملف كبير جداً (الحد 5 ميجابايت)")
+    rows = []
+    try:
+        if name.endswith((".xlsx", ".xlsm")):
+            import io
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            for row in wb.active.iter_rows(values_only=True):
+                rows.append(list(row))
+        else:
+            import csv
+            import io as _io
+            text = content.decode("utf-8-sig", errors="ignore")
+            rows = list(csv.reader(_io.StringIO(text)))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"تعذّر قراءة الملف: {e}")
+    return {"items": _rows_to_items(rows)}
+
+
 @router.get("", summary="List sales documents")
 @router.get("/", include_in_schema=False)
 async def list_docs(doc_type: Optional[str] = None, status: Optional[str] = None,
