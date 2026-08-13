@@ -78,6 +78,13 @@ body, .light, :root {
   background: var(--selection-bg);
 }
 
+/* Chat bubbles — authentic WhatsApp-style and theme-aware. Sent = green, received =
+   neutral surface. Both flip cleanly between dark and light so the inbox always reads well. */
+.bubble-out { background: #0b7c66; color: #ffffff; }
+.bubble-in  { background: rgb(var(--c-gray-800)); color: rgb(var(--c-white)); }
+.light .bubble-out { background: #d9fdd3; color: #0b141a; }
+.light .bubble-in  { background: #ffffff; color: #111827; border: 1px solid rgb(var(--c-gray-700)); }
+
 /* Scrollbar styling — follows the active theme */
 ::-webkit-scrollbar {
   width: 8px;

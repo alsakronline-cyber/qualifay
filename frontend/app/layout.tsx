@@ -34,9 +34,11 @@ export default function RootLayout({
               fontFamily: 'Cairo, sans-serif',
             },
             success: {
-              iconTheme: { primary: '#C9A227', secondary: 'var(--toast-bg)' },
+              style: { borderLeft: '4px solid #25D366' },
+              iconTheme: { primary: '#25D366', secondary: 'var(--toast-bg)' },
             },
             error: {
+              style: { borderLeft: '4px solid #ef4444' },
               iconTheme: { primary: '#ef4444', secondary: 'var(--toast-bg)' },
             },
           }}
