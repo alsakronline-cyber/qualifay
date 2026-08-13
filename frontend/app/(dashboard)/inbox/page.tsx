@@ -320,15 +320,15 @@ export default function InboxPage() {
       ...(channelFilter ? { channel: channelFilter } : {}),
       ...(search.trim() ? { search: search.trim() } : {}),
     }).then((r) => r.data),
-    { refreshInterval: 5000 }
+    { refreshInterval: 4000 }
   )
   const conversations: Conversation[] = Array.isArray(convData) ? convData : (convData?.items || convData?.conversations || [])
 
-  // Messages for selected conversation
+  // Messages for selected conversation — poll faster so incoming replies show quickly.
   const { data: msgData, mutate: mutateMsgs } = useSWR(
     selectedId ? `conversations/${selectedId}/messages` : null,
     () => conversationsApi.messages(selectedId!).then((r) => r.data),
-    { refreshInterval: 5000 }
+    { refreshInterval: 2000 }
   )
   const messages: Message[] = Array.isArray(msgData) ? msgData : (msgData?.items || msgData?.messages || [])
 
@@ -391,14 +391,27 @@ export default function InboxPage() {
 
   const handleSend = useCallback(async () => {
     if (!selectedId || !msgInput.trim()) return
+    const content = msgInput.trim()
+    setMsgInput('')          // clear immediately so the input feels instant
     setSending(true)
+    // Optimistically show the message right away instead of waiting for the next poll.
+    const optimistic = { id: 'temp-' + Date.now(), direction: 'outbound', content,
+      message_type: 'text', created_at: new Date().toISOString(), is_ai_generated: false }
+    mutateMsgs((cur: unknown) => {
+      if (Array.isArray(cur)) return [...cur, optimistic]
+      const o = cur as { items?: unknown[]; messages?: unknown[] } | undefined
+      if (o?.items) return { ...o, items: [...o.items, optimistic] }
+      if (o?.messages) return { ...o, messages: [...o.messages, optimistic] }
+      return [optimistic]
+    }, false)
     try {
-      await conversationsApi.sendMessage(selectedId, msgInput.trim())
-      setMsgInput('')
+      await conversationsApi.sendMessage(selectedId, content)
       mutateMsgs()
       mutateConvs()
     } catch {
       toast.error('فشل إرسال الرسالة')
+      setMsgInput(content)   // restore on failure
+      mutateMsgs()           // drop the optimistic bubble
     } finally {
       setSending(false)
     }
