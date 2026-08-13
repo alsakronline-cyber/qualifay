@@ -205,10 +205,10 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             logger.info(f"Outreach held by supervisor for lead {lead_id}: {_reason}")
             return {"held": True, "reason": _reason, "lead_id": lead_id}
 
-        # Step 5: Send via Evolution API
+        # Step 5: Send via Evolution API (brief typing indicator, then send)
         wa_jid = f"{lead.phone.replace('+', '')}@s.whatsapp.net"
-        await evolution_service.send_typing(instance.instance_name, wa_jid, duration=2)
-        await asyncio.sleep(2)
+        await evolution_service.send_typing(instance.instance_name, wa_jid, duration=1)
+        await asyncio.sleep(0.8)
         await evolution_service.send_text(instance.instance_name, wa_jid, message_text)
 
         # Step 6: Increment WA sent count
@@ -654,9 +654,9 @@ async def _send_ai_reply(
             logger.info(f"AI reply held by supervisor for {conversation_id}: {reason}")
             return {"sent": False, "reason": f"held:{reason}"}
 
-        # Show typing
-        await evolution_service.send_typing(instance_name, wa_jid, duration=2)
-        await asyncio.sleep(2)
+        # Show typing briefly (kept short so replies don't feel sluggish)
+        await evolution_service.send_typing(instance_name, wa_jid, duration=1)
+        await asyncio.sleep(0.8)
 
         # Send message
         await evolution_service.send_text(instance_name, wa_jid, reply)
