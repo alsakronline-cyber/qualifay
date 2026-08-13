@@ -25,7 +25,7 @@ module.exports = {
           900: 'rgb(var(--c-gray-900) / <alpha-value>)',
           950: 'rgb(var(--c-gray-950) / <alpha-value>)',
         },
-        'gold-primary': '#C9A227',
+        'gold-primary': '#D4AF37',
         'gold-dark': '#A87018',
         'wa-green': '#25D366',
       },

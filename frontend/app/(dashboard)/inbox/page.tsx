@@ -856,10 +856,10 @@ export default function InboxPage() {
                 </button>
                 <div
                   className={clsx(
-                    'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm relative',
+                    'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm relative shadow-sm',
                     msg.direction === 'outbound'
-                      ? 'bg-[#005c4b] text-gray-50 rounded-tr-sm'
-                      : 'bg-gray-700 text-gray-50 rounded-tl-sm'
+                      ? 'bubble-out rounded-tr-sm'
+                      : 'bubble-in rounded-tl-sm'
                   )}
                 >
                   {msg.has_media && selectedId ? (
