@@ -39,6 +39,8 @@ class EnrichmentScraper(BaseScraper):
         last_name = config.get("last_name", "")
         phones = config.get("phones", [])
         sources = config.get("enrich_sources", ["hunter", "clearbit"])
+        # Prefer the tenant's own Hunter key (self-serve), fall back to the global one.
+        self._hunter_key = config.get("hunter_api_key") or settings.HUNTER_API_KEY
 
         enriched = RawLead(
             source="web_scrape",
@@ -58,7 +60,7 @@ class EnrichmentScraper(BaseScraper):
             enriched.raw_data["all_phones"] = valid_phones
 
         # Hunter.io email finder
-        if "hunter" in sources and settings.HUNTER_API_KEY:
+        if "hunter" in sources and self._hunter_key:
             hunter_data = await self._hunter_find_email(
                 domain, first_name, last_name
             )
@@ -95,7 +97,7 @@ class EnrichmentScraper(BaseScraper):
 
         params = {
             "domain": domain,
-            "api_key": settings.HUNTER_API_KEY,
+            "api_key": self._hunter_key,
         }
         if first_name:
             params["first_name"] = first_name
@@ -146,12 +148,12 @@ class EnrichmentScraper(BaseScraper):
         Hunter.io Domain Search — find all emails at a domain.
         GET https://api.hunter.io/v2/domain-search
         """
-        if not domain or not settings.HUNTER_API_KEY:
+        if not domain or not getattr(self, "_hunter_key", None):
             return []
 
         params = {
             "domain": domain,
-            "api_key": settings.HUNTER_API_KEY,
+            "api_key": self._hunter_key,
             "limit": 10,
             "type": "personal",
         }
