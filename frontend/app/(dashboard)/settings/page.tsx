@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles, Languages, ImagePlus } from 'lucide-react'
+import { Save, Copy, RefreshCw, Trash2, Bot, Mail, Send, Building2, Sparkles, Languages, ImagePlus, KeyRound, Check } from 'lucide-react'
 import { authApi, agentApi, emailApi, onboardingApi } from '@/lib/api'
 import type { AuthUser } from '@/lib/types'
 import { useLang, type AiLang, type UiLang } from '@/lib/i18n'
@@ -29,6 +29,73 @@ function downscaleToDataUri(file: File, maxW = 240): Promise<string> {
     }
     reader.readAsDataURL(file)
   })
+}
+
+const SCRAPER_KEY_FIELDS: { key: string; label: string; hint: string }[] = [
+  { key: 'apollo', label: 'Apollo API Key', hint: 'جهات اتصال B2B — يتطلب خطة Apollo مدفوعة' },
+  { key: 'hunter', label: 'Hunter API Key', hint: 'إثراء البريد الإلكتروني للعملاء' },
+  { key: 'google_cse_key', label: 'Google Custom Search — API Key', hint: 'يبدأ بـ AIzaSy… (اكتشاف LinkedIn)' },
+  { key: 'google_cse_cx', label: 'Google Custom Search — Engine ID (cx)', hint: 'معرّف محرك البحث' },
+  { key: 'facebook_adlib', label: 'Meta Ad Library Token', hint: 'رمز طويل الأمد لإعلانات Meta' },
+]
+
+function ScraperKeysPanel() {
+  const { data: statusData, mutate } = useSWR('scraper-keys', () => onboardingApi.getScraperKeys().then((r) => r.data))
+  const status: Record<string, boolean> = statusData || {}
+  const [vals, setVals] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    // Send only fields the user actually typed into (non-empty) — untouched keys stay put.
+    const payload: Record<string, string> = {}
+    for (const f of SCRAPER_KEY_FIELDS) if ((vals[f.key] || '').trim()) payload[f.key] = vals[f.key].trim()
+    if (!Object.keys(payload).length) { toast.error('لم تُدخل أي مفتاح'); return }
+    setSaving(true)
+    try { await onboardingApi.setScraperKeys(payload); toast.success('تم حفظ المفاتيح'); setVals({}); mutate() }
+    catch { toast.error('فشل الحفظ') } finally { setSaving(false) }
+  }
+  async function clearKey(k: string) {
+    try { await onboardingApi.setScraperKeys({ [k]: '' }); toast.success('تم الحذف'); mutate() }
+    catch { toast.error('فشل') }
+  }
+
+  const inp = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold-primary'
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <KeyRound size={18} className="text-gold-primary" />
+        <h2 className="text-base font-semibold text-white font-cairo">مفاتيح مصادر الجمع (API)</h2>
+      </div>
+      <p className="text-xs text-gray-500 font-cairo -mt-2">
+        الصق مفاتيح شركتك لتفعيل مصادر إضافية للعملاء المحتملين. المفاتيح مُشفّرة ولا تُعرض بعد الحفظ.
+      </p>
+      <div className="space-y-3">
+        {SCRAPER_KEY_FIELDS.map((f) => (
+          <div key={f.key}>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm text-gray-300 font-cairo">{f.label}</label>
+              {status[f.key] && (
+                <span className="flex items-center gap-1 text-[11px] text-wa-green font-cairo">
+                  <Check size={12} /> مضبوط
+                  <button onClick={() => clearKey(f.key)} className="text-gray-500 hover:text-red-400 ml-1"><Trash2 size={12} /></button>
+                </span>
+              )}
+            </div>
+            <input type="password" autoComplete="off" dir="ltr"
+              value={vals[f.key] || ''} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
+              placeholder={status[f.key] ? '•••••••• (اكتب قيمة جديدة للاستبدال)' : 'الصق المفتاح هنا'}
+              className={inp} />
+            <p className="text-[11px] text-gray-500 font-cairo mt-0.5">{f.hint}</p>
+          </div>
+        ))}
+      </div>
+      <button onClick={save} disabled={saving}
+        className="flex items-center gap-2 bg-gold-primary text-gray-950 font-semibold px-5 py-2.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-all font-cairo text-sm">
+        {saving ? <span className="w-4 h-4 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" /> : <Save size={15} />}
+        حفظ المفاتيح
+      </button>
+    </div>
+  )
 }
 
 function LogoPanel() {
@@ -609,6 +676,8 @@ export default function SettingsPage() {
       <LogoPanel />
 
       <CompanyProfilePanel />
+
+      <ScraperKeysPanel />
 
       {/* Plan info */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">

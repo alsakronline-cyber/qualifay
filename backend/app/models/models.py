@@ -109,6 +109,9 @@ class Tenant(Base):
     # Kept separate from `language` so a user can run an Arabic UI but message leads in
     # Egyptian colloquial, or an English UI while still writing Arabic copy.
     ai_language = Column(String, default="ar")
+    # Per-tenant scraper API keys (Apollo/Hunter/Google CSE/Meta), encrypted at rest with
+    # app.core.crypto. JSON dict; never returned in plaintext by the API.
+    scraper_keys_enc = Column(Text, nullable=True)
     trial_ends_at = Column(DateTime, nullable=True)
     auto_approve = Column(Boolean, default=False)
     min_bant_score = Column(Integer, default=50)

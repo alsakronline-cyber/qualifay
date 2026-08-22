@@ -133,6 +133,29 @@ async def set_language(body: LanguageIn, current_user: dict = Depends(get_curren
     return {"ui_language": t.language, "ai_language": t.ai_language}
 
 
+class ScraperKeysIn(BaseModel):
+    apollo: Optional[str] = None
+    hunter: Optional[str] = None
+    google_cse_key: Optional[str] = None
+    google_cse_cx: Optional[str] = None
+    facebook_adlib: Optional[str] = None
+
+
+@router.get("/scraper-keys", summary="Which scraper API keys this company has set (no values)")
+async def get_scraper_keys(current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from app.services.scraper_keys import get_keys, status
+    return status(await get_keys(db, current_user["tenant_id"]))
+
+
+@router.put("/scraper-keys", summary="Set this company's own scraper API keys (encrypted)")
+async def set_scraper_keys(body: ScraperKeysIn, current_user: dict = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
+    from app.services.scraper_keys import set_keys
+    # exclude_unset so untouched fields keep their stored value; empty string clears.
+    return await set_keys(db, current_user["tenant_id"], body.dict(exclude_unset=True))
+
+
 @router.post("/reset", summary="Start the AI setup over from scratch")
 async def reset_onboarding(current_user: dict = Depends(get_current_user),
                            db: AsyncSession = Depends(get_db)):

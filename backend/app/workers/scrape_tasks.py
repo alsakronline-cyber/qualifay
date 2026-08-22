@@ -135,12 +135,25 @@ async def _run_scrape_job_async(task, job_id: str):
             await db.commit()
             return {"error": "unknown_source"}
 
+        # Inject this tenant's own API keys into the job config (scrapers prefer config keys
+        # over the global .env fallback). Self-serve keys set in Settings take effect here.
+        from app.services.scraper_keys import inject_config, get_keys
+        effective_config = dict(job.config or {})
+        await inject_config(db, job.tenant_id, effective_config)
+        # If the tenant supplied their own Apollo key (paid plan), use the real Apollo scraper
+        # for their apollo jobs even if the global default is the free OSM fallback.
+        if source_value == "apollo":
+            tkeys = await get_keys(db, job.tenant_id)
+            if tkeys.get("apollo"):
+                from scrapers.apollo import ApolloScraper
+                scraper_cls = ApolloScraper
+
         scraper = scraper_cls()
 
         # 4. Run scraper and save leads
         leads_found = 0
         try:
-            async for raw_lead in scraper.scrape(job.config or {}, job.tenant_id):
+            async for raw_lead in scraper.scrape(effective_config, job.tenant_id):
                 # Normalize phone
                 phone = raw_lead.phone
                 if phone:

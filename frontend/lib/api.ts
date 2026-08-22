@@ -298,6 +298,8 @@ export const onboardingApi = {
   getLanguage: () => API.get('/v1/onboarding/language'),
   setLanguage: (ai_language: string, ui_language?: string) =>
     API.post('/v1/onboarding/language', { ai_language, ui_language }),
+  getScraperKeys: () => API.get('/v1/onboarding/scraper-keys'),
+  setScraperKeys: (keys: Record<string, string>) => API.put('/v1/onboarding/scraper-keys', keys),
   chat: (messages: { role: string; content: string }[]) => API.post('/v1/onboarding/chat', { messages }),
   build: () => API.post('/v1/onboarding/build', {}),
   setAutonomy: (level: string) => API.post('/v1/onboarding/autonomy', { level }),
