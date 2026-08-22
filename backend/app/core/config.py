@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Scraping
     GOOGLE_MAPS_API_KEY: str = ""
     APOLLO_API_KEY: str = ""
+    # Apollo's People Search API requires a PAID Apollo plan (free plan -> 403 API_INACCESSIBLE).
+    # Leave off until on a paid plan; then set APOLLO_ENABLED=true to use Apollo instead of the
+    # free OpenStreetMap fallback for the "apollo" source.
+    APOLLO_ENABLED: bool = False
     HUNTER_API_KEY: str = ""
     TOR_PROXY: str = "socks5://127.0.0.1:9050"
     PROXY_POOL: str = ""
