@@ -24,12 +24,22 @@ def _get_scraper_map():
     from scrapers.enrichment import EnrichmentScraper
     from scrapers.competitor_ads import CompetitorAdsScraper
 
+    # Apollo's People Search API needs a PAID Apollo plan; on the free plan it 403s. So the
+    # "apollo" source uses the real Apollo scraper only when explicitly enabled (paid plan),
+    # otherwise it falls back to the free OpenStreetMap business database.
+    from app.core.config import settings as _settings
+    if _settings.APOLLO_ENABLED and _settings.APOLLO_API_KEY:
+        from scrapers.apollo import ApolloScraper
+        apollo_cls = ApolloScraper
+    else:
+        apollo_cls = OSMScraper
+
     return {
         "google_maps": GoogleMapsScraper,
         "web_scrape": WebsiteScraper,
         "directories": DirectoriesScraper,
         "tender": TendersScraper,
-        "apollo": OSMScraper,  # free OpenStreetMap business database (replaces Apollo)
+        "apollo": apollo_cls,  # real Apollo when APOLLO_ENABLED (paid), else free OSM
         "yellowpages": YellowPagesEgyptScraper,
         "linkedin": LinkedInSearchScraper,  # Google CSE discovery (replaces blocked web scraping)
         "facebook": FacebookGroupsScraper,

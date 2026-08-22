@@ -39,11 +39,13 @@ class ApolloScraper(BaseScraper):
             raise ValueError("Apollo API key not configured for this tenant")
 
         job_titles = config.get("job_titles", ["CEO", "Founder", "Owner", "Managing Director"])
-        industries = config.get("industries", [])
-        locations = config.get("locations", ["Egypt"])
+        # Accept the generic Growth-schedule config (industry / location / max_results) too,
+        # so this works with the autonomous scheduler, not just Apollo-native config.
+        industries = config.get("industries") or ([config["industry"]] if config.get("industry") else [])
+        locations = config.get("locations") or ([config["location"]] if config.get("location") else ["Egypt"])
         seniority_levels = config.get("seniority_levels", ["owner", "c_suite", "director", "manager"])
         per_page = min(int(config.get("per_page", 25)), 25)  # free tier cap
-        max_pages = int(config.get("max_pages", 2))
+        max_pages = int(config.get("max_pages") or max(1, int(config.get("max_results", 25)) // 25 + 1))
 
         headers = {
             "Content-Type": "application/json",
