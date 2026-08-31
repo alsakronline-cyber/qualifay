@@ -316,6 +316,7 @@ export default function InboxPage() {
   const { data: convData, mutate: mutateConvs } = useSWR(
     ['conversations', instanceFilter, channelFilter, search],
     () => conversationsApi.list({
+      limit: 200,   // server default is 50 — show the full inbox, not just the newest 50
       ...(instanceFilter ? { instance_name: instanceFilter } : {}),
       ...(channelFilter ? { channel: channelFilter } : {}),
       ...(search.trim() ? { search: search.trim() } : {}),
