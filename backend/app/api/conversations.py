@@ -378,7 +378,7 @@ async def ensure_conversation_lead(
 @router.get("/{conversation_id}/messages")
 async def get_messages(
     conversation_id: str,
-    limit: int = 100,
+    limit: int = 300,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -395,13 +395,16 @@ async def get_messages(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    # Take the NEWEST `limit` messages, then flip back to chronological order for display.
+    # (Ordering ascending before the limit returned the OLDEST messages, so long threads
+    # showed ancient history instead of what's actually on the user's phone.)
     msgs_result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.created_at.desc())
         .limit(limit)
     )
-    msgs = msgs_result.scalars().all()
+    msgs = list(reversed(msgs_result.scalars().all()))
     return [
         {
             "id": m.id,

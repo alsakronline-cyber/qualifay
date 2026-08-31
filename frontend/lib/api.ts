@@ -148,7 +148,8 @@ export const instancesApi = {
 
 // ── Conversations ─────────────────────────────────────────────────────────────
 export const conversationsApi = {
-  list: (params?: { page?: number; per_page?: number; instance_name?: string; channel?: string; search?: string; lead_id?: string }) =>
+  // NB: the API paginates with skip/limit (page/per_page are ignored server-side).
+  list: (params?: { skip?: number; limit?: number; instance_name?: string; channel?: string; search?: string; lead_id?: string }) =>
     API.get('/v1/conversations', { params }),
 
   get: (id: string) => API.get(`/v1/conversations/${id}`),
