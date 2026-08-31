@@ -186,13 +186,15 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                             pass
                         await db.commit()
 
-                        # On connect: sync existing chats from Evolution into inbox
+                        # On connect: import the full history (chats AND their messages)
+                        # from Evolution into the inbox. Runs in the background — a busy
+                        # number can take a few minutes.
                         if state == "open":
-                            from app.services.inbox_sync_service import sync_instance_chats
+                            from app.services.inbox_sync_service import sync_instance_history
                             background_tasks.add_task(
-                                sync_instance_chats, instance, wa.tenant_id, str(wa.id)
+                                sync_instance_history, instance, wa.tenant_id, str(wa.id)
                             )
-                            logger.info(f"Triggered chat sync for {instance}")
+                            logger.info(f"Triggered full history sync for {instance}")
             except Exception as e:
                 logger.error(f"Failed to update instance status: {e}")
 

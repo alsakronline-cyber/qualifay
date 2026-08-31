@@ -1,7 +1,7 @@
 """
 WhatsApp Instances API — WA instance management with warmup tracking
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -157,6 +157,32 @@ async def get_qr(
         raise HTTPException(status_code=404, detail="QR code not available — instance may already be connected")
 
     return {"qr_code": qr, "instance_name": instance.instance_name}
+
+
+@router.post("/{instance_id}/sync", summary="Import full WhatsApp history for this number")
+async def sync_instance(
+    instance_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-import every chat and message Evolution holds for this number. Safe to re-run —
+    messages are deduped by their WhatsApp id. Runs in the background."""
+    require_admin(current_user)
+    instance = (await db.execute(select(WaInstance).where(
+        WaInstance.id == instance_id,
+        WaInstance.tenant_id == current_user["tenant_id"],
+    ))).scalar_one_or_none()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    from app.services.inbox_sync_service import sync_instance_history
+    background_tasks.add_task(
+        sync_instance_history, instance.instance_name,
+        instance.tenant_id, str(instance.id),
+    )
+    return {"started": True, "instance": instance.instance_name,
+            "message": "جارٍ استيراد المحادثات والرسائل — قد يستغرق بضع دقائق."}
 
 
 @router.get("/{instance_id}/status")
