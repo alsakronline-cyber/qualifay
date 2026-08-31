@@ -83,10 +83,10 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
 
     logger.info(f"Syncing {len(chats)} chats for instance {instance_name}")
 
-    truncated = len(chats) > 100
-    if truncated:
-        logger.warning(f"sync_instance_chats: {len(chats)} chats found, capping at 100")
-    chats = chats[:100]
+    # No cap: import every chat the number has. (Previously capped at 100, which silently
+    # dropped most of the history on busy numbers.)
+    if len(chats) > 500:
+        logger.info(f"sync_instance_chats: {len(chats)} chats — large sync, this may take a while")
 
     async with AsyncSessionLocal() as db:
         # Batch-load all existing conversations for this instance (avoids N+1)
@@ -99,8 +99,6 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
         conv_map = {c.wa_jid: c for c in existing_result.scalars()}
 
         synced = 0
-        # Only sync the last ~30 days of activity on connect (not the whole history).
-        sync_cutoff = datetime.utcnow() - timedelta(days=30)
         for chat in chats:
             jid = chat.get("id") or chat.get("remoteJid") or chat.get("jid", "")
             if not jid or jid.endswith("@g.us") or jid.endswith("@lid") or jid.startswith("cmr") or "newsletter" in jid or not jid.split("@")[0].isdigit():  # skip groups, device IDs, channels, and non-numeric JIDs
@@ -137,11 +135,6 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
                     last_at = datetime.utcfromtimestamp(int(raw_ts))
                 except (ValueError, TypeError, OSError):
                     last_at = None
-
-            # Skip chats whose last activity is older than the 30-day sync window. Chats with
-            # no resolvable timestamp are kept (can't tell their age — err toward including).
-            if last_at and last_at < sync_cutoff:
-                continue
 
             if not conv:
                 conv = Conversation(
@@ -183,6 +176,131 @@ async def sync_instance_chats(instance_name: str, tenant_id: str, wa_instance_id
         await db.commit()
         logger.info(f"Synced {synced} new conversations for {instance_name}, named {named} from contacts")
     return synced
+
+
+def _extract_content(m: dict):
+    """Pull display text + type out of a Baileys message payload."""
+    if not isinstance(m, dict):
+        return None, "text"
+    if m.get("conversation"):
+        return m["conversation"], "text"
+    ext = m.get("extendedTextMessage")
+    if isinstance(ext, dict) and ext.get("text"):
+        return ext["text"], "text"
+    for key, kind in (("imageMessage", "image"), ("videoMessage", "video"),
+                      ("audioMessage", "audio"), ("documentMessage", "document"),
+                      ("stickerMessage", "sticker"), ("locationMessage", "location")):
+        blk = m.get(key)
+        if blk:
+            cap = blk.get("caption") if isinstance(blk, dict) else None
+            return (cap or f"[{kind}]"), kind
+    return None, "text"
+
+
+async def _fetch_chat_messages(client, base_url, headers, instance_name, jid, max_pages=40):
+    """Page through every message Evolution has stored for one chat."""
+    records, page = [], 1
+    while page <= max_pages:
+        try:
+            r = await client.post(
+                f"{base_url}/chat/findMessages/{instance_name}",
+                headers=headers, json={"where": {"remoteJid": jid}, "page": page},
+            )
+            if r.status_code != 200:
+                break
+            block = (r.json() or {}).get("messages") or {}
+            recs = block.get("records") or []
+            records.extend(recs)
+            if not recs or page >= int(block.get("pages") or 1):
+                break
+            page += 1
+        except Exception as e:
+            logger.warning(f"findMessages {instance_name} {jid} page {page}: {e}")
+            break
+    return records
+
+
+async def sync_instance_history(instance_name: str, tenant_id: str, wa_instance_id: str):
+    """Import the FULL message history for an instance — every chat, every message Evolution
+    holds. sync_instance_chats() only creates conversation stubs (contact + last-message
+    preview); this is what actually fills the threads. Safe to re-run: messages are deduped
+    by wa_message_id. Also re-links conversations left pointing at a previous instance id
+    (happens when a number is deleted and re-paired)."""
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Conversation, Message, MessageDirection
+    from sqlalchemy import select
+
+    # 1) Make sure the conversation rows exist / are up to date.
+    await sync_instance_chats(instance_name, tenant_id, wa_instance_id)
+
+    base_url = settings.EVOLUTION_API_URL
+    headers = {"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"}
+
+    async with AsyncSessionLocal() as db:
+        convs = (await db.execute(select(Conversation).where(
+            Conversation.tenant_id == tenant_id,
+            Conversation.instance_name == instance_name,
+        ))).scalars().all()
+
+        # Re-link conversations orphaned from an earlier incarnation of this number.
+        relinked = 0
+        for c in convs:
+            if c.wa_instance_id != wa_instance_id:
+                c.wa_instance_id = wa_instance_id
+                relinked += 1
+        if relinked:
+            await db.commit()
+
+        # Existing message ids so re-runs don't duplicate.
+        conv_ids = [c.id for c in convs]
+        known = set()
+        if conv_ids:
+            known = {
+                r for (r,) in (await db.execute(
+                    select(Message.wa_message_id).where(Message.conversation_id.in_(conv_ids))
+                )).all() if r
+            }
+
+        imported, scanned = 0, 0
+        async with httpx.AsyncClient(timeout=45) as client:
+            for c in convs:
+                recs = await _fetch_chat_messages(client, base_url, headers, instance_name, c.wa_jid)
+                scanned += 1
+                newest = c.last_message_at
+                for rec in recs:
+                    key = rec.get("key") or {}
+                    wid = key.get("id")
+                    if not wid or wid in known:
+                        continue
+                    content, mtype = _extract_content(rec.get("message") or {})
+                    if content is None:
+                        continue
+                    ts = rec.get("messageTimestamp")
+                    try:
+                        created = datetime.utcfromtimestamp(int(ts)) if ts else datetime.utcnow()
+                    except (ValueError, TypeError, OSError):
+                        created = datetime.utcnow()
+                    db.add(Message(
+                        conversation_id=c.id,
+                        wa_message_id=wid,
+                        direction=MessageDirection.outbound if key.get("fromMe") else MessageDirection.inbound,
+                        content=content,
+                        message_type=mtype,
+                        created_at=created,
+                    ))
+                    known.add(wid)
+                    imported += 1
+                    if newest is None or created > newest:
+                        newest = created
+                        c.last_message = content[:200]
+                        c.last_message_at = created
+                if imported and imported % 200 < 50:
+                    await db.commit()   # periodic flush so progress survives a failure
+        await db.commit()
+
+    logger.info(f"history sync {instance_name}: {imported} messages across {scanned} chats "
+                f"(relinked {relinked})")
+    return {"chats": scanned, "messages_imported": imported, "relinked": relinked}
 
 
 async def upsert_inbound_message(
