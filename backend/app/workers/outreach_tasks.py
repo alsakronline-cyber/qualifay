@@ -17,12 +17,16 @@ def run_async(coro):
 
 
 @celery_app.task(bind=True, max_retries=2, queue="outreach")
-def process_approved_lead(self, lead_id: str, template_id: str = None, override_text: str = None):
+def process_approved_lead(self, lead_id: str, template_id: str = None, override_text: str = None,
+                          channel: str = None):
     """Send initial outreach to an approved lead. Precedence for the message body:
     override_text (a human-approved/edited copilot draft) → template_id (rendered) →
-    AI-written AIDA copy."""
+    opt-in template (cold opt-in leads) → AI-written AIDA copy.
+
+    channel="email" forces the email path even when the lead has a phone; otherwise the
+    channel is chosen automatically (WhatsApp if there's a number, else email)."""
     try:
-        return run_async(_process_approved_lead(lead_id, template_id, override_text))
+        return run_async(_process_approved_lead(lead_id, template_id, override_text, channel))
     except Exception as exc:
         logger.error(f"process_approved_lead failed for {lead_id}: {exc}")
         raise self.retry(exc=exc, countdown=60)
@@ -81,7 +85,8 @@ async def _supervise_send(db, tenant_id, text, autonomy, brand, first_contact=Fa
         return True, text, "supervisor-error-failopen"
 
 
-async def _process_approved_lead(lead_id: str, template_id: str = None, override_text: str = None):
+async def _process_approved_lead(lead_id: str, template_id: str = None, override_text: str = None,
+                                 channel: str = None):
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
         Lead, WaInstance, Conversation, Message,
@@ -108,8 +113,14 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
 
         template = await _load_template(db, lead.tenant_id, template_id)
 
-        # Channel selection: WhatsApp when there's a phone, else fall back to email
-        # (many LinkedIn leads are email-only), else there's no way to reach them.
+        # Channel selection. Default: WhatsApp when there's a phone, else email. Passing
+        # channel="email" forces the email path even when the lead also has a phone —
+        # without it an email campaign is impossible for any lead that has a number, which
+        # is nearly all of them.
+        if channel == "email":
+            if not lead.email:
+                return {"error": "no_email", "lead_id": lead_id}
+            return await _send_email_outreach(db, lead, template, override_text)
         if not lead.phone:
             if lead.email:
                 return await _send_email_outreach(db, lead, template, override_text)
@@ -306,32 +317,51 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
     WhatsApp, capped per-tenant per-day to protect sender reputation. A human-approved
     copilot draft (override_text) is used verbatim as the body when present."""
     from datetime import date, datetime
+    from sqlalchemy import select
     from app.models.models import LeadStage
     from app.services.ai_service import ai_service
     from app.services.email_service import email_service
     from app.core.config import settings
 
-    if not email_service.is_configured():
-        logger.warning("Email outreach requested but SMTP is not configured")
+    # A tenant's own EmailAccount is a perfectly good sender; requiring the GLOBAL .env SMTP
+    # blocked every send for tenants that only have their own mailbox configured.
+    from app.services.email_account_service import pick_account, record_account_send
+    account = await pick_account(lead.tenant_id, db)
+    if not account and not email_service.is_configured():
+        logger.warning("Email outreach requested but no sender is configured")
         return {"error": "smtp_not_configured"}
 
-    # Consent compliance (Law 151) — identical gate to the WhatsApp path.
+    # Consent compliance (Law 151) — identical gate to the WhatsApp path, including the
+    # opt-in exception: the first message to a lead staged as an opt-in request IS the
+    # request for permission, so blocking it would make consent unobtainable.
+    from app.models.models import Conversation, Message, MessageDirection
+    from sqlalchemy import func as _func
+    optin_first_contact = False
+    if lead.consent_method == "opt_in_request" and not lead.consent_at:
+        prior = (await db.execute(
+            select(_func.count(Message.id))
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(Conversation.lead_id == lead.id,
+                   Message.direction == MessageDirection.outbound)
+        )).scalar() or 0
+        optin_first_contact = prior == 0
+
     lead_dict = {
         "name": lead.name, "company": lead.company,
         "source": lead.source.value if lead.source else None,
         "consent_at": lead.consent_at.isoformat() if lead.consent_at else None,
         "consent_method": lead.consent_method,
     }
-    consent = await ai_service.check_consent_compliance(lead_dict, lead.consent_method or "unknown")
+    consent = ({"compliant": True} if optin_first_contact
+               else await ai_service.check_consent_compliance(
+                   lead_dict, lead.consent_method or "unknown"))
     if not consent.get("compliant", False):
         logger.warning(f"Email outreach blocked by consent for lead {lead.id}")
         return {"error": "consent_non_compliant"}
 
-    # Pick a sending identity: a tenant email account (rotated, own warmup) if any,
-    # else the system-level account with its tenant-level ramped/bounce-aware cap.
+    # Sender identity was resolved above (tenant account preferred). Apply the tenant-level
+    # ramped/bounce-aware cap when falling back to the system account.
     from app.services.warmup_service import warmup_service
-    from app.services.email_account_service import pick_account, record_account_send
-    account = await pick_account(lead.tenant_id, db)
     if not account:
         allowed, used, cap = await warmup_service.check_email_limit(lead.tenant_id, db)
         if not allowed:
@@ -345,6 +375,27 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
     if override_text:
         body = override_text
         subject = _default_subject
+    elif optin_first_contact and not template:
+        # Cold opt-in lead: must receive the opt-in request, never generated sales copy.
+        # Mirrors the WhatsApp path — segment-matched, language-matched, rotated by lead id.
+        from app.models.models import MessageTemplate
+        from app.services.template_render import render_for_lead
+        optin = (await db.execute(select(MessageTemplate).where(
+            MessageTemplate.tenant_id == lead.tenant_id,
+            MessageTemplate.category == "opt_in_email",
+        ).order_by(MessageTemplate.name))).scalars().all()
+        if not optin:
+            logger.error(f"Lead {lead.id}: opt-in email required but no opt_in_email template")
+            return {"error": "no_optin_email_template"}
+        seg = (lead.raw_data or {}).get("segment") or ""
+        pool = [x for x in optin if seg and seg.lower() in x.name.lower()] or optin
+        _, _, _lang = await _tenant_ctx(db, lead.tenant_id)
+        tag = "(en)" if _lang == "en" else "(ar)"
+        pool = [x for x in pool if tag in (x.name or "")] or pool
+        pick = pool[sum(ord(c) for c in (lead.id or "x")) % len(pool)]
+        body = render_for_lead(pick.body, lead)
+        subject = render_for_lead(pick.subject or "", lead) or _default_subject
+        logger.info(f"Lead {lead.id}: opt-in email template '{pick.name}'")
     elif ab:
         _variant, body, ab_subject = ab
         subject = ab_subject or _default_subject
