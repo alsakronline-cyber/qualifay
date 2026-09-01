@@ -90,7 +90,7 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
     from app.services.ai_service import ai_service
     from app.services.evolution_service import evolution_service
     from app.services.warmup_service import warmup_service
-    from sqlalchemy import select
+    from sqlalchemy import select, func
     from datetime import datetime
 
     async with AsyncSessionLocal() as db:
@@ -116,7 +116,21 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             logger.warning(f"Lead {lead_id} has no phone or email")
             return {"error": "no_contact"}
 
-        # Step 1: Consent compliance check
+        # Step 1: Consent compliance check.
+        # Narrow exception: a lead explicitly staged as an opt-in request has no consent yet
+        # BY DESIGN — the first message is what asks for it, so blocking it would make
+        # permission impossible to obtain. This applies to the FIRST contact only: once any
+        # outbound message exists, real consent is required like everyone else.
+        optin_first_contact = False
+        if lead.consent_method == "opt_in_request" and not lead.consent_at:
+            prior = (await db.execute(
+                select(func.count(Message.id))
+                .join(Conversation, Message.conversation_id == Conversation.id)
+                .where(Conversation.lead_id == lead.id,
+                       Message.direction == MessageDirection.outbound)
+            )).scalar() or 0
+            optin_first_contact = prior == 0
+
         lead_dict = {
             "name": lead.name,
             "company": lead.company,
@@ -124,7 +138,9 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             "consent_at": lead.consent_at.isoformat() if lead.consent_at else None,
             "consent_method": lead.consent_method,
         }
-        consent = await ai_service.check_consent_compliance(lead_dict, lead.consent_method or "unknown")
+        consent = ({"compliant": True} if optin_first_contact
+                   else await ai_service.check_consent_compliance(
+                       lead_dict, lead.consent_method or "unknown"))
         if not consent.get("compliant", False):
             notif = Notification(
                 tenant_id=lead.tenant_id,
