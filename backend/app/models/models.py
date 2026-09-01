@@ -409,6 +409,12 @@ class EmailAccount(Base):
     email_started_at = Column(DateTime, nullable=True)  # anchors this account's warmup
     sent_today = Column(Integer, default=0)
     last_reset_at = Column(DateTime, nullable=True)
+    # Deliverability guard. A hard bounce rate above a few percent gets a sending domain
+    # throttled and then blacklisted, which would take the company's normal mail down with
+    # it — so bounces are counted against a rolling send total and the account pauses itself.
+    sent_total = Column(Integer, default=0, server_default="0")
+    bounce_total = Column(Integer, default=0, server_default="0")
+    last_bounce_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     tenant = relationship("Tenant")
