@@ -191,6 +191,31 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             # The user already read and approved (or edited) this exact text — send it verbatim.
             message_text = override_text
             ab_used = True   # also skips the re-translation step below
+        elif optin_first_contact and not template:
+            # A cold lead staged for opt-in must receive the actual opt-in request. Falling
+            # through to AI sales copy here is what sent generated pitches (and a truncated
+            # fragment) to real customers, so that path is closed: pick an opt_in template,
+            # rotating by lead id so consecutive contacts don't get identical text.
+            from app.models.models import MessageTemplate
+            from app.services.template_render import render_for_lead
+            optin = (await db.execute(select(MessageTemplate).where(
+                MessageTemplate.tenant_id == lead.tenant_id,
+                MessageTemplate.category == "opt_in",
+            ).order_by(MessageTemplate.name))).scalars().all()
+            if not optin:
+                logger.error(f"Lead {lead_id}: opt-in required but no opt_in template exists")
+                return {"error": "no_optin_template", "lead_id": lead_id}
+            seg = (lead.raw_data or {}).get("segment") or ""
+            pool = [t for t in optin if seg and seg.lower() in t.name.lower()] or optin
+            # Keep the message in the tenant's outreach language — the templates are tagged
+            # "(ar)"/"(en)", and an English opener to an Arabic-speaking contact reads badly.
+            _, _, _lang = await _tenant_ctx(db, lead.tenant_id)
+            tag = "(en)" if _lang == "en" else "(ar)"
+            pool = [t for t in pool if tag in (t.name or "")] or pool
+            pick = pool[sum(ord(c) for c in (lead.id or "x")) % len(pool)]
+            message_text = render_for_lead(pick.body, lead)
+            ab_used = True   # already in-language; skip the translation pass
+            logger.info(f"Lead {lead_id}: opt-in template '{pick.name}'")
         else:
             from app.services.ab_service import assign_variant
             ab = await assign_variant(db, lead.tenant_id, "whatsapp", lead)
