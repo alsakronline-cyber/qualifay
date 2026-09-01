@@ -158,7 +158,10 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
         inst_result = await db.execute(
             select(WaInstance).where(
                 WaInstance.tenant_id == lead.tenant_id,
-                WaInstance.status == "open",
+                # Connected instances are stored as either "open" or "connected" depending on
+                # which code path last wrote the status. Matching only "open" silently made a
+                # genuinely connected number invisible to the sender (-> no_wa_instance).
+                WaInstance.status.in_(["open", "connected"]),
             ).limit(1)
         )
         instance = inst_result.scalar_one_or_none()
