@@ -62,6 +62,7 @@ export const leadsApi = {
   list: (params?: {
     stage?: string
     source?: string
+    segment?: string        // campaign segment stored at import (raw_data.segment)
     min_score?: number
     max_score?: number
     search?: string

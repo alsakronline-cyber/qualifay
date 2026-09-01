@@ -216,6 +216,9 @@ async def list_leads(
     score_max: Optional[int] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    # Campaign segment stored on the lead at import time (raw_data.segment), e.g.
+    # Procurement / Engineers / General — this is what campaign lists are built from.
+    segment: Optional[str] = None,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     # The frontend sends page/per_page; accept them as aliases so callers that use
@@ -256,6 +259,11 @@ async def list_leads(
             filters.append(Lead.status == LeadStatus(status))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    if segment:
+        # raw_data is a JSON column; ->> works for json and jsonb alike on Postgres.
+        from sqlalchemy import text as _sql
+        filters.append(_sql("raw_data->>'segment' = :seg").bindparams(seg=segment))
 
     if search:
         term = f"%{search}%"

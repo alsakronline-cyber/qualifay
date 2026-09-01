@@ -60,6 +60,7 @@ function LeadsContent() {
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState<string>('')
   const [sourceFilter, setSourceFilter] = useState<string>('')
+  const [segmentFilter, setSegmentFilter] = useState<string>('')
   const [minScore, setMinScore] = useState<string>('')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -80,13 +81,15 @@ function LeadsContent() {
     } catch { toast.error('فشل التسجيل') }
   }, [selectedIds, enrollSeq])
 
-  const allLeadsKey = tab === 'all' ? ['leads/all', search, stageFilter, sourceFilter, minScore, page] : null
+  const allLeadsKey = tab === 'all'
+    ? ['leads/all', search, stageFilter, sourceFilter, minScore, segmentFilter, page] : null
   const { data: allData, isLoading: allLoading, mutate: mutateAll } = useSWR(
     allLeadsKey,
     () => leadsApi.list({
       search: search || undefined,
       stage: stageFilter || undefined,
       source: sourceFilter || undefined,
+      segment: segmentFilter || undefined,
       min_score: minScore ? Number(minScore) : undefined,
       page,
       per_page: 20,
@@ -351,6 +354,20 @@ function LeadsContent() {
               {Object.entries(STAGE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
+            </select>
+            {/* Campaign segment (raw_data.segment), set at import — this is what
+                campaign lists are built from. */}
+            <select
+              value={segmentFilter}
+              onChange={(e) => { setSegmentFilter(e.target.value); setPage(1) }}
+              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo"
+            >
+              <option value="">كل الشرائح</option>
+              <option value="Procurement">المشتريات</option>
+              <option value="Engineers">المهندسون</option>
+              <option value="General">عام</option>
+              <option value="Management">الإدارة</option>
+              <option value="Other">أخرى</option>
             </select>
             <input
               type="number"
