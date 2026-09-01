@@ -472,6 +472,11 @@ async def approve_lead(
 class BulkApproveRequest(BaseModel):
     ids: List[str]
     template_id: Optional[str] = None   # use this template instead of AI-written copy
+    # Spacing between sends, in SECONDS. Each message is queued a randomised gap after the
+    # previous one so a batch trickles out instead of firing as one burst — bursts are the
+    # clearest bot signal to WhatsApp and the fastest way to get a number banned.
+    spacing_min: int = Field(240, ge=0, le=7200)
+    spacing_max: int = Field(600, ge=0, le=7200)
 
 
 @router.post("/bulk-approve")
@@ -480,13 +485,20 @@ async def bulk_approve_leads(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve many leads at once and queue outreach for each. The warmup daily caps
-    pace the actual sends (WhatsApp or email), so over-cap leads retry the next day."""
+    """Approve many leads at once and queue outreach for each, spaced out over time.
+
+    The warmup daily cap still governs how many actually go out (over-cap leads retry the
+    next day); this adds the *gap between* individual sends within a batch.
+    """
+    import random
     from app.workers.outreach_tasks import process_approved_lead
 
     tenant_id = current_user["tenant_id"]
     if not body.ids:
         return {"approved": 0, "queued": 0}
+
+    lo = min(body.spacing_min, body.spacing_max)
+    hi = max(body.spacing_min, body.spacing_max)
 
     result = await db.execute(
         select(Lead).where(and_(Lead.id.in_(body.ids), Lead.tenant_id == tenant_id))
@@ -496,10 +508,18 @@ async def bulk_approve_leads(
         lead.stage = LeadStage.approved
     await db.commit()
 
+    delay = 0
     for lead in leads:
-        process_approved_lead.apply_async(args=[lead.id, body.template_id], queue="outreach")
+        process_approved_lead.apply_async(
+            args=[lead.id, body.template_id], queue="outreach", countdown=delay,
+        )
+        delay += random.randint(lo, hi) if hi > 0 else 0
 
-    return {"approved": len(leads), "queued": len(leads)}
+    return {
+        "approved": len(leads), "queued": len(leads),
+        "spacing_seconds": [lo, hi],
+        "spread_over_minutes": round(delay / 60) if delay else 0,
+    }
 
 
 class CheckReachabilityRequest(BaseModel):

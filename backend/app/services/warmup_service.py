@@ -48,7 +48,12 @@ class WarmupService:
             return False, 0, 0
 
         used = instance.sent_today_wa or 0
-        cap = instance.daily_wa_cap or get_cap_for_day(instance.day_of_life or 0)
+        # A deliberate owner-set ceiling wins over the warmup schedule (daily_wa_cap is
+        # rewritten every night by advance_all_warmup_days, so an override has to live
+        # in its own column to survive).
+        cap = (getattr(instance, "wa_cap_override", None)
+               or instance.daily_wa_cap
+               or get_cap_for_day(instance.day_of_life or 0))
 
         # Soft pause: block sending while keeping the session connected.
         if getattr(instance, "paused", False):

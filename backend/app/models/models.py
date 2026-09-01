@@ -266,6 +266,10 @@ class WaInstance(Base):
     phone_number = Column(String, nullable=True)
     day_of_life = Column(Integer, default=0)
     daily_wa_cap = Column(Integer, default=10)
+    # Manual daily-send ceiling that survives the nightly warmup advance (which rewrites
+    # daily_wa_cap from the schedule). Set only when the owner deliberately chooses a pace;
+    # NULL = follow the warmup schedule. Higher than the schedule = higher ban risk.
+    wa_cap_override = Column(Integer, nullable=True)
     sent_today_wa = Column(Integer, default=0)
     sent_today_email = Column(Integer, default=0)
     last_reset_at = Column(DateTime, nullable=True)
