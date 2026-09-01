@@ -24,7 +24,11 @@ class Settings(BaseSettings):
 
     # AI — Groq (real-time)
     GROQ_API_KEY: str
-    GROQ_MODEL_REALTIME: str = "llama-3.3-70b-versatile"
+    # NOTE: llama-3.3-70b-versatile was decommissioned by Groq — every call 404'd with
+    # "model does not exist", which silently emptied all AI output (BANT, intent, replies,
+    # AIDA copy) because the OpenRouter fallback is disabled. Verified against Groq's
+    # /models endpoint; keep this in sync when Groq retires a model.
+    GROQ_MODEL_REALTIME: str = "openai/gpt-oss-120b"
 
     # AI — OpenRouter (reasoning + batch)
     OPENROUTER_API_KEY: str
