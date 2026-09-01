@@ -304,10 +304,18 @@ Rules:
 {f'Additional context: {context}' if context else ''}
 Write the outreach message:"""
 
+        # Arabic needs far more tokens per word than English; 200 truncated real messages
+        # mid-sentence, which then went out to customers looking broken.
         result = await self._or_fast(
             [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-            max_tokens=200,
+            max_tokens=600,
         )
+        result = (result or "").strip()
+        # Never ship a half-finished sentence: if the model was still cut off, fall back to
+        # the safe canned line rather than sending a fragment.
+        if result and not result.rstrip().endswith((".", "؟", "!", "?", "،", "。", ":", "»")):
+            logger.warning("AIDA output looks truncated; using safe fallback")
+            result = ""
         return result or "مرحباً، كنا نود مشاركتك فرصة قد تناسب عملكم. هل لديكم دقيقة للحديث؟"
 
     async def expand_search_queries(self, industry: str, cities: str, n: int = 8) -> list:
