@@ -41,9 +41,40 @@ async def pick_account(tenant_id: str, db):
 
 async def record_account_send(account, db) -> None:
     account.sent_today = (account.sent_today or 0) + 1
+    account.sent_total = (account.sent_total or 0) + 1
     if not account.email_started_at:
         account.email_started_at = datetime.utcnow()  # anchor this account's ramp
     await db.commit()
+
+
+# Hard-bounce guard. Mailbox providers throttle a sender above roughly 5% bounces and
+# blacklist the domain not far above that — which would take the company's ordinary mail
+# down too, not just campaigns. MIN_SAMPLE stops one early bounce in a tiny batch from
+# pausing the account on noise.
+BOUNCE_PAUSE_RATE = 0.05
+BOUNCE_MIN_SAMPLE = 20
+
+
+def bounce_rate(account) -> float:
+    sent = account.sent_total or 0
+    return (account.bounce_total or 0) / sent if sent else 0.0
+
+
+async def record_account_bounce(account, db, reason: str = "") -> dict:
+    """Count a hard bounce and pause the account if the rate is unsafe. Returns the state so
+    callers can surface it."""
+    account.bounce_total = (account.bounce_total or 0) + 1
+    account.last_bounce_at = datetime.utcnow()
+    rate = bounce_rate(account)
+    paused_now = False
+    if (account.sent_total or 0) >= BOUNCE_MIN_SAMPLE and rate >= BOUNCE_PAUSE_RATE:
+        if not account.paused:
+            account.paused = True
+            paused_now = True
+    await db.commit()
+    return {"bounces": account.bounce_total, "sent": account.sent_total,
+            "rate": round(rate, 4), "paused": bool(account.paused),
+            "paused_now": paused_now, "reason": reason}
 
 
 async def reset_all_accounts(db) -> int:

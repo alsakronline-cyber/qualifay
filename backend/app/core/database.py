@@ -74,6 +74,9 @@ _ENSURE_COLUMNS = [
     ("sales_docs", "payment_terms", "TEXT"),
     ("tenants", "scraper_keys_enc", "TEXT"),
     ("wa_instances", "wa_cap_override", "INTEGER"),
+    ("email_accounts", "sent_total", "INTEGER DEFAULT 0"),
+    ("email_accounts", "bounce_total", "INTEGER DEFAULT 0"),
+    ("email_accounts", "last_bounce_at", "TIMESTAMP"),
 ]
 
 # Enum values added to native PG enums after they were first created. create_all()
