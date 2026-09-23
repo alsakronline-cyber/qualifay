@@ -29,6 +29,12 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_track_started=True,
+    # The worker runs with `-Q scrape,ai,outreach,default`, but Celery's built-in default
+    # queue is named "celery" — so every task NOT matched by task_routes below was published
+    # to a queue nobody consumed and silently piled up (18,598 of them: nightly backups,
+    # inbound-email polling, orchestrator runs, digests). Pin the default to the queue the
+    # worker actually listens on so unrouted tasks are executed.
+    task_default_queue="default",
     task_routes={
         "app.workers.scrape_tasks.*": {"queue": "scrape"},
         "app.workers.ai_tasks.*": {"queue": "ai"},

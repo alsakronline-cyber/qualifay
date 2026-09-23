@@ -14,9 +14,15 @@
         "http.server",
         "8788",
         "--directory",
-        "C:/Users/pc shop/Desktop/Folders/Projects/iconicmach"
+        "C:/Users/pc shop/Desktop/Projects/iconicmach"
       ],
       "port": 8788
+    },
+    {
+      "name": "effat-dev",
+      "runtimeExecutable": "C:\\Users\\PCSHOP~1\\AppData\\Local\\Temp\\claude\\C--Users-pc-shop-Desktop-claudi-projects-qualifay\\b21cea06-400b-434b-83b6-a26ccd8fc86f\\scratchpad\\effat-dev.cmd",
+      "runtimeArgs": [],
+      "port": 3000
     }
   ]
 }
