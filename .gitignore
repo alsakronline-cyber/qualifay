@@ -27,3 +27,6 @@ npm-debug.log*
 frontend/tsconfig.tsbuildinfo
 
 
+
+# n8n execution dumps
+*_exec*.json

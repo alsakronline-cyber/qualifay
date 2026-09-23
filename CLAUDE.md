@@ -1003,3 +1003,23 @@ watch -n5 free -h
 # Nginx
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+---
+
+## 20. Token Budget Rules (measured: ~75% of session tokens were browser screenshots)
+
+**Browser verification (Browser pane / Chrome MCP):**
+- Default to `read_page` (filter `interactive`) or `get_page_text` (`max_chars` ≤ 4000) — NOT screenshots.
+- Screenshot only for visual/CSS proof, max **1 per verification cycle**, always `scale: 0.4`.
+- Never put `screenshot` inside a `browser_batch` unless it is the final step; never chain multiple.
+- Use `find` to get a ref, then act by ref — do not screenshot just to locate a button.
+- Console/network checks: `read_console_messages {onlyErrors:true, limit:20}`.
+
+**Code reading:**
+- Read source with `offset/limit` or `grep -n` context; never whole-file Read on files > 300 lines
+  (models.py, outreach_tasks.py, ai_tasks.py, ai_service.py, inbox/page.tsx, settings/page.tsx).
+- Never cat/Read `frontend/package-lock.json`, `extension/screenshots/*`, or `*_exec*.json` dumps.
+
+**Shell:**
+- Pipe long outputs through `head -40` / `tail -40`; use `docker compose logs --tail=50`.
+- Remote SSH: one combined command per round-trip, not one command per fact.
