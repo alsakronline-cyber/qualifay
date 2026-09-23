@@ -17,6 +17,7 @@ celery_app = Celery(
         "app.workers.campaign_tasks",
         "app.workers.onboarding_tasks",
         "app.workers.orchestrator_tasks",
+        "app.workers.billing_tasks",
     ],
 )
 
@@ -80,6 +81,16 @@ celery_app.conf.update(
             # every time the beat container is recreated, so frequent redeploys can defer
             # it indefinitely (it silently never ran for 10 days). A cron time always fires.
             "schedule": crontab(hour=3, minute=0),
+        },
+        # A backup that stops running reports nothing — only an absence — so check for the
+        # absence explicitly, an hour after the dump is due.
+        "backup-healthcheck": {
+            "task": "billing.backup_healthcheck",
+            "schedule": crontab(hour=4, minute=0),
+        },
+        "enforce-trials": {
+            "task": "billing.enforce_trials",
+            "schedule": crontab(hour=2, minute=0),
         },
         "sync-campaign-audiences": {
             "task": "campaigns.sync_audiences",

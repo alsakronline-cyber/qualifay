@@ -95,12 +95,26 @@ async def create_instance(
         if count >= limit:
             raise HTTPException(status_code=403,
                                 detail=f"خطتك تسمح بـ {limit} جهاز واتساب. رقِّ خطتك لإضافة المزيد.")
-    # Check if name already taken
+    # Check if name already taken — case-INSENSITIVELY. Evolution treats "Nexu" and "nexu"
+    # as two different instances, so a case variant silently created a second, empty session
+    # that could never pair while the real one kept running; the tenant's chats then looked
+    # lost because the DB row pointed at the dead twin. Reject the near-duplicate instead.
+    from sqlalchemy import func as _func
+    requested = (req.instance_name or "").strip()
+    if not requested:
+        raise HTTPException(status_code=400, detail="Instance name is required")
     existing = await db.execute(
-        select(WaInstance).where(WaInstance.instance_name == req.instance_name)
+        select(WaInstance).where(_func.lower(WaInstance.instance_name) == requested.lower())
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Instance name already exists")
+    dup = existing.scalar_one_or_none()
+    if dup:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"يوجد جهاز باسم '{dup.instance_name}' بالفعل. اختر اسماً مختلفاً."
+                    if dup.instance_name != requested
+                    else "Instance name already exists"),
+        )
+    req.instance_name = requested
 
     try:
         await evolution_service.create_instance(req.instance_name)

@@ -11,6 +11,25 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────
 # Scraper registry — maps LeadSource enum values to classes
 # ──────────────────────────────────────────────────────────
+def source_unavailable_reason(source: str) -> str:
+    """Why this source cannot run right now, or "" if it can.
+
+    Some sources need a credential the operator hasn't supplied. Without this gate they are
+    scheduled hourly, fail deep inside the scraper with BlockedError, and are retried — which
+    produced ~2,400 error lines a day for three permanently-dead sources. Real incidents get
+    buried in that noise, so a source that *cannot* work is skipped with a clear reason
+    instead of failing loudly forever.
+    """
+    from app.core.config import settings as s
+    if source in ("linkedin", "linkedin_search"):
+        if not (s.GOOGLE_CSE_API_KEY and s.GOOGLE_CSE_CX):
+            return "LinkedIn discovery needs GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX (free, 100/day)."
+    if source in ("facebook", "competitor_ads"):
+        if not s.FACEBOOK_ADLIB_TOKEN:
+            return "Facebook Ad Library needs FACEBOOK_ADLIB_TOKEN (free, Meta app must be approved)."
+    return ""
+
+
 def _get_scraper_map():
     """Lazy import to avoid circular deps and heavy Playwright loads at startup."""
     from scrapers.google_maps import GoogleMapsScraper
@@ -109,6 +128,18 @@ async def _run_scrape_job_async(task, job_id: str):
         if not job:
             logger.warning(f"ScrapeJob {job_id} not found")
             return {"error": "job_not_found"}
+
+        # Skip sources whose credentials are missing: they can only fail, and retrying them
+        # every hour drowns the logs (see source_unavailable_reason).
+        _src = job.source.value if hasattr(job.source, "value") else str(job.source)
+        _why = source_unavailable_reason(_src)
+        if _why:
+            job.status = "skipped"
+            job.error_message = _why
+            job.finished_at = datetime.now(timezone.utc)
+            await db.commit()
+            logger.info("Scrape job %s skipped — %s", job_id, _why)
+            return {"skipped": True, "source": _src, "reason": _why}
 
         # Check if job is paused and pause window hasn't expired
         if job.status == "paused" and job.paused_until:
