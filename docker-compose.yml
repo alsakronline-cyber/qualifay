@@ -65,6 +65,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # backend, celery_worker and celery_beat are the SAME image — same Dockerfile, same
+    # context, differing only in `command`. Without a shared tag Compose built and committed
+    # the 2.7GB image three times per deploy and kept three byte-identical copies on disk
+    # (8.1GB). Sharing one tag means it is built once and the other two resolve from cache.
+    image: qualifay-app:latest
     platform: linux/arm64
     container_name: qualifay_backend
     command: uvicorn app.main:app --host 127.0.0.1 --port 5000 --workers 2
@@ -113,6 +118,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: qualifay-app:latest       # same image as backend (see note there)
     platform: linux/arm64
     container_name: qualifay_celery
     restart: unless-stopped
@@ -158,6 +164,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: qualifay-app:latest       # same image as backend (see note there)
     platform: linux/arm64
     container_name: qualifay_beat
     restart: unless-stopped
