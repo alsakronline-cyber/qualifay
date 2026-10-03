@@ -28,16 +28,16 @@ import ActivityFeed from '@/components/activity-feed'
 import { PIPELINE_STAGES, STAGE_LABELS } from '@/lib/stages'
 
 const STAGE_COLORS: Record<string, string> = {
-  new: 'text-blue-400 bg-blue-500/10',
-  qualifying: 'text-blue-400 bg-blue-500/10',
+  new: 'text-gray-400 bg-gray-500/10',
+  qualifying: 'text-gray-400 bg-gray-500/10',
   pending_review: 'text-yellow-400 bg-yellow-500/10',
   approved: 'text-green-400 bg-green-500/10',
-  manual: 'text-purple-400 bg-purple-500/10',
-  outreach: 'text-cyan-400 bg-cyan-500/10',
-  replied: 'text-teal-400 bg-teal-500/10',
-  meeting: 'text-cyan-400 bg-cyan-500/10',
-  proposal: 'text-purple-400 bg-purple-500/10',
-  negotiation: 'text-orange-400 bg-orange-500/10',
+  manual: 'text-gray-400 bg-gray-500/10',
+  outreach: 'text-gray-400 bg-gray-500/10',
+  replied: 'text-gray-400 bg-gray-500/10',
+  meeting: 'text-gray-400 bg-gray-500/10',
+  proposal: 'text-gray-400 bg-gray-500/10',
+  negotiation: 'text-gray-400 bg-gray-500/10',
   won: 'text-emerald-400 bg-emerald-500/10',
   lost: 'text-gray-400 bg-gray-700',
   archived: 'text-gray-500 bg-gray-800',
@@ -356,7 +356,7 @@ export default function LeadDetailPage() {
                   </button>
                   <button
                     onClick={handleTakeManually}
-                    className="flex items-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm px-4 py-2 rounded-lg transition-colors font-cairo"
+                    className="flex items-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 text-sm px-4 py-2 rounded-lg transition-colors font-cairo"
                   >
                     <UserCheck size={13} />
                     استلام يدوي

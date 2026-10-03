@@ -382,7 +382,7 @@ export default function OnboardingWizard() {
                 <p className="text-gray-400 text-sm mt-1">Let's find your first leads</p>
               </div>
 
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-sm text-blue-300 font-cairo">
+              <div className="bg-gray-500/10 border border-gray-500/20 rounded-xl p-3 text-sm text-gray-300 font-cairo">
                 المصدر: Google Maps · الحد الأقصى: 10 نتائج
               </div>
 

@@ -49,7 +49,7 @@ export default function AdminAccountsPage() {
 
   const roleBadge = (a: Acct) => a.is_admin
     ? { t: 'مالك المنصة', c: 'text-gold-primary bg-gold-primary/10 border-gold-primary/30', I: ShieldCheck }
-    : a.is_tenant_admin ? { t: 'مدير', c: 'text-blue-400 bg-blue-500/10 border-blue-500/30', I: Shield }
+    : a.is_tenant_admin ? { t: 'مدير', c: 'text-gray-400 bg-gray-500/10 border-gray-500/30', I: Shield }
     : { t: 'موظف', c: 'text-gray-400 bg-gray-700 border-gray-600', I: User }
 
   return (
@@ -83,7 +83,7 @@ export default function AdminAccountsPage() {
                 </div>
                 <span className={clsx('inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-cairo', rb.c)}><RI size={11} /> {rb.t}</span>
                 {suspended && <span className="text-[10px] bg-red-500/20 text-red-300 rounded-full px-2 py-0.5 font-cairo">موقوف</span>}
-                {unverified && <span className="text-[10px] bg-orange-500/20 text-orange-300 rounded-full px-2 py-0.5 font-cairo">غير مُفعّل</span>}
+                {unverified && <span className="text-[10px] bg-gray-500/20 text-gray-300 rounded-full px-2 py-0.5 font-cairo">غير مُفعّل</span>}
 
                 <div className="flex items-center gap-1.5">
                   {unverified && (

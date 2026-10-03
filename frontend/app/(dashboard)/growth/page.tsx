@@ -154,9 +154,9 @@ export default function GrowthPage() {
       <div>
         <h2 className="text-sm font-bold text-white font-cairo mb-2">مسار النمو</h2>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          <Stat label="مجموع العملاء" value={data.funnel.leads_total} icon={Users} color="text-blue-400" />
+          <Stat label="مجموع العملاء" value={data.funnel.leads_total} icon={Users} color="text-gray-400" />
           <Stat label="بانتظار المراجعة" value={data.funnel.pending_review} icon={CheckCheck} color="text-gold-primary" />
-          <Stat label="معتمد/تواصل" value={data.funnel.approved} icon={Send} color="text-cyan-400" />
+          <Stat label="معتمد/تواصل" value={data.funnel.approved} icon={Send} color="text-gray-400" />
           <Stat label="رد" value={data.funnel.replied} icon={MessageSquareReply} color="text-wa-green" />
           <Stat label="صفقات مربوحة" value={data.funnel.won} icon={Trophy} color="text-green-400" />
         </div>
@@ -170,7 +170,7 @@ export default function GrowthPage() {
           <Stat label="غير مُتحقَّق" value={data.funnel.unverified} icon={ShieldAlert} color="text-yellow-400" />
           <Stat label="مكرَّر" value={data.funnel.duplicates} icon={Copy} color="text-gray-400" />
           <Stat label="مسودّات جاهزة" value={data.funnel.drafts_ready} icon={MessageSquare} color="text-gold-primary" />
-          <Stat label="جُمِع خلال ٢٤س" value={data.funnel.scraped_24h} icon={Download} color="text-sky-400" />
+          <Stat label="جُمِع خلال ٢٤س" value={data.funnel.scraped_24h} icon={Download} color="text-gray-400" />
         </div>
         {data.funnel.drafts_ready > 0 && (
           <Link href="/leads" className="mt-2 inline-flex items-center gap-1.5 text-xs text-gold-primary hover:underline font-cairo">

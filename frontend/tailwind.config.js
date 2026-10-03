@@ -25,8 +25,15 @@ module.exports = {
           900: 'rgb(var(--c-gray-900) / <alpha-value>)',
           950: 'rgb(var(--c-gray-950) / <alpha-value>)',
         },
-        'gold-primary': '#D4AF37',
-        'gold-dark': '#A87018',
+        // The accent is now a CSS variable like the gray ramp, so it can invert per theme:
+        // graphite on the white UI, light gray on the dark UI. Both keep `text-gray-950` —
+        // the class already paired with accent buttons everywhere — as the readable
+        // foreground, so the hundreds of existing `bg-gold-primary text-gray-950` usages
+        // stay correct without touching a single component.
+        // (The `gold-*` names are kept deliberately: renaming them would touch ~200 call
+        // sites across the app for no visual gain and a large regression surface.)
+        'gold-primary': 'rgb(var(--c-accent) / <alpha-value>)',
+        'gold-dark': 'rgb(var(--c-accent-strong) / <alpha-value>)',
         'wa-green': '#25D366',
       },
       fontFamily: {

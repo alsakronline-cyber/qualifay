@@ -47,7 +47,7 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    title: 'إدارة العملاء', en: 'Leads & pipeline', icon: Users, accent: 'text-blue-400',
+    title: 'إدارة العملاء', en: 'Leads & pipeline', icon: Users, accent: 'text-gray-400',
     items: [
       { href: '/leads', icon: Users, title: 'العملاء المحتملون', en: 'Leads',
         desc: 'كل عملائك مع تقييم BANT ومصدرهم. الذكاء يؤهّلهم وأنت تقرّر مع من تتواصل.',
@@ -75,7 +75,7 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    title: 'الذكاء والأتمتة', en: 'AI & automation', icon: Sparkles, accent: 'text-purple-400',
+    title: 'الذكاء والأتمتة', en: 'AI & automation', icon: Sparkles, accent: 'text-gray-400',
     items: [
       { href: '/activity', icon: Sparkles, title: 'المساعد الذكي', en: 'AI Activity',
         desc: 'نظام مستقل يقيّم وضعك ويتصرّف نيابةً عنك ويسجّل كل قرار. أنت تتحكّم بمدى تحكّمه.',
@@ -174,10 +174,10 @@ export default function DashboardPage() {
 
       {/* Pulse */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatPill label="إجمالي العملاء" value={stats.total_leads ?? 0} icon={Users} color="bg-blue-500/10 text-blue-400" />
+        <StatPill label="إجمالي العملاء" value={stats.total_leads ?? 0} icon={Users} color="bg-gray-500/10 text-gray-400" />
         <StatPill label="بانتظار المراجعة" value={stats.pending_review ?? 0} icon={CheckCircle} color="bg-gold-primary/10 text-gold-primary" />
         <StatPill label="رسائل واتساب اليوم" value={stats.wa_messages_today ?? 0} icon={MessageSquare} color="bg-wa-green/10 text-wa-green" />
-        <StatPill label="حملات نشطة" value={stats.active_campaigns ?? 0} icon={Megaphone} color="bg-purple-500/10 text-purple-400" />
+        <StatPill label="حملات نشطة" value={stats.active_campaigns ?? 0} icon={Megaphone} color="bg-gray-500/10 text-gray-400" />
       </div>
 
       {/* Quick-start banner */}

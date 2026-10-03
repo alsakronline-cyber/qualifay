@@ -13,12 +13,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ar" dir="rtl" className="dark">
+    <html lang="ar" dir="rtl" className="dark light">
       <head>
-        {/* Apply the saved theme before paint to avoid a flash of the wrong theme. */}
+        {/* Apply the saved theme before paint to avoid a flash of the wrong theme.
+            The grey/white (light) palette is the default now, so only an explicit
+            'dark' choice removes it — anyone who previously picked dark keeps it. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: "try{if(localStorage.getItem('theme')==='light')document.documentElement.classList.add('light')}catch(e){}",
+            __html: "try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.remove('light')}catch(e){}",
           }}
         />
       </head>

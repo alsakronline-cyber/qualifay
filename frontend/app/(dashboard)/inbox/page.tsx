@@ -708,7 +708,7 @@ export default function InboxPage() {
                   <p className="text-xs text-gray-600 truncate" dir="ltr">{conv.contact_phone}</p>
                 )}
                 {conv.channel === 'email' ? (
-                  <span className="inline-block mt-0.5 text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/25 rounded px-1.5 py-px font-cairo">
+                  <span className="inline-block mt-0.5 text-[10px] bg-gray-500/15 text-gray-400 border border-gray-500/25 rounded px-1.5 py-px font-cairo">
                     ✉ بريد إلكتروني
                   </span>
                 ) : conv.instance_name && (() => {
@@ -786,7 +786,7 @@ export default function InboxPage() {
               <div className="flex items-center gap-2">
                 <p className="text-xs text-gray-500">{selectedConv.contact_phone}</p>
                 {selectedIsEmail ? (
-                  <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/25 rounded px-1.5 py-px font-cairo">
+                  <span className="text-[10px] bg-gray-500/15 text-gray-400 border border-gray-500/25 rounded px-1.5 py-px font-cairo">
                     ✉ بريد إلكتروني
                   </span>
                 ) : selectedConv.instance_name && (
@@ -901,7 +901,7 @@ export default function InboxPage() {
               <div className="px-4 py-2 flex items-center gap-2">
                 <button
                   onClick={handleSuggestReply}
-                  className="flex items-center gap-1.5 text-xs bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 px-3 py-1.5 rounded-lg transition-colors font-cairo"
+                  className="flex items-center gap-1.5 text-xs bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 px-3 py-1.5 rounded-lg transition-colors font-cairo"
                 >
                   <Sparkles size={12} />
                   اقتراح ذكاء اصطناعي ✨
@@ -912,11 +912,11 @@ export default function InboxPage() {
             {/* Loading skeleton */}
             {loadingSuggestion && (
               <div className="px-4 py-3">
-                <div className="flex items-center gap-1.5 text-xs text-purple-400 font-cairo mb-2">
-                  <span className="w-3 h-3 border border-purple-400 border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center gap-1.5 text-xs text-gray-400 font-cairo mb-2">
+                  <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
                   جاري التفكير...
                 </div>
-                <div className="bg-gray-800/60 border border-purple-500/20 rounded-xl p-3 animate-pulse space-y-2">
+                <div className="bg-gray-800/60 border border-gray-500/20 rounded-xl p-3 animate-pulse space-y-2">
                   <div className="h-3 bg-gray-700 rounded w-2/3" />
                   <div className="h-3 bg-gray-700 rounded w-full" />
                   <div className="h-3 bg-gray-700 rounded w-1/2" />
@@ -927,9 +927,9 @@ export default function InboxPage() {
             {/* Suggestion box — editable */}
             {aiSuggestion && !loadingSuggestion && (
               <div className="px-4 pb-3 pt-2">
-                <div className="bg-gray-800/60 border border-purple-500/30 rounded-xl p-3">
+                <div className="bg-gray-800/60 border border-gray-500/30 rounded-xl p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="flex items-center gap-1.5 text-xs text-purple-400 font-cairo font-semibold">
+                    <span className="flex items-center gap-1.5 text-xs text-gray-400 font-cairo font-semibold">
                       <Sparkles size={11} />
                       اقتراح الذكاء الاصطناعي
                       <span className="text-gray-500 font-normal">AI Suggestion</span>
@@ -947,7 +947,7 @@ export default function InboxPage() {
                     onChange={(e) => setEditedSuggestion(e.target.value)}
                     rows={3}
                     dir="rtl"
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-500 font-cairo resize-none"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 font-cairo resize-none"
                   />
                   <div className="flex items-center gap-2 mt-2">
                     <button

@@ -11,10 +11,10 @@ interface Submission {
 }
 
 const META: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-  booking: { label: 'حجز موعد', icon: <CalendarCheck size={14} />, cls: 'text-orange-400 bg-orange-500/10 border-orange-500/25' },
+  booking: { label: 'حجز موعد', icon: <CalendarCheck size={14} />, cls: 'text-gray-400 bg-gray-500/10 border-gray-500/25' },
   order: { label: 'طلب', icon: <ShoppingCart size={14} />, cls: 'text-green-400 bg-green-500/10 border-green-500/25' },
-  callback: { label: 'اتصال', icon: <Phone size={14} />, cls: 'text-blue-400 bg-blue-500/10 border-blue-500/25' },
-  quote: { label: 'عرض سعر', icon: <FileText size={14} />, cls: 'text-purple-400 bg-purple-500/10 border-purple-500/25' },
+  callback: { label: 'اتصال', icon: <Phone size={14} />, cls: 'text-gray-400 bg-gray-500/10 border-gray-500/25' },
+  quote: { label: 'عرض سعر', icon: <FileText size={14} />, cls: 'text-gray-400 bg-gray-500/10 border-gray-500/25' },
   custom: { label: 'أخرى', icon: <FileText size={14} />, cls: 'text-gray-400 bg-gray-700 border-gray-600' },
 }
 

@@ -138,7 +138,7 @@ export default function EmailAccountsPage() {
 
               <div className="flex gap-2">
                 <button onClick={() => act(a.id, () => emailApi.testAccount(a.id), 'تم إرسال رسالة اختبار')} disabled={busy === a.id}
-                  className="flex-1 flex items-center justify-center gap-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg py-1.5 text-xs font-cairo disabled:opacity-50">
+                  className="flex-1 flex items-center justify-center gap-1 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-1.5 text-xs font-cairo disabled:opacity-50">
                   <Send size={12} /> اختبار
                 </button>
                 <button onClick={() => act(a.id, () => emailApi.updateAccount(a.id, { paused: !a.paused }), a.paused ? 'تم الاستئناف' : 'تم الإيقاف')} disabled={busy === a.id}

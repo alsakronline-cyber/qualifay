@@ -512,7 +512,7 @@ function AutomationPanel() {
                   <span className={clsx('text-xs px-1.5 py-0.5 rounded font-cairo',
                     t.status === 'error' ? 'bg-red-500/15 text-red-400' :
                     t.status === 'done' ? 'bg-green-500/15 text-green-400' :
-                    t.status === 'in_progress' ? 'bg-blue-500/15 text-blue-400' : 'bg-gray-700 text-gray-400')}>
+                    t.status === 'in_progress' ? 'bg-gray-500/15 text-gray-400' : 'bg-gray-700 text-gray-400')}>
                     {STATUS_LABEL[t.status] || t.status}
                   </span>
                   <span className="text-sm text-white font-cairo">{TASK_TYPES[t.type]?.label || t.type}</span>
@@ -561,7 +561,7 @@ function EmailPanel() {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
       <div className="flex items-center gap-2">
-        <Mail size={18} className="text-purple-400" />
+        <Mail size={18} className="text-gray-400" />
         <h2 className="text-base font-semibold text-white font-cairo">نظام البريد الإلكتروني</h2>
         <span className={clsx(
           'text-[11px] px-2 py-0.5 rounded-full font-cairo border',
@@ -593,7 +593,7 @@ function EmailPanel() {
         <button
           onClick={sendTest}
           disabled={testing || !configured}
-          className="flex items-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm px-4 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
+          className="flex items-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 text-sm px-4 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
         >
           {testing ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
           إرسال رسالة اختبار لنفسك
