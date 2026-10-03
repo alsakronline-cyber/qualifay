@@ -19,7 +19,7 @@ const STATUS = {
   draft: { label: 'مسودة', cls: 'text-gray-400 bg-gray-700 border-gray-600' },
   running: { label: 'نشطة', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
   paused: { label: 'موقوفة', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
-  done: { label: 'مكتملة', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  done: { label: 'مكتملة', cls: 'text-gray-400 bg-gray-500/10 border-gray-500/30' },
 } as const
 
 const SOURCES = ['', 'google_maps', 'linkedin', 'facebook_groups', 'apollo', 'directories', 'websites', 'tenders', 'manual']

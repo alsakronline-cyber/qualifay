@@ -21,7 +21,7 @@ export const STATUS_LABEL: Record<string, string> = {
   draft: 'مسودة', sent: 'مُرسل', accepted: 'مقبول', rejected: 'مرفوض', paid: 'مدفوع', cancelled: 'ملغي',
 }
 export const STATUS_COLOR: Record<string, string> = {
-  draft: 'bg-gray-500/10 text-gray-400', sent: 'bg-blue-500/10 text-blue-400',
+  draft: 'bg-gray-500/10 text-gray-400', sent: 'bg-gray-500/10 text-gray-400',
   accepted: 'bg-green-500/10 text-green-400', rejected: 'bg-red-500/10 text-red-400',
   paid: 'bg-wa-green/10 text-wa-green', cancelled: 'bg-gray-600/10 text-gray-500',
 }

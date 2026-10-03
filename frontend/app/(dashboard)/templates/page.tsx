@@ -24,7 +24,7 @@ const CHANNELS = [
 ]
 
 function ChannelBadge({ channel }: { channel: string }) {
-  if (channel === 'email') return <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/25 font-cairo"><Mail size={10} /> بريد</span>
+  if (channel === 'email') return <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-500/15 text-gray-400 border border-gray-500/25 font-cairo"><Mail size={10} /> بريد</span>
   if (channel === 'whatsapp') return <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-wa-green/15 text-wa-green border border-wa-green/25 font-cairo"><MessageSquare size={10} /> واتساب</span>
   return <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-gold-primary/15 text-gold-primary border border-gold-primary/25 font-cairo">كلاهما</span>
 }

@@ -153,7 +153,7 @@ export default function SequencesPage() {
                 <Clock size={12} /> {s.steps.length} خطوات
               </div>
               <div className="flex gap-2 text-[11px] font-cairo">
-                <span className="text-blue-400">جارٍ {s.stats.active || 0}</span>
+                <span className="text-gray-400">جارٍ {s.stats.active || 0}</span>
                 <span className="text-green-400">ردّ {s.stats.replied || 0}</span>
                 <span className="text-gray-500">اكتمل {s.stats.completed || 0}</span>
               </div>

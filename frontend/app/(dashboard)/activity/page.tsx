@@ -74,7 +74,7 @@ const MEM_KIND: Record<string, { label: string; icon: LucideIcon; cls: string }>
   win_reason: { label: 'يكسب العملاء', icon: Trophy, cls: 'text-green-400' },
   loss_reason: { label: 'يخسر العملاء', icon: ShieldAlert, cls: 'text-red-400' },
   objection: { label: 'اعتراض شائع', icon: AlertTriangle, cls: 'text-yellow-400' },
-  insight: { label: 'ملاحظة', icon: Lightbulb, cls: 'text-blue-400' },
+  insight: { label: 'ملاحظة', icon: Lightbulb, cls: 'text-gray-400' },
 }
 
 function MemoryPanel() {

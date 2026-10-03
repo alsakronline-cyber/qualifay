@@ -12,11 +12,11 @@ interface Entry {
 }
 
 const ACTION: Record<string, { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; cls: string }> = {
-  'tenant.update': { label: 'تعديل شركة', icon: Building2, cls: 'text-blue-400' },
+  'tenant.update': { label: 'تعديل شركة', icon: Building2, cls: 'text-gray-400' },
   'user.update': { label: 'تعديل حساب', icon: Settings2, cls: 'text-gold-primary' },
   'user.set_password': { label: 'تغيير كلمة مرور', icon: KeyRound, cls: 'text-yellow-400' },
   'user.delete': { label: 'حذف حساب', icon: Trash2, cls: 'text-red-400' },
-  'impersonate': { label: 'دخول كشركة', icon: LogIn, cls: 'text-purple-400' },
+  'impersonate': { label: 'دخول كشركة', icon: LogIn, cls: 'text-gray-400' },
 }
 
 export default function AdminAuditPage() {

@@ -226,7 +226,7 @@ export default function InstancesPage() {
       case 'open':
       case 'connected': return { label: 'متصل', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30' }
       case 'connecting': return { label: 'جارٍ الاتصال...', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' }
-      case 'qr_needed': return { label: 'يحتاج QR', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30' }
+      case 'qr_needed': return { label: 'يحتاج QR', color: 'text-gray-400', bg: 'bg-gray-500/10 border-gray-500/30' }
       default: return { label: 'غير متصل', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30' }
     }
   }
@@ -339,7 +339,7 @@ export default function InstancesPage() {
                   {inst.status === 'disconnected' && (
                     <button
                       onClick={() => handleReconnect(inst.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
                     >
                       <Wifi size={13} />
                       إعادة اتصال
@@ -348,7 +348,7 @@ export default function InstancesPage() {
                   {(inst.status === 'connected' || inst.status === 'open') && (
                     <button
                       onClick={() => handleSync(inst.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
                     >
                       <Download size={13} />مزامنة
                     </button>

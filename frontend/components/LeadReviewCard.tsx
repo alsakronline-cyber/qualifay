@@ -27,14 +27,14 @@ const sourceLabels: Record<LeadSource, string> = {
 }
 
 const sourceColors: Record<LeadSource, string> = {
-  google_maps: 'bg-blue-500/10 text-blue-400',
-  websites: 'bg-purple-500/10 text-purple-400',
-  directories: 'bg-indigo-500/10 text-indigo-400',
-  tenders: 'bg-orange-500/10 text-orange-400',
-  apollo: 'bg-pink-500/10 text-pink-400',
-  linkedin: 'bg-sky-500/10 text-sky-400',
-  facebook_groups: 'bg-blue-600/10 text-blue-500',
-  enrichment: 'bg-teal-500/10 text-teal-400',
+  google_maps: 'bg-gray-500/10 text-gray-400',
+  websites: 'bg-gray-500/10 text-gray-400',
+  directories: 'bg-gray-500/10 text-gray-400',
+  tenders: 'bg-gray-500/10 text-gray-400',
+  apollo: 'bg-gray-500/10 text-gray-400',
+  linkedin: 'bg-gray-500/10 text-gray-400',
+  facebook_groups: 'bg-gray-600/10 text-gray-500',
+  enrichment: 'bg-gray-500/10 text-gray-400',
   competitor_ads: 'bg-red-500/10 text-red-400',
   manual: 'bg-gray-500/10 text-gray-400',
   pool: 'bg-gold-primary/10 text-gold-primary',
@@ -243,10 +243,10 @@ export default function LeadReviewCard({
         <button
           onClick={handleManual}
           disabled={loading !== null}
-          className="flex-1 flex items-center justify-center gap-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
+          className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
         >
           {loading === 'manual' ? (
-            <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
           ) : (
             <UserCheck size={15} />
           )}

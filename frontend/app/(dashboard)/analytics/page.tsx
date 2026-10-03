@@ -24,10 +24,10 @@ function KPI({ icon, label, value, sub }: { icon: React.ReactNode; label: string
 
 const FUNNEL = [
   { key: 'total', label: 'إجمالي العملاء', color: 'bg-gray-500' },
-  { key: 'new', label: 'جديد / قيد التأهيل', color: 'bg-blue-500' },
-  { key: 'contacted', label: 'تم التواصل', color: 'bg-cyan-500' },
+  { key: 'new', label: 'جديد / قيد التأهيل', color: 'bg-gray-500' },
+  { key: 'contacted', label: 'تم التواصل', color: 'bg-gray-500' },
   { key: 'replied', label: 'ردّوا', color: 'bg-yellow-500' },
-  { key: 'booked', label: 'حجزوا اجتماعاً', color: 'bg-orange-500' },
+  { key: 'booked', label: 'حجزوا اجتماعاً', color: 'bg-gray-500' },
   { key: 'won', label: 'صفقات مربوحة', color: 'bg-green-500' },
 ] as const
 
@@ -80,7 +80,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {[
           { key: 'whatsapp' as const, label: 'واتساب', icon: <MessageSquare size={15} className="text-wa-green" /> },
-          { key: 'email' as const, label: 'البريد', icon: <Mail size={15} className="text-purple-400" /> },
+          { key: 'email' as const, label: 'البريد', icon: <Mail size={15} className="text-gray-400" /> },
         ].map((c) => {
           const d = data.channels[c.key]
           return (
@@ -95,7 +95,7 @@ export default function AnalyticsPage() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3"><GitBranch size={15} className="text-gold-primary" /><h3 className="font-semibold text-white font-cairo">التسلسلات</h3></div>
           <div className="space-y-1.5 text-sm font-cairo">
-            <div className="flex justify-between"><span className="text-blue-400">جارٍ</span><span className="text-white">{data.sequences.active || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">جارٍ</span><span className="text-white">{data.sequences.active || 0}</span></div>
             <div className="flex justify-between"><span className="text-green-400">ردّوا</span><span className="text-white">{data.sequences.replied || 0}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">اكتمل</span><span className="text-white">{data.sequences.completed || 0}</span></div>
           </div>

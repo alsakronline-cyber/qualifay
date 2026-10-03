@@ -41,22 +41,22 @@ const SOURCES: SourceConfig[] = [
       { name: 'query', label: 'المجال', type: 'text', placeholder: 'بلاستيك، مقاولات، أدوية...', required: true },
       { name: 'location', label: 'المدينة', type: 'text', placeholder: 'القاهرة' },
     ] },
-  { source: 'web_scrape', label: 'مواقع الويب', desc: 'استخراج من موقع أو نطاق', icon: Globe, color: 'text-blue-400',
+  { source: 'web_scrape', label: 'مواقع الويب', desc: 'استخراج من موقع أو نطاق', icon: Globe, color: 'text-gray-400',
     fields: [
       { name: 'query', label: 'الموقع أو الكلمة البحثية', type: 'text', placeholder: 'https://example.com', required: true },
       { name: 'industry', label: 'المجال', type: 'text', placeholder: 'التصميم' },
     ] },
-  { source: 'directories', label: 'الأدلة التجارية', desc: 'أدلة الأعمال الدولية', icon: BookOpen, color: 'text-purple-400',
+  { source: 'directories', label: 'الأدلة التجارية', desc: 'أدلة الأعمال الدولية', icon: BookOpen, color: 'text-gray-400',
     fields: [
       { name: 'industry', label: 'المجال', type: 'text', placeholder: 'الاستشارات', required: true },
       { name: 'location', label: 'المدينة', type: 'text', placeholder: 'القاهرة' },
     ] },
-  { source: 'linkedin', label: 'LinkedIn', desc: 'عبر بحث جوجل — بدون حظر', icon: Users, color: 'text-sky-400', badge: 'بحث',
+  { source: 'linkedin', label: 'LinkedIn', desc: 'عبر بحث جوجل — بدون حظر', icon: Users, color: 'text-gray-400', badge: 'بحث',
     fields: [
       { name: 'query', label: 'المسمى الوظيفي / المجال', type: 'text', placeholder: 'Marketing Manager', required: true },
       { name: 'location', label: 'الدولة / المدينة', type: 'text', placeholder: 'Egypt' },
     ] },
-  { source: 'facebook', label: 'مكتبة إعلانات فيسبوك', desc: 'واجهة ميتا الرسمية المجانية', icon: Layers, color: 'text-indigo-400', badge: 'API',
+  { source: 'facebook', label: 'مكتبة إعلانات فيسبوك', desc: 'واجهة ميتا الرسمية المجانية', icon: Layers, color: 'text-gray-400', badge: 'API',
     fields: [
       { name: 'query', label: 'الكلمة البحثية / المجال', type: 'text', placeholder: 'شركات مقاولات', required: true },
     ] },
@@ -69,7 +69,7 @@ const SOURCES: SourceConfig[] = [
     fields: [
       { name: 'query', label: 'النطاق أو اسم الشركة', type: 'text', placeholder: 'company.com', required: true },
     ] },
-  { source: 'competitor_ads', label: 'إعلانات منافسين', desc: 'تحليل إعلانات المنافسين', icon: Target, color: 'text-rose-400',
+  { source: 'competitor_ads', label: 'إعلانات منافسين', desc: 'تحليل إعلانات المنافسين', icon: Target, color: 'text-gray-400',
     fields: [
       { name: 'query', label: 'اسم المنافس أو المجال', type: 'text', placeholder: 'شركات توصيل', required: true },
     ] },
@@ -79,7 +79,7 @@ const COUNT_PRESETS = [25, 50, 100, 200]
 
 const JOB_STATUS: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'انتظار', color: 'text-gray-400', bg: 'bg-gray-700/50' },
-  running: { label: 'جارٍ', color: 'text-blue-400', bg: 'bg-blue-500/20' },
+  running: { label: 'جارٍ', color: 'text-gray-400', bg: 'bg-gray-500/20' },
   done: { label: 'مكتمل', color: 'text-green-400', bg: 'bg-green-500/10' },
   completed: { label: 'مكتمل', color: 'text-green-400', bg: 'bg-green-500/10' },
   paused: { label: 'متوقف مؤقتاً', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
@@ -207,7 +207,7 @@ export default function ScrapePage() {
           <h2 className="text-base font-semibold text-white font-cairo">مهام البحث</h2>
           <div className="flex items-center gap-2">
             {runningCount > 0 && (
-              <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-semibold font-cairo animate-pulse">{runningCount} نشط</span>
+              <span className="text-xs bg-gray-500/10 text-gray-400 border border-gray-500/30 px-2 py-0.5 rounded-full font-semibold font-cairo animate-pulse">{runningCount} نشط</span>
             )}
             <button onClick={() => mutateJobs()} className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800"><RefreshCw size={14} /></button>
           </div>
@@ -279,7 +279,7 @@ export default function ScrapePage() {
                       <button key={s.source} onClick={() => { setSource(s); setForm({}) }}
                         className={clsx('relative flex flex-col items-start gap-1 px-3 py-3 rounded-xl border text-right transition-all',
                           active ? 'bg-gold-primary/10 border-gold-primary/50' : 'bg-gray-800/50 border-gray-700 hover:border-gray-600')}>
-                        {s.badge && <span className="absolute top-1.5 left-1.5 text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded px-1 font-mono">{s.badge}</span>}
+                        {s.badge && <span className="absolute top-1.5 left-1.5 text-[9px] bg-gray-500/20 text-gray-300 border border-gray-500/30 rounded px-1 font-mono">{s.badge}</span>}
                         <Icon size={18} className={active ? 'text-gold-primary' : s.color} />
                         <span className="text-xs font-cairo font-medium text-white leading-tight">{s.label}</span>
                         <span className="text-[10px] text-gray-500 font-cairo leading-tight">{s.desc}</span>

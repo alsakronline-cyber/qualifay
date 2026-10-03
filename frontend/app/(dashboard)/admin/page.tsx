@@ -36,14 +36,14 @@ export default function AdminOverviewPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile label="الشركات" value={s.tenants ?? 0} icon={Building2} color="bg-blue-500/10 text-blue-400" href="/admin/companies" />
-        <Tile label="الحسابات" value={s.users ?? 0} icon={UsersRound} color="bg-purple-500/10 text-purple-400" href="/admin/accounts" />
+        <Tile label="الشركات" value={s.tenants ?? 0} icon={Building2} color="bg-gray-500/10 text-gray-400" href="/admin/companies" />
+        <Tile label="الحسابات" value={s.users ?? 0} icon={UsersRound} color="bg-gray-500/10 text-gray-400" href="/admin/accounts" />
         <Tile label="إجمالي العملاء" value={s.leads ?? 0} icon={Users} color="bg-gold-primary/10 text-gold-primary" />
         <Tile label="رسائل ٢٤ساعة" value={s.messages_24h ?? 0} icon={MessageSquare} color="bg-wa-green/10 text-wa-green" />
-        <Tile label="مُرسل ٢٤ساعة" value={s.sent_24h ?? 0} icon={Send} color="bg-cyan-500/10 text-cyan-400" />
+        <Tile label="مُرسل ٢٤ساعة" value={s.sent_24h ?? 0} icon={Send} color="bg-gray-500/10 text-gray-400" />
         <Tile label="تجارب نشطة" value={s.active_trials ?? 0} icon={Hourglass} color="bg-green-500/10 text-green-400" />
         <Tile label="تجارب تنتهي ٧أيام" value={s.trials_expiring_7d ?? 0} icon={AlertTriangle} color="bg-yellow-500/10 text-yellow-400" href="/admin/companies" />
-        <Tile label="بريد غير مُفعّل" value={s.unverified_users ?? 0} icon={MailWarning} color="bg-orange-500/10 text-orange-400" href="/admin/accounts" />
+        <Tile label="بريد غير مُفعّل" value={s.unverified_users ?? 0} icon={MailWarning} color="bg-gray-500/10 text-gray-400" href="/admin/accounts" />
       </div>
 
       {(s.suspended_tenants ?? 0) > 0 && (

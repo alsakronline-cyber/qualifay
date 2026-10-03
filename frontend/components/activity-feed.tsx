@@ -39,17 +39,17 @@ type IconConfig = {
 }
 
 const ACTIVITY_ICONS: Record<string, IconConfig> = {
-  message_sent:         { icon: MessageSquare, color: 'text-blue-400',   bg: 'bg-blue-500/10' },
-  message_received:     { icon: MessageSquare, color: 'text-blue-400',   bg: 'bg-blue-500/10' },
+  message_sent:         { icon: MessageSquare, color: 'text-gray-400',   bg: 'bg-gray-500/10' },
+  message_received:     { icon: MessageSquare, color: 'text-gray-400',   bg: 'bg-gray-500/10' },
   lead_approved:        { icon: CheckCircle,   color: 'text-green-400',  bg: 'bg-green-500/10' },
   lead_rejected:        { icon: XCircle,       color: 'text-red-400',    bg: 'bg-red-500/10' },
-  ai_suggested:         { icon: Sparkles,      color: 'text-purple-400', bg: 'bg-purple-500/10' },
-  ai_sent:              { icon: Sparkles,      color: 'text-purple-400', bg: 'bg-purple-500/10' },
-  scrape_started:       { icon: Search,        color: 'text-orange-400', bg: 'bg-orange-500/10' },
-  scrape_completed:     { icon: Search,        color: 'text-orange-400', bg: 'bg-orange-500/10' },
+  ai_suggested:         { icon: Sparkles,      color: 'text-gray-400', bg: 'bg-gray-500/10' },
+  ai_sent:              { icon: Sparkles,      color: 'text-gray-400', bg: 'bg-gray-500/10' },
+  scrape_started:       { icon: Search,        color: 'text-gray-400', bg: 'bg-gray-500/10' },
+  scrape_completed:     { icon: Search,        color: 'text-gray-400', bg: 'bg-gray-500/10' },
   instance_connected:   { icon: Wifi,          color: 'text-green-400',  bg: 'bg-green-500/10' },
   lead_updated:         { icon: Edit,          color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-  appointment_booked:   { icon: Calendar,      color: 'text-teal-400',   bg: 'bg-teal-500/10' },
+  appointment_booked:   { icon: Calendar,      color: 'text-gray-400',   bg: 'bg-gray-500/10' },
 }
 
 const DEFAULT_ICON: IconConfig = {

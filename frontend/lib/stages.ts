@@ -13,10 +13,10 @@ export interface PipelineStageDef {
 
 export const PIPELINE_STAGES: PipelineStageDef[] = [
   { value: 'replied', label: 'استجاب', color: 'border-yellow-500/30', headerColor: 'text-yellow-400' },
-  { value: 'qualifying', label: 'تأهيل', color: 'border-blue-500/30', headerColor: 'text-blue-400' },
-  { value: 'meeting', label: 'اجتماع', color: 'border-cyan-500/30', headerColor: 'text-cyan-400' },
-  { value: 'proposal', label: 'عرض سعر', color: 'border-purple-500/30', headerColor: 'text-purple-400' },
-  { value: 'negotiation', label: 'تفاوض', color: 'border-orange-500/30', headerColor: 'text-orange-400' },
+  { value: 'qualifying', label: 'تأهيل', color: 'border-gray-500/30', headerColor: 'text-gray-400' },
+  { value: 'meeting', label: 'اجتماع', color: 'border-gray-500/30', headerColor: 'text-gray-400' },
+  { value: 'proposal', label: 'عرض سعر', color: 'border-gray-500/30', headerColor: 'text-gray-400' },
+  { value: 'negotiation', label: 'تفاوض', color: 'border-gray-500/30', headerColor: 'text-gray-400' },
   { value: 'won', label: 'مربوح', color: 'border-green-500/30', headerColor: 'text-green-400' },
   { value: 'lost', label: 'خسارة', color: 'border-red-500/30', headerColor: 'text-red-400' },
 ]

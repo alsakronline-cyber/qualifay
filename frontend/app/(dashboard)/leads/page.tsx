@@ -24,9 +24,9 @@ const STAGE_LABELS: Record<string, string> = {
 // whether it's contactable and via which channel, before approving it for outreach.
 const REACH: Record<string, { label: string; cls: string }> = {
   whatsapp:    { label: 'واتساب ✓',      cls: 'text-wa-green bg-wa-green/10 border border-wa-green/25' },
-  phone:       { label: 'هاتف',          cls: 'text-blue-400 bg-blue-500/10 border border-blue-500/25' },
+  phone:       { label: 'هاتف',          cls: 'text-gray-400 bg-gray-500/10 border border-gray-500/25' },
   phone_no_wa: { label: 'ليس على واتساب', cls: 'text-amber-400 bg-amber-500/10 border border-amber-500/25' },
-  email:       { label: 'بريد',          cls: 'text-purple-400 bg-purple-500/10 border border-purple-500/25' },
+  email:       { label: 'بريد',          cls: 'text-gray-400 bg-gray-500/10 border border-gray-500/25' },
   none:        { label: 'يحتاج إثراء',    cls: 'text-gray-500 bg-gray-700/40 border border-gray-600' },
 }
 
@@ -390,7 +390,7 @@ function LeadsContent() {
               onClick={handleEnrichLinkedIn}
               disabled={enriching}
               title="فتح ملفات LinkedIn غير المكتملة عبر الإضافة لجلب الهاتف/البريد"
-              className="flex items-center gap-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm px-3 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
+              className="flex items-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 text-sm px-3 py-2 rounded-lg transition-colors font-cairo disabled:opacity-50"
             >
               {enriching ? <RefreshCw size={14} className="animate-spin" /> : null}
               إثراء LinkedIn
@@ -441,7 +441,7 @@ function LeadsContent() {
                       {sequences.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                     <button onClick={handleEnroll} disabled={!enrollSeq}
-                      className="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg transition-colors font-cairo disabled:opacity-40">
+                      className="text-xs bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 px-3 py-1.5 rounded-lg transition-colors font-cairo disabled:opacity-40">
                       تسجيل
                     </button>
                   </div>
