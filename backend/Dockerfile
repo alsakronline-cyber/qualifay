@@ -14,7 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# BuildKit cache mount: downloaded wheels persist across builds in a cache that lives
+# OUTSIDE the image, so a requirements.txt change (or a build-cache prune) re-resolves
+# from local wheels instead of re-downloading every package. --no-cache-dir is dropped
+# because it would defeat the mount; the cache never lands in an image layer, so image
+# size is unchanged.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 # Playwright Chromium for scraping (ARM64). Base image already has the shared libs,
 # so install the browser only (no --with-deps, which fails on this ARM base). Do NOT
