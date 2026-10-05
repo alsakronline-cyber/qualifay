@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     # spike means bad addresses / reputation trouble, so stop before it gets worse.
     EMAIL_BOUNCE_PAUSE_THRESHOLD: int = 10
     RESEND_API_KEY: str = ""
+    # Hard ceiling on drip-campaign emails per tenant per day, applied ON TOP of the
+    # account's warmup cap (lower wins). The account warmup counts calendar days since its
+    # first-ever send, so a mailbox that has barely sent anything can look "fully warm" and
+    # allow 250/day of cold email — enough to get the domain blacklisted. Raise gradually
+    # (~25%/week) only while bounces stay low.
+    DRIP_EMAIL_DAILY_MAX: int = 30
 
     # Payments
     PAYMOB_API_KEY: str = ""
