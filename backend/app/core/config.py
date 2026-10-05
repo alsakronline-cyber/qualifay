@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     # allow 250/day of cold email — enough to get the domain blacklisted. Raise gradually
     # (~25%/week) only while bounces stay low.
     DRIP_EMAIL_DAILY_MAX: int = 30
+    # Same idea for WhatsApp: a per-campaign ceiling below the number's warmup cap, so a drip
+    # can run conservatively without throttling the number's manual sends and replies.
+    DRIP_WA_DAILY_MAX: int = 30
 
     # Payments
     PAYMOB_API_KEY: str = ""
