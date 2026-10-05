@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.workers.onboarding_tasks",
         "app.workers.orchestrator_tasks",
         "app.workers.billing_tasks",
+        "app.workers.drip_tasks",
     ],
 )
 
@@ -36,6 +37,11 @@ celery_app.conf.update(
     # inbound-email polling, orchestrator runs, digests). Pin the default to the queue the
     # worker actually listens on so unrouted tasks are executed.
     task_default_queue="default",
+    # Redis broker re-delivers any un-acked message after visibility_timeout (default 1h).
+    # Outreach is spaced out with countdowns that reach several hours, so a task scheduled
+    # >1h ahead would be handed to the worker a SECOND time — i.e. a duplicate WhatsApp
+    # message to a real customer. 12h comfortably covers a full day's spread.
+    broker_transport_options={"visibility_timeout": 43200},
     task_routes={
         "app.workers.scrape_tasks.*": {"queue": "scrape"},
         "app.workers.ai_tasks.*": {"queue": "ai"},
@@ -87,6 +93,12 @@ celery_app.conf.update(
         "backup-healthcheck": {
             "task": "billing.backup_healthcheck",
             "schedule": crontab(hour=4, minute=0),
+        },
+        # Daily drip: sends each staged list only up to the day's warmup cap, spaced out
+        # (WhatsApp 1-3 min apart over the working day, email 5 s apart).
+        "drip-daily": {
+            "task": "drip.run_daily",
+            "schedule": crontab(hour=10, minute=0),
         },
         "enforce-trials": {
             "task": "billing.enforce_trials",

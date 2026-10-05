@@ -32,6 +32,13 @@ def process_approved_lead(self, lead_id: str, template_id: str = None, override_
         raise self.retry(exc=exc, countdown=60)
 
 
+# Consent bases that justify a FIRST message without a recorded consent timestamp:
+#  - opt_in_request: the message itself asks for permission (cold contact)
+#  - existing_business_relationship: re-contacting a past customer
+# Both apply to the first contact on a channel only; afterwards normal consent rules hold.
+FIRST_CONTACT_METHODS = ("opt_in_request", "existing_business_relationship")
+
+
 async def _load_template(db, tenant_id, template_id):
     if not template_id:
         return None
@@ -132,12 +139,16 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
         # BY DESIGN — the first message is what asks for it, so blocking it would make
         # permission impossible to obtain. This applies to the FIRST contact only: once any
         # outbound message exists, real consent is required like everyone else.
+        # existing_business_relationship (a past customer being re-contacted) gets the same
+        # first-contact allowance. Prior history is counted on the WhatsApp channel only, so
+        # an email sent to the same lead doesn't make this look like a repeat contact.
         optin_first_contact = False
-        if lead.consent_method == "opt_in_request" and not lead.consent_at:
+        if lead.consent_method in FIRST_CONTACT_METHODS and not lead.consent_at:
             prior = (await db.execute(
                 select(func.count(Message.id))
                 .join(Conversation, Message.conversation_id == Conversation.id)
                 .where(Conversation.lead_id == lead.id,
+                       func.coalesce(Conversation.channel, "whatsapp") == "whatsapp",
                        Message.direction == MessageDirection.outbound)
             )).scalar() or 0
             optin_first_contact = prior == 0
@@ -227,15 +238,17 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             message_text = render_for_lead(pick.body, lead)
             ab_used = True   # already in-language; skip the translation pass
             logger.info(f"Lead {lead_id}: opt-in template '{pick.name}'")
+        elif template:
+            # An explicitly chosen template is a deliberate decision (e.g. an approved campaign
+            # message) and must not be silently swapped for whatever A/B test is running.
+            from app.services.template_render import render_for_lead
+            message_text = render_for_lead(template.body, lead)
         else:
             from app.services.ab_service import assign_variant
             ab = await assign_variant(db, lead.tenant_id, "whatsapp", lead)
             if ab:
                 _variant, message_text, _subject = ab
                 ab_used = True
-            elif template:
-                from app.services.template_render import render_for_lead
-                message_text = render_for_lead(template.body, lead)
             else:
                 _brand, _, _ai_lang = await _tenant_ctx(db, lead.tenant_id)
                 # Generate directly in the tenant's chosen output language — no separate
@@ -306,6 +319,8 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
         )
         db.add(msg)
         conv.last_message = message_text[:200]
+        # Stamp the channel so schedulers never pick this lead for a WhatsApp first-contact again.
+        lead.raw_data = {**(lead.raw_data or {}), "wa_contacted_at": datetime.utcnow().isoformat()}
 
         await db.commit()
         logger.info(f"Lead {lead_id} outreach sent via {instance.instance_name} to {wa_jid}")
@@ -336,15 +351,14 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
     # request for permission, so blocking it would make consent unobtainable.
     from app.models.models import Conversation, Message, MessageDirection
     from sqlalchemy import func as _func
-    optin_first_contact = False
-    if lead.consent_method == "opt_in_request" and not lead.consent_at:
-        prior = (await db.execute(
-            select(_func.count(Message.id))
-            .join(Conversation, Message.conversation_id == Conversation.id)
-            .where(Conversation.lead_id == lead.id,
-                   Message.direction == MessageDirection.outbound)
-        )).scalar() or 0
-        optin_first_contact = prior == 0
+    # Email sends don't create Conversation rows, so first contact ON THIS CHANNEL is tracked
+    # by the email_contacted_at stamp set below — a WhatsApp message to the same lead must
+    # not make the email look like a repeat (that wrongly blocked dual-channel outreach).
+    optin_first_contact = (
+        lead.consent_method in FIRST_CONTACT_METHODS
+        and not lead.consent_at
+        and not (lead.raw_data or {}).get("email_contacted_at")
+    )
 
     lead_dict = {
         "name": lead.name, "company": lead.company,
@@ -371,7 +385,8 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
     # A human-approved copilot draft wins, else active A/B variant, else template, else AI copy.
     from app.services.ab_service import assign_variant
     _default_subject = "بخصوص التعاون معكم" if lead.language == "ar" else f"Quick note for {lead.company or lead.name or 'you'}"
-    ab = None if override_text else await assign_variant(db, lead.tenant_id, "email", lead)
+    # An explicitly chosen template beats any running A/B test (same rule as WhatsApp).
+    ab = None if (override_text or template) else await assign_variant(db, lead.tenant_id, "email", lead)
     if override_text:
         body = override_text
         subject = _default_subject
@@ -422,6 +437,8 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
 
     lead.stage = LeadStage.outreach
     lead.updated_at = datetime.utcnow()
+    # Reassign (not mutate) so SQLAlchemy notices the JSON change.
+    lead.raw_data = {**(lead.raw_data or {}), "email_contacted_at": datetime.utcnow().isoformat()}
     await db.commit()
 
     # Count the send against the account used (per-account warmup), or the tenant fallback.
