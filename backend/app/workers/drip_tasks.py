@@ -77,9 +77,11 @@ async def _run_daily():
                 WaInstance.status.in_(["open", "connected"]),
             ))).scalars().first()
             if inst and not getattr(inst, "paused", False):
+                from app.core.config import settings
                 allowed, used, cap = await warmup_service.check_wa_limit(inst.id, db)
-                ids = await _pending(db, tid, "phone", "wa_contacted_at",
-                                     (cap - used) if allowed else 0)
+                # Lower of: what the number can still send today, and the campaign ceiling.
+                budget = min(cap - used, settings.DRIP_WA_DAILY_MAX) if allowed else 0
+                ids = await _pending(db, tid, "phone", "wa_contacted_at", budget)
                 delay = START_DELAY
                 for lid in ids:
                     send_one.apply_async(args=[lid, "whatsapp"], queue="outreach", countdown=delay)
