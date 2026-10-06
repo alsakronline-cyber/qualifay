@@ -56,6 +56,24 @@ async def _pending(db, tenant_id, contact_col, stamp, limit):
     return list(rows)
 
 
+async def _refresh_instance_status(db, tenant_id):
+    """Sync each of the tenant's WhatsApp numbers with Evolution's live connection state."""
+    from app.models.models import WaInstance
+    from app.services.evolution_service import evolution_service
+    for inst in (await db.execute(select(WaInstance).where(
+            WaInstance.tenant_id == tenant_id))).scalars().all():
+        try:
+            data = await evolution_service.connect_status(inst.instance_name)
+            state = (data.get("instance") or {}).get("state") or data.get("state")
+        except Exception:
+            continue                       # can't reach Evolution: keep the stored value
+        mapped = {"open": "connected", "close": "disconnected", "closed": "disconnected"}.get(state, state)
+        if mapped and mapped != inst.status:
+            logger.info("drip: %s status %s -> %s (live)", inst.instance_name, inst.status, mapped)
+            inst.status = mapped
+    await db.commit()
+
+
 async def _run_daily():
     from app.core.database import AsyncSessionLocal
     from app.models.models import WaInstance
@@ -72,6 +90,11 @@ async def _run_daily():
             r = {"whatsapp": 0, "email": 0}
 
             # ── WhatsApp: fill whatever the warmup cap still allows today ──
+            # The stored status goes stale when a connection webhook is missed (a number can
+            # read "connecting" while it's actually open), and both this query and the sender
+            # trust it — so a connected number would silently send nothing. Refresh from the
+            # live connection state first.
+            await _refresh_instance_status(db, tid)
             inst = (await db.execute(select(WaInstance).where(
                 WaInstance.tenant_id == tid,
                 WaInstance.status.in_(["open", "connected"]),

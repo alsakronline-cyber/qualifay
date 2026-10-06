@@ -2,6 +2,7 @@
 import re
 
 _NORM = re.compile(r"[^0-9a-z؀-ۿ]+")
+_ARABIC = re.compile(r"[؀-ۿ]")
 # Words that mark a "name" as really being an organisation, not a person.
 _ORG_WORDS = (
     "company", "co.", "group", "factory", "industries", "industrial", "trading", "plast",
@@ -60,6 +61,8 @@ def render_for_lead(text: str, lead) -> str:
         #   AR: "يا هندسة{{greet_ar}}،"  -> "يا هندسة أحمد،" / "يا هندسة،"
         #   EN: "Dear {{greet_en}},"     -> "Dear Eng. Ahmed," / "Dear Engineer,"
         "greet_ar": f" {pn}" if pn else "",
-        "greet_en": f"Eng. {pn}" if pn else "Engineer",
+        # An Arabic-script name inside an English sentence ("Dear Eng. هيثم,") reads broken
+        # in bilingual messages, so the English greeting only uses Latin-script names.
+        "greet_en": f"Eng. {pn}" if (pn and not _ARABIC.search(pn)) else "Engineer",
     }
     return re.sub(r"\{\{(\w+)\}\}", lambda m: data.get(m.group(1), ""), text or "")
