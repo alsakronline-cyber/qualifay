@@ -94,7 +94,7 @@ async def _supervise_send(db, tenant_id, text, autonomy, brand, first_contact=Fa
 
 
 async def _process_approved_lead(lead_id: str, template_id: str = None, override_text: str = None,
-                                 channel: str = None):
+                                 channel: str = None, instance_id: str = None):
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
         Lead, WaInstance, Conversation, Message,
@@ -183,16 +183,17 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             return {"error": "consent_non_compliant", "reason": consent.get("reason")}
 
         # Find best WA instance for this tenant
-        inst_result = await db.execute(
-            select(WaInstance).where(
-                WaInstance.tenant_id == lead.tenant_id,
-                # Connected instances are stored as either "open" or "connected" depending on
-                # which code path last wrote the status. Matching only "open" silently made a
-                # genuinely connected number invisible to the sender (-> no_wa_instance).
-                WaInstance.status.in_(["open", "connected"]),
-            ).limit(1)
+        inst_q = select(WaInstance).where(
+            WaInstance.tenant_id == lead.tenant_id,
+            # Connected instances are stored as either "open" or "connected" depending on
+            # which code path last wrote the status. Matching only "open" silently made a
+            # genuinely connected number invisible to the sender (-> no_wa_instance).
+            WaInstance.status.in_(["open", "connected"]),
         )
-        instance = inst_result.scalar_one_or_none()
+        if instance_id:
+            # A scheduler that splits volume across numbers names the one to use.
+            inst_q = inst_q.where(WaInstance.id == instance_id)
+        instance = (await db.execute(inst_q.limit(1))).scalars().first()
         if not instance:
             logger.warning(f"No connected WA instance for tenant {lead.tenant_id}")
             return {"error": "no_wa_instance"}
