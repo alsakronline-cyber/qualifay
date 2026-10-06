@@ -130,8 +130,21 @@ async def _send_one(lead_id: str, channel: str):
         tpl = drip.get("wa_tpl") if channel == "whatsapp" else drip.get("email_tpl")
 
     try:
-        return await _process_approved_lead(
+        result = await _process_approved_lead(
             lead_id, tpl, None, "email" if channel == "email" else None)
     except Exception as e:   # a cap race or transient send error must not crash the queue
         logger.warning("drip send %s/%s failed: %s", lead_id, channel, e)
         return {"error": str(e)[:200]}
+
+    # Evolution answers 400 when the number isn't on WhatsApp. That never fixes itself, so
+    # stamp it as a permanent failure — otherwise the lead is retried every morning forever
+    # and keeps eating a slot of the daily budget. Transient errors are left to retry.
+    err = str((result or {}).get("error", ""))
+    if channel == "whatsapp" and "400 Bad Request" in err:
+        async with AsyncSessionLocal() as db:
+            lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+            if lead:
+                lead.raw_data = {**(lead.raw_data or {}), "wa_contacted_at": "failed:not_on_whatsapp"}
+                await db.commit()
+        result = {**result, "marked": "not_on_whatsapp"}
+    return result

@@ -554,7 +554,7 @@ async def _sync_wa_to_pipeline_async(tenant_id: str):
             elif phone:
                 lead = (await db.execute(
                     select(Lead).where(Lead.tenant_id == tenant_id, Lead.phone == phone)
-                )).scalar_one_or_none()
+                )).scalars().first()   # dup-safe
 
             notes = f"[WA] {analysis.get('intent', '')}: {reason}"
             if lead:
@@ -747,7 +747,7 @@ async def _ingest_agent_leads_async(tenant_id: str, task_id: str, platform: str,
                         dup = await db.execute(
                             select(Lead).where(Lead.tenant_id == tenant_id, Lead.phone == phone)
                         )
-                        existing = dup.scalar_one_or_none()
+                        existing = dup.scalars().first()   # dup-safe
                     if existing:
                         continue  # already have this contact — skip, don't duplicate
 
@@ -804,7 +804,7 @@ async def _ingest_agent_leads_async(tenant_id: str, task_id: str, platform: str,
                         dup = await db.execute(
                             select(Lead).where(Lead.tenant_id == tenant_id, Lead.phone == phone)
                         )
-                        if dup.scalar_one_or_none():
+                        if dup.scalars().first():   # dup-safe
                             continue
 
                     lead = Lead(
