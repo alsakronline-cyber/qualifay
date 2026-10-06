@@ -56,6 +56,25 @@ async def _pending(db, tenant_id, contact_col, stamp, limit):
     return list(rows)
 
 
+def _split(total, room):
+    """Divide `total` sends across numbers: even shares capped by each number's `room`,
+    with leftover redistributed to numbers that still have room. Returns {id: count}."""
+    plan = {k: 0 for k in room}
+    left = total
+    while left > 0:
+        open_ = [k for k in room if plan[k] < room[k]]
+        if not open_:
+            break
+        share = max(left // len(open_), 1)
+        for k in open_:
+            give = min(share, room[k] - plan[k], left)
+            plan[k] += give
+            left -= give
+            if left == 0:
+                break
+    return plan
+
+
 async def _refresh_instance_status(db, tenant_id):
     """Sync each of the tenant's WhatsApp numbers with Evolution's live connection state."""
     from app.models.models import WaInstance
@@ -95,22 +114,34 @@ async def _run_daily():
             # trust it — so a connected number would silently send nothing. Refresh from the
             # live connection state first.
             await _refresh_instance_status(db, tid)
-            inst = (await db.execute(select(WaInstance).where(
+            from app.core.config import settings
+            insts = [i for i in (await db.execute(select(WaInstance).where(
                 WaInstance.tenant_id == tid,
                 WaInstance.status.in_(["open", "connected"]),
-            ))).scalars().first()
-            if inst and not getattr(inst, "paused", False):
-                from app.core.config import settings
-                allowed, used, cap = await warmup_service.check_wa_limit(inst.id, db)
-                # Lower of: what the number can still send today, and the campaign ceiling.
-                budget = min(cap - used, settings.DRIP_WA_DAILY_MAX) if allowed else 0
-                ids = await _pending(db, tid, "phone", "wa_contacted_at", budget)
+            ).order_by(WaInstance.instance_name))).scalars().all()
+                if not getattr(i, "paused", False)]
+            # Split the campaign's daily total across every connected number: an even share
+            # each, never above a number's own remaining warmup cap. Any share a young number
+            # can't use goes to the others, so the day's total still lands.
+            room = {}
+            for i in insts:
+                allowed, used, cap = await warmup_service.check_wa_limit(i.id, db)
+                room[i.id] = max(cap - used, 0) if allowed else 0
+            plan = _split(settings.DRIP_WA_DAILY_MAX, room)
+            ids = await _pending(db, tid, "phone", "wa_contacted_at", sum(plan.values()))
+            # Each number keeps its own 1-3 min spacing, so they send in parallel lanes.
+            lanes = [(iid, n) for iid, n in plan.items() if n > 0]
+            r["per_number"] = {}
+            pos = 0
+            for iid, n in lanes:
                 delay = START_DELAY
-                for lid in ids:
-                    send_one.apply_async(args=[lid, "whatsapp"], queue="outreach", countdown=delay)
+                for lid in ids[pos:pos + n]:
+                    send_one.apply_async(args=[lid, "whatsapp", iid], queue="outreach", countdown=delay)
                     delay += random.randint(*WA_GAP)
-                r["whatsapp"] = len(ids)
-                r["wa_spread_min"] = round(delay / 60)
+                name = next(i.instance_name for i in insts if i.id == iid)
+                r["per_number"][name] = len(ids[pos:pos + n])
+                pos += n
+            r["whatsapp"] = min(pos, len(ids))
 
             # ── Email: same idea against the sending account's own warmup cap ──
             acct = await pick_account(tid, db)
@@ -130,11 +161,11 @@ async def _run_daily():
 
 
 @celery_app.task(name="drip.send_one", queue="outreach")
-def send_one(lead_id: str, channel: str):
-    return run_async(_send_one(lead_id, channel))
+def send_one(lead_id: str, channel: str, instance_id: str = None):
+    return run_async(_send_one(lead_id, channel, instance_id))
 
 
-async def _send_one(lead_id: str, channel: str):
+async def _send_one(lead_id: str, channel: str, instance_id: str = None):
     from app.core.database import AsyncSessionLocal
     from app.models.models import Lead
     from app.workers.outreach_tasks import _process_approved_lead
@@ -154,7 +185,8 @@ async def _send_one(lead_id: str, channel: str):
 
     try:
         result = await _process_approved_lead(
-            lead_id, tpl, None, "email" if channel == "email" else None)
+            lead_id, tpl, None, "email" if channel == "email" else None,
+            instance_id if channel == "whatsapp" else None)
     except Exception as e:   # a cap race or transient send error must not crash the queue
         logger.warning("drip send %s/%s failed: %s", lead_id, channel, e)
         # Fall through (no early return): send failures arrive HERE as exceptions, and the
