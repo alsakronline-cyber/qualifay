@@ -134,7 +134,9 @@ async def _send_one(lead_id: str, channel: str):
             lead_id, tpl, None, "email" if channel == "email" else None)
     except Exception as e:   # a cap race or transient send error must not crash the queue
         logger.warning("drip send %s/%s failed: %s", lead_id, channel, e)
-        return {"error": str(e)[:200]}
+        # Fall through (no early return): send failures arrive HERE as exceptions, and the
+        # not-on-WhatsApp check below must see them — returning early skipped it entirely.
+        result = {"error": str(e)[:300]}
 
     # Evolution answers 400 when the number isn't on WhatsApp. That never fixes itself, so
     # stamp it as a permanent failure — otherwise the lead is retried every morning forever
