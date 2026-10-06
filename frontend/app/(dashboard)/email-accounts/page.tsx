@@ -22,7 +22,7 @@ interface EmailAccount {
 }
 
 function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [f, setF] = useState({ from_email: '', from_name: '', smtp_host: 'smtp.hostinger.com', smtp_port: 465, smtp_password: '', imap_host: 'imap.hostinger.com', imap_port: 993 })
+  const [f, setF] = useState({ from_email: '', from_name: '', smtp_user: '', smtp_host: 'smtp.hostinger.com', smtp_port: 465, smtp_password: '', imap_host: 'imap.hostinger.com', imap_port: 993 })
   const [loading, setLoading] = useState(false)
   const set = (k: string, v: string | number) => setF((p) => ({ ...p, [k]: v }))
 
@@ -32,7 +32,9 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => vo
     }
     setLoading(true)
     try {
-      await emailApi.createAccount({ ...f, smtp_user: f.from_email })
+      // The SMTP login can differ from the From address — e.g. Gmail "Send mail as":
+      // From = info@company.com, but you log in to smtp.gmail.com as you@gmail.com.
+      await emailApi.createAccount({ ...f, smtp_user: f.smtp_user.trim() || f.from_email })
       toast.success('تمت إضافة الحساب')
       onAdded(); onClose()
     } catch (e: unknown) {
@@ -58,6 +60,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => vo
         </div>
         <Field label="عنوان الإرسال (Email)" k="from_email" />
         <Field label="الاسم الظاهر" k="from_name" dir="rtl" />
+        <Field label="اسم مستخدم SMTP (اختياري — اتركه فارغاً إذا كان نفس البريد)" k="smtp_user" />
         <Field label="كلمة مرور البريد (SMTP)" k="smtp_password" type="password" />
         <div className="grid grid-cols-2 gap-3">
           <Field label="خادم SMTP" k="smtp_host" />
