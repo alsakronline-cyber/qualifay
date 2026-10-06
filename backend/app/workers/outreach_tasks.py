@@ -32,11 +32,12 @@ def process_approved_lead(self, lead_id: str, template_id: str = None, override_
         raise self.retry(exc=exc, countdown=60)
 
 
-# Consent bases that justify a FIRST message without a recorded consent timestamp:
-#  - opt_in_request: the message itself asks for permission (cold contact)
-#  - existing_business_relationship: re-contacting a past customer
-# Both apply to the first contact on a channel only; afterwards normal consent rules hold.
-FIRST_CONTACT_METHODS = ("opt_in_request", "existing_business_relationship")
+# Consent bases that justify sending without a recorded consent timestamp:
+#  - opt_in_request: the message itself asks for permission (cold contact) — FIRST contact
+#    on a channel only; afterwards normal consent rules hold.
+#  - existing_business_relationship: re-contacting a past customer — the relationship is the
+#    basis, so prior conversations don't revoke it.
+# (Referenced inline in _process_approved_lead and _send_email_outreach.)
 
 
 async def _load_template(db, tenant_id, template_id):
@@ -139,11 +140,10 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
         # BY DESIGN — the first message is what asks for it, so blocking it would make
         # permission impossible to obtain. This applies to the FIRST contact only: once any
         # outbound message exists, real consent is required like everyone else.
-        # existing_business_relationship (a past customer being re-contacted) gets the same
-        # first-contact allowance. Prior history is counted on the WhatsApp channel only, so
-        # an email sent to the same lead doesn't make this look like a repeat contact.
+        # Prior history is counted on the WhatsApp channel only, so an email to the same lead
+        # doesn't make this look like a repeat contact.
         optin_first_contact = False
-        if lead.consent_method in FIRST_CONTACT_METHODS and not lead.consent_at:
+        if lead.consent_method == "opt_in_request" and not lead.consent_at:
             prior = (await db.execute(
                 select(func.count(Message.id))
                 .join(Conversation, Message.conversation_id == Conversation.id)
@@ -152,6 +152,12 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
                        Message.direction == MessageDirection.outbound)
             )).scalar() or 0
             optin_first_contact = prior == 0
+        # A past customer (existing_business_relationship) is NOT limited to a first contact:
+        # earlier conversations are the evidence of that relationship, not a reason to block.
+        # Gating them on "no prior messages" blocked exactly the customers we'd already
+        # talked to, and the AI checker then rejected them for lacking a consent date.
+        existing_customer = (lead.consent_method == "existing_business_relationship"
+                             and not lead.consent_at)
 
         lead_dict = {
             "name": lead.name,
@@ -160,7 +166,7 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
             "consent_at": lead.consent_at.isoformat() if lead.consent_at else None,
             "consent_method": lead.consent_method,
         }
-        consent = ({"compliant": True} if optin_first_contact
+        consent = ({"compliant": True} if (optin_first_contact or existing_customer)
                    else await ai_service.check_consent_compliance(
                        lead_dict, lead.consent_method or "unknown"))
         if not consent.get("compliant", False):
@@ -355,10 +361,13 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
     # by the email_contacted_at stamp set below — a WhatsApp message to the same lead must
     # not make the email look like a repeat (that wrongly blocked dual-channel outreach).
     optin_first_contact = (
-        lead.consent_method in FIRST_CONTACT_METHODS
+        lead.consent_method == "opt_in_request"
         and not lead.consent_at
         and not (lead.raw_data or {}).get("email_contacted_at")
     )
+    # Past customers aren't limited to a first contact (same rule as the WhatsApp path).
+    existing_customer = (lead.consent_method == "existing_business_relationship"
+                         and not lead.consent_at)
 
     lead_dict = {
         "name": lead.name, "company": lead.company,
@@ -366,7 +375,7 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
         "consent_at": lead.consent_at.isoformat() if lead.consent_at else None,
         "consent_method": lead.consent_method,
     }
-    consent = ({"compliant": True} if optin_first_contact
+    consent = ({"compliant": True} if (optin_first_contact or existing_customer)
                else await ai_service.check_consent_compliance(
                    lead_dict, lead.consent_method or "unknown"))
     if not consent.get("compliant", False):
