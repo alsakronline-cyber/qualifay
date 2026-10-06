@@ -267,8 +267,8 @@ async def poll_inbound_email() -> dict:
                     Conversation.tenant_id == lead.tenant_id,
                     Conversation.channel == "email",
                     Conversation.wa_jid == addr,
-                ))
-            )).scalar_one_or_none()
+                )).order_by(Conversation.last_message_at.desc().nullslast())
+            )).scalars().first()   # dup-safe: one-or-none crashed on duplicate threads
             if not conv:
                 conv = Conversation(
                     tenant_id=lead.tenant_id, lead_id=lead.id,

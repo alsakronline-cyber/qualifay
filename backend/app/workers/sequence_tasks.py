@@ -62,7 +62,7 @@ async def _send_wa(db, lead, text) -> bool:
         Conversation.tenant_id == lead.tenant_id,
         Conversation.instance_name == inst.instance_name,
         Conversation.wa_jid == jid,
-    ))).scalar_one_or_none()
+    ).order_by(Conversation.last_message_at.desc().nullslast()))).scalars().first()  # dup-safe
     if not conv:
         conv = Conversation(tenant_id=lead.tenant_id, lead_id=lead.id, wa_instance_id=inst.id,
                             instance_name=inst.instance_name, wa_jid=jid, channel="whatsapp",

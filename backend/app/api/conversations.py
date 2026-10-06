@@ -599,7 +599,7 @@ async def compose_message(
     conv = (await db.execute(select(Conversation).where(and_(
         Conversation.tenant_id == tenant_id, Conversation.channel == channel,
         Conversation.wa_jid == wa_jid,
-    )))).scalar_one_or_none()
+    )).order_by(Conversation.last_message_at.desc().nullslast()))).scalars().first()  # dup-safe
     if not conv:
         conv = Conversation(
             tenant_id=tenant_id, lead_id=lead.id, instance_name=instance_name,

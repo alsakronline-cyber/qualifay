@@ -198,7 +198,7 @@ async def _run_scrape_job_async(task, job_id: str):
                             Lead.phone == phone,
                         )
                     )
-                    if dup_result.scalar_one_or_none():
+                    if dup_result.scalars().first():   # dup-safe
                         logger.debug(f"Skipping duplicate phone {phone}")
                         continue
 

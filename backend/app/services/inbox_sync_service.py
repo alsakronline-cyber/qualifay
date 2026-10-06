@@ -429,9 +429,11 @@ async def upsert_inbound_message(
                 Conversation.tenant_id == tenant_id,
                 Conversation.instance_name == instance_name,
                 Conversation.wa_jid == wa_jid,
-            )
+            ).order_by(Conversation.last_message_at.desc().nullslast())
         )
-        conv = conv_result.scalar_one_or_none()
+        # .first(): duplicates exist (23 chats in prod), and one-or-none raised — which meant
+        # an incoming customer reply was never saved to the inbox.
+        conv = conv_result.scalars().first()
         if not conv:
             conv = Conversation(
                 tenant_id=tenant_id,
@@ -454,9 +456,9 @@ async def upsert_inbound_message(
                         Conversation.tenant_id == tenant_id,
                         Conversation.instance_name == instance_name,
                         Conversation.wa_jid == wa_jid,
-                    )
+                    ).order_by(Conversation.last_message_at.desc().nullslast())
                 )
-                conv = conv_result2.scalar_one()
+                conv = conv_result2.scalars().first()
 
         # Update last message + its real time (for recency sorting in the inbox).
         conv.last_message = content[:200] if content else conv.last_message

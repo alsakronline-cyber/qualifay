@@ -297,9 +297,11 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
                 Conversation.tenant_id == lead.tenant_id,
                 Conversation.wa_jid == wa_jid,
                 Conversation.status != ConversationStatus.resolved,
-            )
+            ).order_by(Conversation.last_message_at.desc().nullslast())
         )
-        conv = conv_result.scalar_one_or_none()
+        # .first(), not scalar_one_or_none(): a number can have more than one conversation
+        # row (history import / webhook races), and one-or-none crashed the send outright.
+        conv = conv_result.scalars().first()
         if not conv:
             conv = Conversation(
                 tenant_id=lead.tenant_id,
@@ -569,9 +571,9 @@ async def _handle_inbound_message(webhook_data: dict):
                 select(Lead).where(
                     and_(Lead.phone == phone, Lead.tenant_id == tenant_id) if tenant_id
                     else Lead.phone == phone
-                )
+                ).order_by(Lead.updated_at.desc().nullslast())
             )
-            lead = lead_result.scalar_one_or_none()
+            lead = lead_result.scalars().first()   # tolerate duplicates instead of crashing
 
         # A WhatsApp reply stops the lead's active cadences (no more follow-ups).
         if lead:
@@ -597,8 +599,9 @@ async def _handle_inbound_message(webhook_data: dict):
         if tenant_id:
             query = query.where(Conversation.tenant_id == tenant_id)
 
-        conv_result = await db.execute(query)
-        conv = conv_result.scalar_one_or_none()
+        conv_result = await db.execute(
+            query.order_by(Conversation.last_message_at.desc().nullslast()))
+        conv = conv_result.scalars().first()   # most recent thread if duplicates exist
 
         if not conv:
             conv = Conversation(
