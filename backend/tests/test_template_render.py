@@ -35,5 +35,11 @@ def test_missing_name_degrades_cleanly():
     assert render_for_lead(EN, lead("")) == "Dear Engineer,"
 
 
+def test_bilingual_message_uses_neutral_english_greeting_for_arabic_names():
+    l = lead("هيثم غراب", "X")
+    assert render_for_lead(AR, l) == "السلام عليكم يا هندسة هيثم غراب،"
+    assert render_for_lead(EN, l) == "Dear Engineer,"
+
+
 def test_legacy_placeholders_unchanged():
     assert render_for_lead("{{name}} @ {{company}}", lead("Ali", "ABB")) == "Ali @ ABB"
