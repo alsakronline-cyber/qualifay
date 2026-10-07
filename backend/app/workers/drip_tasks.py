@@ -182,6 +182,8 @@ async def _send_one(lead_id: str, channel: str, instance_id: str = None):
             return {"skipped": f"status_{getattr(lead.status, 'value', lead.status)}"}
         drip = rd.get("drip") or {}
         tpl = drip.get("wa_tpl") if channel == "whatsapp" else drip.get("email_tpl")
+        if not tpl:                            # channel switched off for this campaign
+            return {"skipped": "channel_disabled", "channel": channel}
 
     try:
         result = await _process_approved_lead(
