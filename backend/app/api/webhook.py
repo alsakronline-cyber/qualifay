@@ -136,6 +136,12 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                         )
                         await unsub_db.commit()
                         logger.info(f"STOP keyword received from {phone} — lead(s) unsubscribed immediately")
+                        # Site Factory: end the conversation, delete the preview + data, suppress.
+                        try:
+                            from app.site_factory.service import on_stop_keyword
+                            await on_stop_keyword(unsub_db, phone)
+                        except Exception as e_sf:
+                            logger.warning(f"site-factory stop handling failed: {e_sf}")
                 except Exception as e:
                     logger.error(f"STOP handler synchronous DB update failed: {e}")
                 # Return immediately — do NOT queue any further processing
@@ -278,7 +284,22 @@ async def paymob_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     obj = data.get("obj", {})
     success = obj.get("success", False)
     if success:
-        order_id = str(obj.get("order", {}).get("id", ""))
+        # Site Factory sales carry merchant reference "sf-<prospect_id>" (set via the
+        # Intention API's special_reference, echoed as the order's merchant_order_id).
+        from app.site_factory.payments import prospect_id_from_reference
+        order = obj.get("order", {}) or {}
+        sf_id = prospect_id_from_reference(order.get("merchant_order_id") or obj.get("special_reference"))
+        if sf_id:
+            from app.models.models import SiteProspect
+            from app.site_factory import service as sf_service
+            prospect = await db.get(SiteProspect, sf_id)
+            if prospect:
+                try:
+                    await sf_service.mark_paid(db, prospect, ref=f"paymob:{obj.get('id', '')}")
+                except Exception as e:
+                    logger.warning(f"site-factory mark_paid failed for {sf_id}: {e}")
+            return {"received": True}
+        order_id = str(order.get("id", ""))
         await _update_subscription_by_provider("paymob", order_id, "active", db)
 
     return {"received": True}

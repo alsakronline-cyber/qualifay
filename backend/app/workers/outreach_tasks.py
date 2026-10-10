@@ -554,7 +554,27 @@ async def _handle_inbound_message(webhook_data: dict):
                     lead.status = LeadStatus.unsubscribed
                     await db.commit()
                     logger.info(f"Lead {lead.id} unsubscribed via STOP keyword")
+                try:
+                    from app.site_factory.service import on_stop_keyword
+                    await on_stop_keyword(db, phone)
+                except Exception as e:
+                    logger.warning(f"site-factory stop handling failed: {e}")
         return {"skipped": True, "reason": "stop_keyword", "jid": wa_jid}
+
+    # Site Factory conversations have their own consent-first state machine — route the
+    # reply there instead of the generic AI responder (the webhook already saved it to the inbox).
+    try:
+        from app.site_factory.service import find_active_by_phone
+        sf_phone = _jid_to_e164(wa_jid)
+        if sf_phone:
+            async with AsyncSessionLocal() as sf_db:
+                prospect = await find_active_by_phone(sf_db, sf_phone)
+            if prospect:
+                from app.site_factory.tasks import handle_reply as sf_handle_reply
+                sf_handle_reply.apply_async(args=[prospect.id, content], queue="default")
+                return {"routed": "site_factory", "prospect_id": prospect.id}
+    except Exception as e:
+        logger.warning(f"site-factory routing check failed: {e}")
 
     async with AsyncSessionLocal() as db:
         # Find WA instance record
