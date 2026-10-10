@@ -131,10 +131,8 @@ celery_app.conf.update(
             "task": "site_factory.discover",
             "schedule": crontab(hour=8, minute=30),
         },
-        "site-factory-build": {
-            "task": "site_factory.build",
-            "schedule": 600.0,
-        },
+        # No automatic site building: a site is built only after the owner picks its theme
+        # in the dashboard (see site_factory.build_one).
         "site-factory-intros": {
             "task": "site_factory.send_intros",
             "schedule": 900.0,
