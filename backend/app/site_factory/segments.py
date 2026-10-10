@@ -116,3 +116,43 @@ def fallback_copy(segment: str, name: str, city: str | None, category: str | Non
         "services": [dict(x) for x in DEFAULT_SERVICES[seg]],
         "cta_ar": CTA[seg]["ar"], "cta_en": CTA[seg]["en"],
     }
+
+
+# Words that turn a factual draft into an unverifiable claim. A field containing any of them is
+# replaced by the safe default (the owner can still write their own claims before publishing).
+CLAIM_WORDS = [
+    "متميز", "متميزة", "الأفضل", "افضل", "أفضل", "رائد", "رائدة", "الأول", "الاولى", "الأولى", "متكامل", "متكاملة",
+    "عالمي", "عالمية", "مضمون", "مضمونة", "ضمان", "خبرة طويلة", "سنوات من الخبرة", "أعلى جودة", "اعلى جودة", "الأرخص", "ارخص",
+    "best", "leading", "top", "premium", "world-class", "guaranteed", "number one", "no. 1", "#1", "cheapest", "unmatched", "excellent",
+    "comprehensive", "state-of-the-art", "cutting-edge",
+]
+
+
+def has_claim(text: str) -> bool:
+    t = (text or "").lower()
+    return any(w in t for w in CLAIM_WORDS)
+
+
+def sanitize_copy(data: dict, base: dict, segment: str) -> dict:
+    """Merge LLM copy over the facts-only `base`, keeping a field only if it is well-formed and
+    claim-free. Clinics always keep the neutral services list: specific procedures/tests are
+    medical claims we can't verify from public data."""
+    out = dict(base)
+    for k in ("tagline_ar", "tagline_en", "intro_ar", "intro_en", "cta_ar", "cta_en"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip() and not has_claim(v):
+            out[k] = v.strip()[:300 if k.startswith("intro") else 140]
+    for k in ("about_ar", "about_en"):
+        v = data.get(k)
+        if isinstance(v, list) and v and all(isinstance(x, str) and x.strip() for x in v):
+            paras = [x.strip()[:700] for x in v[:4] if not has_claim(x)]
+            if paras:
+                out[k] = paras
+    svcs = data.get("services")
+    if segment != "clinic" and isinstance(svcs, list):
+        good = [{f: str(x.get(f, "")).strip()[:400] for f in ("name_ar", "name_en", "desc_ar", "desc_en")}
+                for x in svcs if isinstance(x, dict) and str(x.get("name_ar", "")).strip()]
+        good = [g for g in good if not any(has_claim(g[f]) for f in g)]
+        if len(good) >= 3:
+            out["services"] = good[:6]
+    return out

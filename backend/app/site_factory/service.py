@@ -31,7 +31,7 @@ from app.models.models import (
 from app.site_factory import state as S, replies as R, messages as M, payments
 from app.site_factory.builder import build_site
 from app.site_factory import insights
-from app.site_factory.segments import KEYWORDS, PLACE_TYPES, fallback_copy
+from app.site_factory.segments import KEYWORDS, PLACE_TYPES, fallback_copy, sanitize_copy
 
 logger = logging.getLogger(__name__)
 CAIRO = ZoneInfo("Africa/Cairo")
@@ -258,26 +258,6 @@ COPY_PROMPT = """أنت كاتب محتوى ومتخصص SEO لمواقع الأ
 الحقائق: {facts}"""
 
 
-def clean_copy(data: dict, base: dict) -> dict:
-    """Keep only well-formed fields from the LLM; anything malformed falls back to `base`."""
-    out = dict(base)
-    for k in ("tagline_ar", "tagline_en", "intro_ar", "intro_en", "cta_ar", "cta_en"):
-        v = data.get(k)
-        if isinstance(v, str) and v.strip():
-            out[k] = v.strip()[:300 if k.startswith("intro") else 140]
-    for k in ("about_ar", "about_en"):
-        v = data.get(k)
-        if isinstance(v, list) and v and all(isinstance(x, str) and x.strip() for x in v):
-            out[k] = [x.strip()[:700] for x in v[:4]]
-    svcs = data.get("services")
-    if isinstance(svcs, list):
-        good = [{f: str(x.get(f, "")).strip()[:400] for f in ("name_ar", "name_en", "desc_ar", "desc_en")}
-                for x in svcs if isinstance(x, dict) and str(x.get("name_ar", "")).strip()]
-        if len(good) >= 3:
-            out["services"] = good[:6]
-    return out
-
-
 async def write_copy(p: SiteProspect) -> dict:
     prof = p.profile or {}
     base = fallback_copy(p.segment, p.business_name, p.city, prof.get("category"))
@@ -289,7 +269,7 @@ async def write_copy(p: SiteProspect) -> dict:
         text = await ai_service._or_fast(
             [{"role": "user", "content": COPY_PROMPT.format(facts=json.dumps(facts, ensure_ascii=False))}], max_tokens=3200)
         data = ai_service._parse_json(text, {})
-        return clean_copy(data, base) if isinstance(data, dict) else base
+        return sanitize_copy(data, base, p.segment) if isinstance(data, dict) else base
     except Exception as e:
         logger.info("copywriter fell back for %s: %s", p.id, e)
         return base

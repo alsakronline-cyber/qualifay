@@ -275,3 +275,18 @@ def test_exclusions_and_same_business():
     assert insights.same_business("Heart Care Clinics Maadi", "Heart Care Clinics", {"maadi"})
     assert not insights.same_business("مصنع النور للبلاستيك", "مصنع الأمل للبلاستيك")
     assert not insights.same_business("مصنع العاشر من رمضان", "مصنع النور", area)
+
+
+def test_copy_guard_blocks_claims_and_clinic_procedures():
+    from app.site_factory.segments import sanitize_copy
+    base = fallback_copy("clinic", "هارت كير", "المعادي", "عيادة قلب")
+    llm = {"tagline_ar": "رعاية قلبية متميزة في المعادي", "intro_ar": "عيادة هارت كير في المعادي. احجز بالهاتف.",
+           "services": [{"name_ar": "اختبار تخطيط القلب (ECG)", "name_en": "ECG", "desc_ar": "x", "desc_en": "x"}] * 3}
+    out = sanitize_copy(llm, base, "clinic")
+    assert out["tagline_ar"] == base["tagline_ar"]                      # claim rejected
+    assert out["intro_ar"] == "عيادة هارت كير في المعادي. احجز بالهاتف."  # factual text kept
+    assert out["services"] == base["services"]                           # clinics: neutral services only
+    store = sanitize_copy({"services": [{"name_ar": f"خدمة {i}", "name_en": f"S{i}", "desc_ar": "وصف", "desc_en": "d"} for i in range(4)]
+                           + [{"name_ar": "أفضل خدمة", "name_en": "best", "desc_ar": "", "desc_en": ""}]},
+                          fallback_copy("store", "محل", None, None), "store")
+    assert len(store["services"]) == 4 and all("أفضل" not in s["name_ar"] for s in store["services"])
