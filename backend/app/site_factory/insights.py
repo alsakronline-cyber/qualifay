@@ -20,6 +20,41 @@ SERVICE_TITLES = {
 }
 
 
+import re as _re
+
+# Not prospects: government, military, public bodies, universities.
+EXCLUDE_PATTERNS = [
+    "قوات المسلحة", "قوات مسلحة", "وزارة", "هيئة", "محافظة", "الحكومة", "جامعة", "مستشفى جامعي", "جهاز مشروعات",
+    "armed forces", "ministry", "authority", "government", "governorate", "university",
+]
+_GENERIC = {"مصنع", "شركة", "شركه", "محل", "معرض", "عيادة", "عياده", "عيادات", "مركز", "فرع", "ستور", "store", "stores",
+            "factory", "company", "co", "clinic", "clinics", "center", "centre", "branch", "the", "for", "and", "of", "-", "_",
+            "د", "دكتور", "dr", "للصناعات", "لصناعة", "للتجارة", "egypt", "مصر", "ال"}
+
+
+def is_excluded(name: str | None) -> bool:
+    n = (name or "").lower()
+    return any(p in n for p in EXCLUDE_PATTERNS)
+
+
+def name_tokens(name: str | None, drop: set[str] | None = None) -> set[str]:
+    """Distinctive words of a business name (generic words, area names and short tokens removed)."""
+    t = (name or "").lower()
+    t = _re.sub(r"[إأآ]", "ا", t).replace("ة", "ه").replace("ى", "ي")
+    words = set(_re.findall(r"[\w']+", t))
+    stop = _GENERIC | {w.lower() for w in (drop or set())}
+    return {w for w in words if len(w) > 2 and w not in stop and not w.isdigit()}
+
+
+def same_business(a: str | None, b: str | None, area_words: set[str] | None = None) -> bool:
+    """True when two listing names clearly refer to the same brand (e.g. a branch vs the HQ listing)."""
+    ta, tb = name_tokens(a, area_words), name_tokens(b, area_words)
+    if not ta or not tb:
+        return False
+    overlap = len(ta & tb) / min(len(ta), len(tb))
+    return overlap >= 0.6
+
+
 def score(*, segment: str, gap: str, rating: float | None, reviews: int | None, has_hours: bool,
           has_address: bool, wa_reachable: bool | None, social_links: int) -> tuple[int, list[str]]:
     """0–100 'worth pursuing' score + Arabic reasons (shown in the dashboard)."""
