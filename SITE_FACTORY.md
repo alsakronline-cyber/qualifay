@@ -5,6 +5,18 @@ Finds Egyptian businesses (manufacturers, local stores, clinics) that have **no 
 **consent-first** WhatsApp conversation. It runs as a Qualifay module: `backend/app/site_factory/`
 and the dashboard page `/site-factory`.
 
+## Owner decides the design (no automatic building)
+Discovery only **collects data**. Every business waits in **بانتظار التصميم** until the owner:
+1. reviews the collected data (name AR/EN, category, address, phone, hours, Google rating, Maps link, social links);
+2. picks a **reference site** (Awwwards board in `references.py`, or any URL) → **حلّل الستايل** opens it in
+   headless Chromium and reads its computed style: light/dark, heading/body fonts (mapped to Google Fonts +
+   a matching Arabic font), heading case/weight, corner radius. Only the *style* is used — never the
+   reference's code, text or images;
+3. uploads the business's **logo** (or a link) → colors are extracted (`design.logo_palette`), and the owner
+   confirms/edits primary + accent;
+4. clicks **ابنِ الموقع** → one Celery job (`site_factory.build_one`) builds that single site with the
+   chosen design and the logo in the header. There is no scheduled build job.
+
 ## The funnel
 
 ```
@@ -18,7 +30,7 @@ any stage: "لا" / "إيقاف" / "إلغاء" / silence after one follow-up �
 | Step | What happens | Where |
 |---|---|---|
 | Discover (daily 08:30) | Google Maps places **without** `websiteUri` → `no_website`; OSM businesses cross-checked against Maps → `no_gbp` if not on Maps. Mobile numbers only; skips known/unsubscribed/suppressed numbers. | `service.discover` |
-| Build (every 10 min) | WhatsApp check, Place Details (hours, category), facts-only AI copy (fallback copy if the LLM fails), one-file bilingual HTML stored in MinIO. | `service.build`, `builder.py` |
+| Build (**only when you click Build**) | WhatsApp check, Place Details (hours, category), facts-only AI copy with a claims filter, full bilingual site in your chosen design stored in MinIO. | `service.build`, `builder.py`, `design.py` |
 | **Approve (you)** | Dashboard → *بانتظار الموافقة* → select → **موافقة**. Nothing is ever sent without this. | `api.approve_intros` |
 | Intro (every 15 min, 10:00–19:59) | Asks permission only — no link. Respects the WhatsApp warmup cap and the campaign's daily intro cap, 40–110 s apart. | `service.send_intro` |
 | Reply handling | Rules for Arabic/Egyptian/English (`replies.py`), LLM second opinion, then a human notification if still unclear. | `service.handle_reply` |

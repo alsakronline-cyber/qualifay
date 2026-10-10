@@ -932,6 +932,9 @@ class SiteProspect(Base):
     score_reasons = Column(JSON, default=list)
     services = Column(JSON, default=list)                 # recommended services from online data gaps
     assigned_to = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Owner-chosen design: {"style": {...reference style}, "reference_url", "colors": {primary, accent},
+    # "logo_key"}. A site is never built until this is set by a human.
+    design = Column(JSON, default=dict)
     status = Column(String, default="found", nullable=False, index=True)
     preview_token = Column(String, unique=True, nullable=True, index=True)
     preview_expires_at = Column(DateTime, nullable=True)

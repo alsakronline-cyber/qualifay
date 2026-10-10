@@ -30,7 +30,8 @@ from app.models.models import (
 )
 from app.site_factory import state as S, replies as R, messages as M, payments
 from app.site_factory.builder import build_site
-from app.site_factory import insights
+from app.site_factory import insights, design as D
+from app.site_factory.segments import THEMES
 from app.site_factory.segments import KEYWORDS, PLACE_TYPES, fallback_copy, sanitize_copy
 
 logger = logging.getLogger(__name__)
@@ -316,8 +317,11 @@ def render_files(p: SiteProspect, preview: bool) -> dict[str, str]:
     else:
         base = f"/api/v1/site-factory/s/{p.live_slug}/"
         expires = None
+    d = p.design or {}
+    theme = D.build_theme(d.get("style"), d.get("colors"), THEMES.get(p.segment, THEMES["store"]))
     return build_site(profile=p.profile or {}, copy=p.site_copy or {}, segment=p.segment, base=base, preview=preview,
-                      expires_on=expires, brand_url=settings.SITE_FACTORY_BRAND_URL, site_url=public_base() + base)
+                      expires_on=expires, brand_url=settings.SITE_FACTORY_BRAND_URL, site_url=public_base() + base,
+                      design_theme=theme, has_logo=bool(d.get("logo_key")))
 
 
 def store_site(p: SiteProspect, preview: bool) -> bool:
@@ -326,6 +330,11 @@ def store_site(p: SiteProspect, preview: bool) -> bool:
     prefix = site_prefix(p, "preview" if preview else "live")
     ok = all(upload_attachment(prefix + path, text.encode("utf-8"), content_type(path))
              for path, text in render_files(p, preview).items())
+    logo_key = (p.design or {}).get("logo_key")
+    if ok and logo_key:
+        from app.services.storage_service import get_attachment
+        data, _ = get_attachment(logo_key)
+        ok = bool(data) and upload_attachment(prefix + "assets/logo.png", data, "image/png")
     if ok:
         p.site_key = prefix
     return ok
@@ -341,8 +350,35 @@ def delete_site_files(p: SiteProspect) -> None:
         logger.info("site file cleanup failed for %s: %s", p.id, e)
 
 
+async def save_logo(p: SiteProspect, raw: bytes) -> dict:
+    """Store the business's logo (validated, re-encoded PNG) and return its palette."""
+    from app.services.storage_service import upload_attachment
+    png = D.normalize_logo(raw)
+    key = f"{STORAGE_PREFIX}/{p.tenant_id}/{p.id}/src/logo.png"
+    if not upload_attachment(key, png, "image/png"):
+        raise RuntimeError("logo upload failed")
+    p.design = {**(p.design or {}), "logo_key": key}
+    return D.logo_palette(png)
+
+
+async def fetch_image(url: str, max_bytes: int = 3_000_000) -> bytes:
+    if not url.startswith("https://"):
+        raise ValueError("Logo link must start with https://")
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as c:
+        r = await c.get(url)
+    if r.status_code != 200 or not r.headers.get("content-type", "").startswith("image/"):
+        raise ValueError("That link is not an image")
+    if len(r.content) > max_bytes:
+        raise ValueError("Image is larger than 3 MB")
+    return r.content
+
+
 async def build(db: AsyncSession, p: SiteProspect) -> bool:
-    """found → built → awaiting_approval (or unreachable)."""
+    """found → built → awaiting_approval (or unreachable). Only after the owner chose the design."""
+    if not (p.design or {}).get("style"):
+        log_event(p, "build_blocked", "no design chosen")
+        await db.commit()
+        return False
     reach = await _check_whatsapp(db, p.tenant_id, p.phone)
     p.wa_reachable = reach
     if reach is False:

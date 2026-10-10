@@ -14,6 +14,7 @@ import {
   Globe, Search, Check, X, ExternalLink, Plus, CreditCard, Send, ShieldCheck, Loader2, ChevronDown, UserPlus, Flame,
 } from 'lucide-react'
 import { siteFactoryApi, teamApi } from '@/lib/api'
+import SiteDesignPanel from '@/components/SiteDesignPanel'
 
 interface Campaign {
   id: string; name: string; segment: string; areas: string[]; price_egp: number; service_prices?: Record<string, number>
@@ -25,11 +26,13 @@ interface Prospect {
   approved: boolean; preview_url?: string; live_url?: string; last_inbound?: string; last_event_at?: string
   score?: number; tier: 'hot' | 'warm' | 'cold'; score_reasons: string[]; services: Service[]; package_egp: number
   assigned_to?: string | null
+  profile: Record<string, unknown>
+  design?: { style?: Record<string, unknown>; colors?: { primary?: string; accent?: string | null }; has_logo?: boolean }
 }
 interface Member { id: string; full_name?: string; email: string }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
-  found: { label: 'تم العثور عليه', cls: 'bg-gray-700 text-gray-300' },
+  found: { label: 'بانتظار التصميم', cls: 'bg-gray-700 text-gray-300' },
   built: { label: 'المعاينة جاهزة', cls: 'bg-gray-700 text-gray-300' },
   awaiting_approval: { label: 'بانتظار موافقتك', cls: 'bg-amber-500/15 text-amber-300' },
   intro_sent: { label: 'تم إرسال التعريف', cls: 'bg-sky-500/15 text-sky-300' },
@@ -57,6 +60,7 @@ const SEGMENTS = [
 ]
 const SERVICE_LABELS: Record<string, string> = { website: 'موقع', gbp: 'جوجل', social: 'سوشيال', whatsapp: 'واتساب' }
 const TABS = [
+  { k: 'found', l: 'بانتظار التصميم' },
   { k: 'awaiting_approval', l: 'بانتظار الموافقة' },
   { k: 'intro_sent,opted_in,preview_sent,changes_requested,payment_sent', l: 'محادثات نشطة' },
   { k: 'paid,live', l: 'مبيعات' },
@@ -67,7 +71,7 @@ const OWNER_FILTERS = [
   { k: 'me', l: 'المسندة لي' },
   { k: 'none', l: 'غير مسندة' },
 ]
-const FUNNEL = ['awaiting_approval', 'intro_sent', 'preview_sent', 'payment_sent', 'live']
+const FUNNEL = ['found', 'awaiting_approval', 'intro_sent', 'preview_sent', 'live']
 
 function Badge({ s }: { s: string }) {
   const m = STATUS[s] || { label: s, cls: 'bg-gray-700 text-gray-300' }
@@ -75,7 +79,7 @@ function Badge({ s }: { s: string }) {
 }
 
 export default function SiteFactoryPage() {
-  const [tab, setTab] = useState(TABS[0].k)
+  const [tab, setTab] = useState(TABS[0].k)   // start on "waiting for design" 
   const [owner, setOwner] = useState('')
   const [hotOnly, setHotOnly] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
@@ -133,7 +137,7 @@ export default function SiteFactoryPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white font-cairo flex items-center gap-2"><Globe size={22} /> مصنع المواقع</h1>
-          <p className="text-gray-400 text-sm mt-1 font-cairo">نشاطات بدون موقع ← تقييم واختيار ← موقع كامل كمعاينة ← تواصل بعد موافقتك وموافقتهم ← بيع</p>
+          <p className="text-gray-400 text-sm mt-1 font-cairo">نجمع البيانات ← أنت تختار التصميم وتبني ← تراجع وتوافق ← تواصل بعد موافقة العميل ← بيع</p>
         </div>
         <button onClick={() => setShowNew((v) => !v)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary text-black font-semibold text-sm font-cairo">
           <Plus size={16} /> حملة جديدة
@@ -290,6 +294,9 @@ export default function SiteFactoryPage() {
                     <tr className="bg-gray-950/50">
                       <td />
                       <td colSpan={6} className="px-3 py-4">
+                        {p.status === 'found' ? (
+                          <SiteDesignPanel p={p} onBuilt={() => { setOpen(null); refresh() }} />
+                        ) : (
                         <div className="grid md:grid-cols-3 gap-4 text-xs font-cairo">
                           <div>
                             <p className="text-gray-400 mb-2">لماذا هذا التقييم</p>
@@ -308,8 +315,10 @@ export default function SiteFactoryPage() {
                             <p>آخر رد: <span className="text-gray-200">{p.last_inbound || '—'}</span></p>
                             <p>آخر نشاط: {p.last_event_at ? format(new Date(p.last_event_at), 'yyyy-MM-dd HH:mm') : '—'}</p>
                             {p.assigned_to && <p>المسؤول: <span className="text-gray-200">{memberName(p.assigned_to)}</span></p>}
+                            {p.design?.style && <p>التصميم: <span className="text-gray-200">{String(p.design.style.title || p.design.style.url || '')}</span></p>}
                           </div>
                         </div>
+                        )}
                       </td>
                     </tr>
                   )}
