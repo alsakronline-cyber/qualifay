@@ -446,3 +446,19 @@ export const salesApi = {
 }
 
 export default API
+
+// ── Site Factory (website-gap prospects → preview site → consented WhatsApp sale) ──────
+export const siteFactoryApi = {
+  campaigns: () => API.get('/v1/site-factory/campaigns'),
+  createCampaign: (body: Record<string, unknown>) => API.post('/v1/site-factory/campaigns', body),
+  updateCampaign: (id: string, body: Record<string, unknown>) => API.put(`/v1/site-factory/campaigns/${id}`, body),
+  discoverNow: (id: string) => API.post(`/v1/site-factory/campaigns/${id}/discover`, {}),
+  stats: () => API.get('/v1/site-factory/stats'),
+  prospects: (params?: { status?: string; campaign_id?: string; limit?: number }) => API.get('/v1/site-factory/prospects', { params }),
+  prospect: (id: string) => API.get(`/v1/site-factory/prospects/${id}`),
+  approve: (ids: string[]) => API.post('/v1/site-factory/prospects/approve', { ids }),
+  reject: (ids: string[]) => API.post('/v1/site-factory/prospects/reject', { ids }),
+  editCopy: (id: string, fields: Record<string, unknown>) => API.put(`/v1/site-factory/prospects/${id}/copy`, { fields }),
+  resendPreview: (id: string) => API.post(`/v1/site-factory/prospects/${id}/resend-preview`, {}),
+  markPaid: (id: string, reference: string) => API.post(`/v1/site-factory/prospects/${id}/mark-paid`, { reference }),
+}

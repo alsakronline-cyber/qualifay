@@ -19,6 +19,7 @@ celery_app = Celery(
         "app.workers.orchestrator_tasks",
         "app.workers.billing_tasks",
         "app.workers.drip_tasks",
+        "app.site_factory.tasks",
     ],
 )
 
@@ -123,6 +124,24 @@ celery_app.conf.update(
         "harvest-learnings": {
             "task": "orchestrator.harvest_learnings",
             "schedule": 14400.0,  # every 4h — distill won/lost leads into tenant memory
+        },
+        # Site Factory: find website-gap businesses daily, render previews, send ONLY
+        # human-approved intros inside working hours, and follow up / expire / purge hourly.
+        "site-factory-discover": {
+            "task": "site_factory.discover",
+            "schedule": crontab(hour=8, minute=30),
+        },
+        "site-factory-build": {
+            "task": "site_factory.build",
+            "schedule": 600.0,
+        },
+        "site-factory-intros": {
+            "task": "site_factory.send_intros",
+            "schedule": 900.0,
+        },
+        "site-factory-tick": {
+            "task": "site_factory.tick",
+            "schedule": 3600.0,
         },
         "optimize-ab-tests": {
             "task": "orchestrator.optimize_ab_tests",

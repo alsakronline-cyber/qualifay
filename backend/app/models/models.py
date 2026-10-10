@@ -875,3 +875,83 @@ class SalesDocLine(Base):
     line_total = Column(Float, default=0.0)            # qty * unit_price * (1 - discount_pct/100)
 
     doc = relationship("SalesDoc", back_populates="lines")
+
+
+# ─── Site Factory (website-gap prospects → free preview site → consented outreach) ─────
+#
+# Finds businesses with no website / no Google Business Profile, builds them a private
+# preview site, and — only after a human approves the intro and the business replies "yes"
+# — sends the preview link, gathers feedback, and closes with a payment link. Consent-first
+# by design (Egypt PDPL 151/2020, WhatsApp policy): see app/site_factory/state.py.
+
+class SiteFactoryCampaign(Base):
+    """One search + offer: a segment, an area, a price, and daily limits."""
+    __tablename__ = "site_factory_campaigns"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    segment = Column(String, nullable=False)              # manufacturer | store | clinic
+    areas = Column(JSON, default=list)                    # ["10th of Ramadan", "Nasr City"]
+    keywords = Column(JSON, default=list)                 # overrides the segment defaults when set
+    sources = Column(JSON, default=lambda: ["google_maps", "osm"])
+    price_egp = Column(Integer, default=4500)
+    max_new_per_day = Column(Integer, default=25)         # discovery cap
+    max_intros_per_day = Column(Integer, default=15)      # on top of the WA warmup cap
+    instapay_handle = Column(String, nullable=True)       # shown as the non-card payment option
+    sender_name = Column(String, default="محمد")          # signs the intro message
+    brand_name = Column(String, default="Sdiek Marketing")
+    active = Column(Boolean, default=True, nullable=False, server_default="true")
+    last_discovery_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class SiteProspect(Base):
+    """A business in the Site Factory funnel. `status` follows app.site_factory.state."""
+    __tablename__ = "site_prospects"
+    __table_args__ = (UniqueConstraint("tenant_id", "phone", name="uq_site_prospect_tenant_phone"),)
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    campaign_id = Column(String, ForeignKey("site_factory_campaigns.id", ondelete="SET NULL"), nullable=True, index=True)
+    lead_id = Column(String, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    business_name = Column(String, nullable=False)
+    segment = Column(String, nullable=False)
+    gap = Column(String, nullable=False)                  # no_website | no_gbp
+    phone = Column(String, nullable=False, index=True)    # E.164
+    wa_reachable = Column(Boolean, nullable=True)
+    city = Column(String, nullable=True)
+    source = Column(String, nullable=True)                # google_maps | osm | yellowpages
+    source_ref = Column(String, nullable=True)            # place_id / osm id — provenance
+    profile = Column(JSON, default=dict)                  # facts collected (address, hours, category, links…)
+    site_copy = Column(JSON, default=dict)                # AI-written site copy, facts-only
+
+    status = Column(String, default="found", nullable=False, index=True)
+    preview_token = Column(String, unique=True, nullable=True, index=True)
+    preview_expires_at = Column(DateTime, nullable=True)
+    site_key = Column(String, nullable=True)              # object-storage key of the built HTML
+    live_slug = Column(String, unique=True, nullable=True)
+
+    intro_approved_by = Column(String, nullable=True)     # user id — the human gate
+    intro_sent_at = Column(DateTime, nullable=True)
+    opted_in_at = Column(DateTime, nullable=True)         # the business replied yes → consent
+    preview_sent_at = Column(DateTime, nullable=True)
+    payment_sent_at = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    payment_ref = Column(String, nullable=True)
+    followups_sent = Column(Integer, default=0)
+    last_inbound = Column(Text, nullable=True)
+    last_event_at = Column(DateTime, default=func.now())
+    events = Column(JSON, default=list)                   # audit trail [{at, type, detail}]
+    created_at = Column(DateTime, default=func.now())
+
+
+class SiteSuppression(Base):
+    """Numbers that declined or asked to stop. Only a hash is kept, so the business's data
+    is deleted while we still guarantee they are never contacted again."""
+    __tablename__ = "site_suppressions"
+
+    phone_hash = Column(String, primary_key=True)
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now())

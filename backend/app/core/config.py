@@ -109,6 +109,14 @@ class Settings(BaseSettings):
     PAYMOB_API_KEY: str = ""
     PAYMOB_INTEGRATION_ID: str = ""
     PAYMOB_HMAC_SECRET: str = ""
+    # Intention API (Unified Checkout) — used by the Site Factory to sell websites.
+    PAYMOB_SECRET_KEY: str = ""
+    PAYMOB_PUBLIC_KEY: str = ""
+
+    # Site Factory — public base URL for preview/live site links (e.g. https://sites.example.com).
+    # Defaults to APP_BASE_URL. Previews are served by this backend at /api/v1/site-factory/p/<token>.
+    SITE_FACTORY_PUBLIC_URL: str = ""
+    SITE_FACTORY_BRAND_URL: str = ""
     FAWRY_MERCHANT_CODE: str = ""
     FAWRY_SECURITY_KEY: str = ""
     STRIPE_SECRET_KEY: str = ""
