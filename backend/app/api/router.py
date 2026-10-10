@@ -55,3 +55,7 @@ api_router.include_router(onboarding.router, prefix="/onboarding", tags=["Onboar
 api_router.include_router(agent_runs.router, prefix="/agent-runs", tags=["Agent Activity"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Platform Admin"])
 api_router.include_router(sales.router, prefix="/sales/docs", tags=["Sales Documents"])
+
+from app.site_factory import api as site_factory_api  # noqa: E402
+api_router.include_router(site_factory_api.router, prefix="/site-factory", tags=["Site Factory"])
+api_router.include_router(site_factory_api.public_router, prefix="/site-factory", tags=["Site Factory (public)"])

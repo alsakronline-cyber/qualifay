@@ -37,6 +37,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   Rocket,
+  Globe,
 } from 'lucide-react'
 import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
@@ -69,6 +70,7 @@ const navItems: NavItem[] = [
   { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail, adminOnly: true },
   { href: '/templates', label: 'القوالب', labelEn: 'Templates', icon: FileText },
   { href: '/scrape', label: 'جمع البيانات', labelEn: 'Scrape', icon: Bot, adminOnly: true },
+  { href: '/site-factory', label: 'مصنع المواقع', labelEn: 'Site Factory', icon: Globe, adminOnly: true },
   { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog, adminOnly: true },
   { href: '/webhooks', label: 'الويب هوك', labelEn: 'Webhooks', icon: Webhook, adminOnly: true },
   { href: '/ab-tests', label: 'اختبارات A/B', labelEn: 'A/B Tests', icon: FlaskConical, adminOnly: true },
