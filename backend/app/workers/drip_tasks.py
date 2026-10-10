@@ -29,6 +29,23 @@ WA_GAP = (60, 180)      # seconds between WhatsApp sends
 EMAIL_GAP = 5           # seconds between emails
 START_DELAY = 30        # small head-start before the first send
 
+# New numbers get banned fast when they open with cold messages (masoud: linked Oct 6, 403 on
+# Oct 10). A number sends no drip messages for its first QUIET_DAYS, then NEW_CAP a day for a
+# week, then whatever the normal warmup cap allows.
+QUIET_DAYS = 14
+NEW_CAP = 5
+NEW_CAP_DAYS = 7
+
+
+def _cold_room(day_of_life, room):
+    """How many cold (drip) messages a number of this age may send today, given `room`."""
+    day = day_of_life or 0
+    if day < QUIET_DAYS:
+        return 0
+    if day < QUIET_DAYS + NEW_CAP_DAYS:
+        return min(room, NEW_CAP)
+    return room
+
 
 def run_async(coro):
     return _run_async(coro)
@@ -126,7 +143,7 @@ async def _run_daily():
             room = {}
             for i in insts:
                 allowed, used, cap = await warmup_service.check_wa_limit(i.id, db)
-                room[i.id] = max(cap - used, 0) if allowed else 0
+                room[i.id] = _cold_room(i.day_of_life, max(cap - used, 0) if allowed else 0)
             plan = _split(settings.DRIP_WA_DAILY_MAX, room)
             ids = await _pending(db, tid, "phone", "wa_contacted_at", sum(plan.values()))
             # Each number keeps its own 1-3 min spacing, so they send in parallel lanes.
