@@ -69,6 +69,21 @@ def build_pending():
     return run_async(_run(), reset_ai=True)
 
 
+@celery_app.task(name="site_factory.build_one", bind=True, max_retries=1)
+def build_one(self, prospect_id: str):
+    """Build ONE site — queued only when the owner clicks Build after choosing its design."""
+    async def _run():
+        from app.core.database import AsyncSessionLocal
+        from app.models.models import SiteProspect
+        from app.site_factory import service, state as S
+        async with AsyncSessionLocal() as db:
+            p = await db.get(SiteProspect, prospect_id)
+            if p and p.status == S.FOUND:
+                return {"built": await service.build(db, p)}
+            return {"built": False}
+    return run_async(_run(), reset_ai=True)
+
+
 @celery_app.task(name="site_factory.send_intros")
 def send_approved_intros():
     """Every 15 min (only acts 10:00–19:59 Cairo): send intros a human has approved."""

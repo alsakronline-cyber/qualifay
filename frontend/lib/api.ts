@@ -457,6 +457,11 @@ export const siteFactoryApi = {
   prospects: (params?: { status?: string; campaign_id?: string; assigned?: string; min_score?: number; sort?: 'score' | 'recent'; limit?: number }) =>
     API.get('/v1/site-factory/prospects', { params }),
   assign: (ids: string[], user_id: string | null) => API.post('/v1/site-factory/prospects/assign', { ids, user_id }),
+  references: () => API.get('/v1/site-factory/references'),
+  analyzeReference: (url: string) => API.post('/v1/site-factory/design/reference', { url }, { timeout: 90000 }),
+  setLogo: (id: string, fd: FormData) => API.post(`/v1/site-factory/prospects/${id}/logo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  build: (id: string, body: { style: Record<string, unknown>; colors: { primary: string; accent?: string | null } }) =>
+    API.post(`/v1/site-factory/prospects/${id}/build`, body),
   prospect: (id: string) => API.get(`/v1/site-factory/prospects/${id}`),
   approve: (ids: string[]) => API.post('/v1/site-factory/prospects/approve', { ids }),
   reject: (ids: string[]) => API.post('/v1/site-factory/prospects/reject', { ids }),

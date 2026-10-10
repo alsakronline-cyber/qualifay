@@ -290,3 +290,53 @@ def test_copy_guard_blocks_claims_and_clinic_procedures():
                            + [{"name_ar": "أفضل خدمة", "name_en": "best", "desc_ar": "", "desc_en": ""}]},
                           fallback_copy("store", "محل", None, None), "store")
     assert len(store["services"]) == 4 and all("أفضل" not in s["name_ar"] for s in store["services"])
+
+
+# ── owner-chosen design ─────────────────────────────────────────────────────
+
+from app.site_factory import design as D
+
+
+def test_style_from_reference_computed_styles():
+    s = D.style_from_computed({"bodyBg": "rgb(10, 10, 12)", "bodyColor": "rgb(240, 240, 240)",
+                               "headingFont": '"Playfair Display", serif', "bodyFont": "Inter, sans-serif",
+                               "headingTransform": "uppercase", "headingWeight": "500", "radius": "999px"})
+    assert s["dark"] and s["heading_font"] == "Playfair Display" and s["arabic_font"] == "Noto Naskh Arabic"
+    assert s["uppercase"] and s["radius"] == 28 and s["body_font"] == "Inter"
+    light = D.style_from_computed({"bodyBg": "rgba(0, 0, 0, 0)", "headingFont": "Gilroy, Arial"})
+    assert not light["dark"] and light["heading_font"] == "Inter" and light["bg"] == "#ffffff"
+
+
+def test_logo_palette_finds_brand_colors():
+    import io
+    from PIL import Image
+    im = Image.new("RGBA", (200, 100), (255, 255, 255, 255))
+    for x in range(0, 120):
+        for y in range(100):
+            im.putpixel((x, y), (200, 30, 40, 255))      # red brand block
+    for x in range(120, 170):
+        for y in range(100):
+            im.putpixel((x, y), (20, 60, 200, 255))      # blue accent
+    buf = io.BytesIO(); im.save(buf, "PNG")
+    pal = D.logo_palette(D.normalize_logo(buf.getvalue()))
+    r = D.parse_css_color(pal["primary"]); b = D.parse_css_color(pal["accent"])
+    assert r[0] > 150 and r[2] < 90          # primary is the red
+    assert b[2] > 150 and b[0] < 90          # accent is the blue
+
+
+def test_build_theme_keeps_text_readable():
+    fallback = {"primary": "#1f4fd1", "accent": "#f2a900", "bg": "#f4f6fa", "ink": "#0f1a2c", "font": "IBM Plex Sans Arabic"}
+    t = D.build_theme({"dark": True, "bg": "#0a0a0c", "ink": "#0b0b0b"}, {"primary": "#0d0d0f"}, fallback)
+    assert D.readable_on(t["bg"], t["ink"], 4.5)
+    assert D.readable_on(t["bg"], t["primary"], 2.2)
+
+
+def test_dark_design_and_logo_render():
+    theme = D.build_theme({"dark": True, "bg": "#0a0a0c", "ink": "#f0f0f0", "heading_font": "Playfair Display",
+                           "arabic_font": "Noto Naskh Arabic", "uppercase": True, "radius": 4}, {"primary": "#c8102e"},
+                          {"primary": "#1f4fd1", "accent": "#f2a900", "bg": "#f4f6fa", "ink": "#0f1a2c", "font": "IBM Plex Sans Arabic"})
+    files = build_site(profile=_profile(), copy=fallback_copy("store", "x", None, None), segment="store", base="/b/",
+                       preview=True, design_theme=theme, has_logo=True)
+    css, home = files["assets/site.css"], files["index.html"]
+    assert "--bg:#0a0a0c" in css and "--p:#c8102e" in css and "--r:4px" in css and "text-transform:uppercase" in css
+    assert 'src="/b/assets/logo.png"' in home and "Noto+Naskh+Arabic" in home

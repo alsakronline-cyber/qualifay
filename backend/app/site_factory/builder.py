@@ -123,35 +123,43 @@ def _schema_type(segment: str, category: str | None) -> str:
 
 
 def _css(theme: dict) -> str:
-    return f""":root{{--p:{theme['primary']};--a:{theme['accent']};--bg:{theme['bg']};--ink:{theme['ink']};--mut:#5b6575;--line:#dde2ea;--card:#fff;--r:16px}}
+    dark = bool(theme.get("dark"))
+    card, line, mut, hdr = (("rgba(255,255,255,.05)", "rgba(255,255,255,.12)", "rgba(255,255,255,.66)", "rgba(10,12,16,.82)") if dark
+                            else ("#fff", "#dde2ea", "#5b6575", "rgba(255,255,255,.9)"))
+    font_en = theme.get("font_en", "Inter")
+    heading_en = theme.get("heading_en", font_en)
+    upper = "uppercase" if theme.get("uppercase") else "none"
+    return f""":root{{--p:{theme['primary']};--a:{theme['accent']};--bg:{theme['bg']};--ink:{theme['ink']};--mut:{mut};--line:{line};--card:{card};--hdr:{hdr};--r:{int(theme.get('radius', 16))}px;--hw:{int(theme.get('heading_weight', 700))}}}
 *{{box-sizing:border-box;margin:0}}html{{scroll-behavior:smooth}}
 body{{font-family:'{theme['font']}','IBM Plex Sans Arabic',system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.75;-webkit-font-smoothing:antialiased}}
-html[lang=en] body{{font-family:'Inter',system-ui,sans-serif}}
+html[lang=en] body{{font-family:'{font_en}',system-ui,sans-serif}}html[lang=en] :is(h1,h2,h3){{font-family:'{heading_en}','{font_en}',system-ui,sans-serif;text-transform:{upper}}}
+:is(h1,h2){{font-weight:var(--hw)}}
 a{{color:inherit}}img,svg{{display:block;max-width:100%}}
 .wrap{{max-width:1120px;margin-inline:auto;padding-inline:20px}}
 .skip{{position:absolute;inset-inline-start:10px;top:-60px;background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;z-index:20}}.skip:focus{{top:10px}}
 :focus-visible{{outline:2px solid var(--p);outline-offset:3px;border-radius:6px}}
 .pv{{background:#111827;color:#fff;font-size:.86rem;padding:9px 20px;text-align:center}}.pv span{{opacity:.75;margin-inline-start:8px}}
-.hdr{{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}}
+.hdr{{position:sticky;top:0;z-index:10;background:var(--hdr);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}}
 .hdr .wrap{{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:68px}}
 .logo{{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none;min-width:0}}
 .logo i{{width:40px;height:40px;flex:none;border-radius:12px;background:var(--p);color:#fff;display:grid;place-items:center;font-style:normal}}
+.logo img{{height:42px;width:auto;max-width:160px;object-fit:contain}}
 .logo span{{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 nav.main ul{{display:flex;gap:22px;list-style:none;padding:0}}
 nav.main a{{text-decoration:none;font-weight:600;font-size:.95rem;color:var(--mut)}}nav.main a[aria-current=page],nav.main a:hover{{color:var(--p)}}
 .hdr-actions{{display:flex;align-items:center;gap:12px;flex:none}}
 .lang{{font-size:.88rem;text-decoration:none;color:var(--mut)}}
 .btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:13px 22px;border-radius:12px;text-decoration:none;border:0;cursor:pointer;font:inherit;font-weight:700}}
-.btn--p{{background:var(--p);color:#fff}}.btn--g{{background:#25d366;color:#06301a}}.btn--o{{background:#fff;border:1px solid var(--line)}}.btn--sm{{padding:9px 16px;font-size:.9rem}}
+.btn--p{{background:var(--p);color:#fff}}.btn--g{{background:#25d366;color:#06301a}}.btn--o{{background:var(--card);color:var(--ink);border:1px solid var(--line)}}.btn--sm{{padding:9px 16px;font-size:.9rem}}
 .mnav{{display:none}}
 @media(max-width:860px){{nav.main{{display:none}}.mnav{{display:block}}.hdr .btn--sm{{display:none}}}}
-.mnav summary{{list-style:none;cursor:pointer;width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:12px;background:#fff}}
+.mnav summary{{list-style:none;cursor:pointer;width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:12px;background:var(--card)}}
 .mnav summary::-webkit-details-marker{{display:none}}
-.mnav ul{{position:absolute;inset-inline:12px;top:72px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:10px;list-style:none;display:grid;box-shadow:0 20px 50px -20px rgba(0,0,0,.3)}}
+.mnav ul{{position:absolute;inset-inline:12px;top:72px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:10px;list-style:none;display:grid;box-shadow:0 20px 50px -20px rgba(0,0,0,.3)}}
 .mnav li a{{display:block;padding:12px 14px;text-decoration:none;font-weight:600;border-radius:10px}}.mnav li a:hover{{background:var(--bg)}}
 .crumbs{{font-size:.85rem;color:var(--mut);padding-top:22px}}.crumbs ol{{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0}}.crumbs li+li::before{{content:"/";margin-inline-end:6px;opacity:.5}}.crumbs a{{text-decoration:none}}
 .hero{{padding:56px 0 48px;display:grid;gap:20px}}
-.tag{{display:inline-flex;gap:8px;align-items:center;font-size:.86rem;color:var(--p);font-weight:700;background:#fff;border:1px solid var(--line);padding:6px 12px;border-radius:99px;width:fit-content}}
+.tag{{display:inline-flex;gap:8px;align-items:center;font-size:.86rem;color:var(--p);font-weight:700;background:var(--card);border:1px solid var(--line);padding:6px 12px;border-radius:99px;width:fit-content}}
 h1{{font-size:clamp(2rem,5.6vw,3.3rem);line-height:1.2}}h2{{font-size:clamp(1.4rem,3vw,1.9rem);line-height:1.3;margin-bottom:18px}}h3{{font-size:1.12rem}}
 .lead{{font-size:1.12rem;color:var(--mut);max-width:62ch}}
 .btns{{display:flex;flex-wrap:wrap;gap:12px}}
@@ -162,16 +170,16 @@ section{{padding:48px 0}}section+section{{border-top:1px solid var(--line)}}
 a.card{{text-decoration:none;transition:border-color .2s,transform .2s}}a.card:hover{{border-color:var(--p);transform:translateY(-3px)}}
 .card>svg{{color:var(--p)}}.card p{{color:var(--mut)}}.card .go{{color:var(--p);font-weight:700;display:inline-flex;gap:6px;align-items:center}}
 [dir=rtl] .go svg{{transform:scaleX(-1)}}
-ol.steps{{list-style:none;padding:0;display:grid;gap:12px;counter-reset:s}}ol.steps li{{counter-increment:s;display:flex;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px}}
+ol.steps{{list-style:none;padding:0;display:grid;gap:12px;counter-reset:s}}ol.steps li{{counter-increment:s;display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}}
 ol.steps li::before{{content:counter(s);width:30px;height:30px;flex:none;border-radius:50%;background:var(--p);color:#fff;display:grid;place-items:center;font-weight:700}}
 .prose{{max-width:72ch}}.prose p+p{{margin-top:14px}}
 .facts{{display:grid;border-top:1px solid var(--line)}}.facts div{{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}}.facts dd{{margin:0;font-weight:600;text-align:end}}
-details.faq{{background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 18px}}details.faq+details.faq{{margin-top:10px}}
+details.faq{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0 18px}}details.faq+details.faq{{margin-top:10px}}
 details.faq summary{{cursor:pointer;font-weight:700;padding:16px 0;list-style:none}}details.faq summary::-webkit-details-marker{{display:none}}details.faq p{{padding-bottom:16px;color:var(--mut)}}
 .band{{background:var(--p);color:#fff;border-radius:24px;padding:40px clamp(20px,5vw,56px);display:grid;gap:14px;justify-items:start;margin:24px 0}}.band p{{opacity:.85}}.band h2{{margin:0}}
-form.wa{{display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:24px;align-content:start}}
+form.wa{{display:grid;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px;align-content:start}}
 form.wa label{{display:grid;gap:6px;font-weight:600;font-size:.92rem}}
-form.wa input,form.wa textarea{{font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}}form.wa textarea{{min-height:110px;resize:vertical}}
+form.wa input,form.wa textarea{{font:inherit;color:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}}form.wa textarea{{min-height:110px;resize:vertical}}
 .note{{font-size:.85rem;color:var(--mut)}}
 .map{{width:100%;min-height:320px;border:0;border-radius:var(--r);background:#e6e9ef}}
 ul.hrs{{list-style:none;padding:0}}
@@ -203,6 +211,8 @@ def build_site(
     brand: str = "Sdiek Marketing",
     brand_url: str = "",
     site_url: str | None = None,
+    design_theme: dict | None = None,
+    has_logo: bool = False,
 ) -> dict[str, str]:
     """Return {relative_path: file_text}. `base` is the URL path the site is served under
     (ends with '/'); `site_url` (absolute, for canonical/sitemap) defaults to `base`."""
@@ -210,7 +220,7 @@ def build_site(
         base += "/"
     site_url = (site_url or base).rstrip("/") + "/"
     seg = segment if segment in THEMES else "store"
-    theme = THEMES[seg]
+    theme = {**THEMES[seg], **(design_theme or {})}
     names = {"ar": profile.get("name") or "—", "en": profile.get("name_en") or profile.get("name") or "—"}
     name = names["ar"]
     phone = profile.get("phone") or ""
@@ -268,7 +278,9 @@ def build_site(
         items = nav_items(lang, path)
         return (
             f'<header class="hdr"><div class="wrap">'
-            f'<a class="logo" href="{_e(href(lang))}"><i aria-hidden="true">{_e(_initials(name))}</i><span>{_e(name)}</span></a>'
+            f'<a class="logo" href="{_e(href(lang))}">'
+            + (f'<img src="{_e(base)}assets/logo.png" alt="{_e(name)}">' if has_logo else f'<i aria-hidden="true">{_e(_initials(name))}</i><span>{_e(name)}</span>')
+            + '</a>'
             f'<nav class="main" aria-label="{_e(tr("menu", lang))}"><ul>{items}</ul></nav>'
             f'<div class="hdr-actions"><a class="lang" href="{_e(href(other, path))}" hreflang="{other}" lang="{other}">{_e(tr("lang", lang))}</a>'
             + (f'<a class="btn btn--g btn--sm" href="{_e(wa_link(phone, wa_text[lang]))}" target="_blank" rel="noopener">{_e(cta[lang])}</a>' if phone else "")
@@ -316,7 +328,8 @@ def build_site(
             banner = (f'<div class="pv" role="note"><strong>{_e(tr("preview", lang))}</strong> — {_e(tr("draft", lang))}'
                       + (f'<span>{_e(tr("expires", lang))} {_e(expires_on)}</span>' if expires_on else "") + "</div>")
         full_title = title if title.startswith(name) else f"{title} | {name}"
-        fonts = quote(theme["font"])
+        fam = [theme["font"], theme.get("font_en", "Inter"), theme.get("heading_en", "Inter")]
+        fonts = "&family=".join(dict.fromkeys(quote(f).replace("%20", "+") + ":wght@400;600;700;800" for f in fam))
         return (
             f'<!doctype html><html lang="{lang}" dir="{"rtl" if lang == "ar" else "ltr"}"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{_e(full_title)}</title>'
@@ -329,7 +342,7 @@ def build_site(
             f'<meta property="og:description" content="{_e(description[:200])}"><meta property="og:url" content="{_e(absolute(lang, path))}">'
             f'<meta property="og:locale" content="{"ar_EG" if lang == "ar" else "en_US"}"><meta name="theme-color" content="{_e(theme["primary"])}">'
             f'<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-            f'<link href="https://fonts.googleapis.com/css2?family={fonts}:wght@400;600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">'
+            f'<link href="https://fonts.googleapis.com/css2?family={fonts}&display=swap" rel="stylesheet">'
             f'<link rel="stylesheet" href="{_e(base)}assets/site.css">'
             + "".join(_ld(x) for x in lds)
             + f'</head><body><a class="skip" href="#main">{_e(tr("skip", lang))}</a>{banner}{header(lang, path)}{bc_html}'

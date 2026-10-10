@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
@@ -67,6 +67,8 @@ def _prospect(p: SiteProspect, detail: bool = False) -> dict:
         "score": p.score, "tier": insights.tier(p.score or 0), "score_reasons": p.score_reasons or [],
         "services": p.services or [], "package_egp": insights.package_total(p.services or []),
         "assigned_to": p.assigned_to,
+        "design": {k: v for k, v in (p.design or {}).items() if k != "logo_key"} | {"has_logo": bool((p.design or {}).get("logo_key"))},
+        "profile": p.profile or {},
         "preview_url": service.preview_url(p) if p.preview_token else None,
         "live_url": service.live_url(p) if p.live_slug else None,
         "last_inbound": p.last_inbound,
@@ -314,3 +316,77 @@ async def public_live(slug: str, path: str = "", db: AsyncSession = Depends(get_
     if not p or p.status != S.LIVE:
         raise HTTPException(404, "Site not found")
     return _serve(service.site_prefix(p, "live"), path, preview=False)
+
+
+
+# ── design (owner-chosen) ───────────────────────────────────────────────────
+
+class ReferenceIn(BaseModel):
+    url: str = Field(min_length=10, max_length=500)
+
+
+class Colors(BaseModel):
+    primary: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    accent: Optional[str] = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class BuildIn(BaseModel):
+    style: dict
+    colors: Colors
+
+
+@router.get("/references")
+async def list_references(user=Depends(get_current_user)):
+    from app.site_factory.references import REFERENCES
+    return REFERENCES
+
+
+@router.post("/design/reference")
+async def analyze_reference(body: ReferenceIn, user=Depends(require_admin_dep)):
+    """Read the visual style of a reference site (light/dark, fonts, corners, heading case)."""
+    from app.site_factory import design as D
+    try:
+        return await D.analyze_reference(body.url)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"Could not open that site: {str(e)[:120]}")
+
+
+@router.post("/prospects/{pid}/logo")
+async def set_logo(pid: str, file: Optional[UploadFile] = File(default=None), url: Optional[str] = Form(default=None),
+                   user=Depends(require_admin_dep), db: AsyncSession = Depends(get_db)):
+    """Upload the business's logo (or give a https link to it). Returns the colors found in it."""
+    p = await _own(db, SiteProspect, pid, user["tenant_id"])
+    try:
+        raw = await file.read() if file else (await service.fetch_image(url) if url else None)
+        if not raw:
+            raise ValueError("Send a logo file or link")
+        if len(raw) > 3_000_000:
+            raise ValueError("Image is larger than 3 MB")
+        palette = await service.save_logo(p, raw)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except Exception:
+        raise HTTPException(422, "Could not read that image")
+    service.log_event(p, "logo_set", user["user_id"])
+    await db.commit()
+    return palette
+
+
+@router.post("/prospects/{pid}/build")
+async def build_site_now(pid: str, body: BuildIn, user=Depends(require_admin_dep), db: AsyncSession = Depends(get_db)):
+    """The owner's decision: save the chosen style + colors and build this one site."""
+    p = await _own(db, SiteProspect, pid, user["tenant_id"])
+    if p.status != S.FOUND:
+        raise HTTPException(409, "This business already has a site or is closed")
+    allowed = {"dark", "bg", "ink", "heading_font", "body_font", "arabic_font", "character", "uppercase",
+               "heading_weight", "radius", "title", "url"}
+    style = {k: v for k, v in body.style.items() if k in allowed}
+    p.design = {**(p.design or {}), "style": style, "reference_url": style.get("url"), "colors": body.colors.model_dump(),
+                "chosen_by": user["user_id"]}
+    service.log_event(p, "design_chosen", style.get("url") or "")
+    await db.commit()
+    from app.site_factory.tasks import build_one
+    build_one.apply_async(args=[p.id], queue="default")
+    return {"queued": True}

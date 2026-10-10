@@ -58,6 +58,7 @@ _ENSURE_COLUMNS = [
     ("site_prospects", "score_reasons", "JSON"),
     ("site_prospects", "services", "JSON"),
     ("site_prospects", "assigned_to", "VARCHAR"),
+    ("site_prospects", "design", "JSON"),
     ("campaigns", "sequence_id", "VARCHAR"),
     ("campaigns", "audience_filter", "JSON"),
     ("campaigns", "instance_ids", "JSON"),
