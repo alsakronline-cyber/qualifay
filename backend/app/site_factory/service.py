@@ -115,6 +115,20 @@ async def _known(db: AsyncSession, tenant_id: str, phone: str) -> bool:
     return unsub.first() is not None
 
 
+async def has_website_elsewhere(name: str, area: str) -> bool:
+    """A Maps branch without a website link doesn't mean the brand has no website: look the name up
+    across Egypt and skip it if any matching listing has one (e.g. a pharma company's local branch)."""
+    if not (name and settings.GOOGLE_MAPS_API_KEY):
+        return False
+    area_words = set(area.lower().split())
+    query = " ".join(sorted(insights.name_tokens(name, area_words))) or name
+    try:
+        hits = await _places_search(query, "Egypt", 5)
+    except Exception:
+        return False
+    return any(h.website and insights.same_business(name, h.name, area_words) for h in hits)
+
+
 async def discover(db: AsyncSession, campaign: SiteFactoryCampaign) -> int:
     """Find new website-gap businesses for one campaign. Returns how many were added."""
     keywords = campaign.keywords or KEYWORDS.get(campaign.segment, [])
@@ -148,6 +162,8 @@ async def discover(db: AsyncSession, campaign: SiteFactoryCampaign) -> int:
                 phone = normalize_egyptian_phone(raw.phone) if raw.phone else None
                 if not is_mobile(phone) or await _known(db, campaign.tenant_id, phone):
                     continue
+                if insights.is_excluded(raw.name or raw.company):
+                    continue
                 if source == "osm" and settings.GOOGLE_MAPS_API_KEY:
                     # Cross-check: an OSM business that IS on Maps with a website is not a prospect;
                     # one on Maps without a website is a no_website prospect, not no_gbp.
@@ -159,6 +175,8 @@ async def discover(db: AsyncSession, campaign: SiteFactoryCampaign) -> int:
                         continue
                     if hits:
                         gap, ref = "no_website", hits[0].raw_data.get("place_id") or ref
+                if await has_website_elsewhere(raw.name or raw.company or "", area):
+                    continue
                 p = SiteProspect(
                     tenant_id=campaign.tenant_id, campaign_id=campaign.id,
                     business_name=(raw.name or raw.company or "").strip()[:200] or "—",
@@ -269,7 +287,7 @@ async def write_copy(p: SiteProspect) -> dict:
         facts = {k: prof.get(k) for k in ("name", "category", "city", "address", "hours")}
         facts["segment"] = p.segment
         text = await ai_service._or_fast(
-            [{"role": "user", "content": COPY_PROMPT.format(facts=json.dumps(facts, ensure_ascii=False))}], max_tokens=1800)
+            [{"role": "user", "content": COPY_PROMPT.format(facts=json.dumps(facts, ensure_ascii=False))}], max_tokens=3200)
         data = ai_service._parse_json(text, {})
         return clean_copy(data, base) if isinstance(data, dict) else base
     except Exception as e:
@@ -348,6 +366,7 @@ async def build(db: AsyncSession, p: SiteProspect) -> bool:
     reach = await _check_whatsapp(db, p.tenant_id, p.phone)
     p.wa_reachable = reach
     if reach is False:
+        apply_insights(p, await db.get(SiteFactoryCampaign, p.campaign_id) if p.campaign_id else None)   # → score 0
         set_status(p, S.UNREACHABLE, "not on WhatsApp")
         await db.commit()
         return False

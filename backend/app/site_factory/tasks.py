@@ -6,7 +6,8 @@ from app.workers._loop import run_async
 
 logger = logging.getLogger(__name__)
 
-BUILD_BATCH = 15     # previews rendered per run (each = 1 Place Details call + 1 LLM call)
+BUILD_BATCH = 5      # previews per 10-min run (each = 1 Place Details call + 1 LLM call)
+BUILD_GAP_SECONDS = 40   # spacing so the copywriter stays under the LLM tokens-per-minute limit
 INTRO_BATCH = 20     # intros attempted per run; per-campaign daily caps still apply
 
 
@@ -55,7 +56,10 @@ def build_pending():
         async with AsyncSessionLocal() as db:
             rows = (await db.execute(select(SiteProspect).where(SiteProspect.status == S.FOUND)
                                      .order_by(SiteProspect.created_at).limit(BUILD_BATCH))).scalars().all()
-            for p in rows:
+            import asyncio
+            for i, p in enumerate(rows):
+                if i:
+                    await asyncio.sleep(BUILD_GAP_SECONDS)
                 try:
                     done += 1 if await service.build(db, p) else 0
                 except Exception as e:

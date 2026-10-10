@@ -264,3 +264,14 @@ def test_recommendations_follow_data_gaps():
                             wa_reachable=False, prices={"website": 6000})
     assert [x["id"] for x in r2] == ["website"] and r2[0]["price_egp"] == 6000
     assert insights.package_total(r) == sum(insights.DEFAULT_PRICES_EGP.values())
+
+
+def test_exclusions_and_same_business():
+    assert insights.is_excluded("مجمع الصناعات الغذائية والتعبئة للقوات المسلحة")
+    assert insights.is_excluded("Ministry of Health clinic")
+    assert not insights.is_excluded("مصنع النور للبلاستيك")
+    area = {"10th", "of", "ramadan"}
+    assert insights.same_business("EIPICO -10 of Ramadan", "EIPICO", area)
+    assert insights.same_business("Heart Care Clinics Maadi", "Heart Care Clinics", {"maadi"})
+    assert not insights.same_business("مصنع النور للبلاستيك", "مصنع الأمل للبلاستيك")
+    assert not insights.same_business("مصنع العاشر من رمضان", "مصنع النور", area)
