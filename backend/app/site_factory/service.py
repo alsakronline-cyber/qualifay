@@ -29,7 +29,8 @@ from app.models.models import (
     SiteFactoryCampaign, SiteProspect, SiteSuppression, Lead, LeadSource, LeadStage, LeadStatus, WaInstance,
 )
 from app.site_factory import state as S, replies as R, messages as M, payments
-from app.site_factory.builder import render_site
+from app.site_factory.builder import build_site
+from app.site_factory import insights
 from app.site_factory.segments import KEYWORDS, PLACE_TYPES, fallback_copy
 
 logger = logging.getLogger(__name__)
@@ -56,11 +57,11 @@ def public_base() -> str:
 
 
 def preview_url(p: SiteProspect) -> str:
-    return f"{public_base()}/api/v1/site-factory/p/{p.preview_token}"
+    return f"{public_base()}/api/v1/site-factory/p/{p.preview_token}/"
 
 
 def live_url(p: SiteProspect) -> str:
-    return f"{public_base()}/api/v1/site-factory/s/{p.live_slug}"
+    return f"{public_base()}/api/v1/site-factory/s/{p.live_slug}/"
 
 
 def log_event(p: SiteProspect, kind: str, detail: str = "") -> None:
@@ -164,15 +165,18 @@ async def discover(db: AsyncSession, campaign: SiteFactoryCampaign) -> int:
                     segment=campaign.segment, gap=gap, phone=phone, city=raw.city or area,
                     source=source, source_ref=str(ref) if ref else None,
                     profile={
-                        "name": raw.name or raw.company, "phone": phone, "city": raw.city or area,
+                        "name": raw.name or raw.company, "name_en": raw.name if source == "google_maps" else None,
+                        "phone": phone, "city": raw.city or area,
                         "address": (raw.raw_data or {}).get("formatted_address"),
                         "category": raw.industry, "place_id": (raw.raw_data or {}).get("place_id"),
+                        "location": (raw.raw_data or {}).get("location"),
                         "rating": (raw.raw_data or {}).get("rating"),
                         "reviews": (raw.raw_data or {}).get("user_ratings_total"),
                         "links": _osm_links(raw.raw_data or {}),
                     },
                     status=S.FOUND, events=[],
                 )
+                apply_insights(p, campaign)
                 log_event(p, "found", f"{source} · {kw} · {area} · {gap}")
                 try:
                     async with db.begin_nested():   # savepoint: a (tenant, phone) race skips one row only
@@ -203,7 +207,7 @@ async def _place_details(place_id: str) -> dict:
         return {}
     headers = {
         "X-Goog-Api-Key": settings.GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": "regularOpeningHours.weekdayDescriptions,primaryTypeDisplayName,googleMapsUri",
+        "X-Goog-FieldMask": "displayName,regularOpeningHours.weekdayDescriptions,primaryTypeDisplayName,googleMapsUri",
     }
     try:
         async with httpx.AsyncClient(timeout=20) as c:
@@ -212,6 +216,7 @@ async def _place_details(place_id: str) -> dict:
             return {}
         d = r.json()
         return {
+            "name_ar": (d.get("displayName") or {}).get("text"),
             "hours": (d.get("regularOpeningHours") or {}).get("weekdayDescriptions") or [],
             "category": (d.get("primaryTypeDisplayName") or {}).get("text"),
             "maps_url": d.get("googleMapsUri"),
@@ -221,14 +226,38 @@ async def _place_details(place_id: str) -> dict:
         return {}
 
 
-COPY_PROMPT = """أنت كاتب محتوى لمواقع الأعمال الصغيرة في مصر. اكتب نصوص موقع من صفحة واحدة لهذا النشاط.
+COPY_PROMPT = """أنت كاتب محتوى ومتخصص SEO لمواقع الأعمال في مصر. اكتب نصوص موقع متعدد الصفحات لهذا النشاط.
 القواعد الصارمة:
-- استخدم فقط الحقائق الموجودة في JSON. لا تخترع أسعارًا أو سنوات خبرة أو شهادات أو جوائز أو أرقامًا أو أسماء عملاء.
+- استخدم فقط الحقائق الموجودة في JSON. لا تخترع أسعارًا أو سنوات خبرة أو شهادات أو جوائز أو أرقامًا أو أسماء عملاء أو منتجات محددة غير مذكورة.
 - للعيادات: لا وعود علاجية ولا ادعاءات طبية، فقط تعريف بالعيادة وطريقة الحجز.
-- الخدمات: 3 إلى 5 بنود عامة ومعتادة لهذا النوع من النشاط، بصياغة محايدة.
-- عربي فصيح بسيط + ترجمة إنجليزية.
-أعد JSON فقط بالمفاتيح: tagline_ar, tagline_en, about_ar, about_en, services_ar (list), services_en (list), cta_ar, cta_en.
+- الخدمات: 3 إلى 6 بنود معتادة لهذا النوع من النشاط بصياغة عامة محايدة، ولكل بند وصف من جملتين يشرح كيف يطلبها العميل.
+- اكتب بالعربية الفصحى البسيطة مع ترجمة إنجليزية طبيعية، وضمّن اسم النشاط والمدينة بشكل طبيعي (SEO محلي).
+أعد JSON فقط بهذا الشكل:
+{{"tagline_ar": "...", "tagline_en": "...", "intro_ar": "جملتان", "intro_en": "...",
+ "about_ar": ["فقرة", "فقرة"], "about_en": ["...", "..."],
+ "services": [{{"name_ar": "...", "name_en": "...", "desc_ar": "...", "desc_en": "..."}}],
+ "cta_ar": "...", "cta_en": "..."}}
 الحقائق: {facts}"""
+
+
+def clean_copy(data: dict, base: dict) -> dict:
+    """Keep only well-formed fields from the LLM; anything malformed falls back to `base`."""
+    out = dict(base)
+    for k in ("tagline_ar", "tagline_en", "intro_ar", "intro_en", "cta_ar", "cta_en"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            out[k] = v.strip()[:300 if k.startswith("intro") else 140]
+    for k in ("about_ar", "about_en"):
+        v = data.get(k)
+        if isinstance(v, list) and v and all(isinstance(x, str) and x.strip() for x in v):
+            out[k] = [x.strip()[:700] for x in v[:4]]
+    svcs = data.get("services")
+    if isinstance(svcs, list):
+        good = [{f: str(x.get(f, "")).strip()[:400] for f in ("name_ar", "name_en", "desc_ar", "desc_en")}
+                for x in svcs if isinstance(x, dict) and str(x.get("name_ar", "")).strip()]
+        if len(good) >= 3:
+            out["services"] = good[:6]
+    return out
 
 
 async def write_copy(p: SiteProspect) -> dict:
@@ -237,25 +266,25 @@ async def write_copy(p: SiteProspect) -> dict:
     try:
         import json
         from app.services.ai_service import ai_service
-        facts = {k: prof.get(k) for k in ("name", "category", "city", "address", "hours", "rating", "reviews")}
+        facts = {k: prof.get(k) for k in ("name", "category", "city", "address", "hours")}
         facts["segment"] = p.segment
         text = await ai_service._or_fast(
-            [{"role": "user", "content": COPY_PROMPT.format(facts=json.dumps(facts, ensure_ascii=False))}], max_tokens=700)
+            [{"role": "user", "content": COPY_PROMPT.format(facts=json.dumps(facts, ensure_ascii=False))}], max_tokens=1800)
         data = ai_service._parse_json(text, {})
-        if not isinstance(data, dict):
-            return base
-        out = dict(base)
-        for k in base:
-            v = data.get(k)
-            if isinstance(base[k], list):
-                if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
-                    out[k] = [x.strip()[:120] for x in v[:6]]
-            elif isinstance(v, str) and v.strip():
-                out[k] = v.strip()[:400]
-        return out
+        return clean_copy(data, base) if isinstance(data, dict) else base
     except Exception as e:
         logger.info("copywriter fell back for %s: %s", p.id, e)
         return base
+
+
+def apply_insights(p: SiteProspect, campaign: SiteFactoryCampaign | None) -> None:
+    """Score + recommended services from what exists about the business online."""
+    prof = p.profile or {}
+    common = dict(segment=p.segment, gap=p.gap, reviews=prof.get("reviews"),
+                  has_hours=bool(prof.get("hours")), wa_reachable=p.wa_reachable,
+                  social_links=len(prof.get("links") or {}))
+    p.score, p.score_reasons = insights.score(rating=prof.get("rating"), has_address=bool(prof.get("address")), **common)
+    p.services = insights.recommend(prices=(campaign.service_prices if campaign else None), **common)
 
 
 async def _check_whatsapp(db: AsyncSession, tenant_id: str, phone: str) -> Optional[bool]:
@@ -270,17 +299,52 @@ async def _check_whatsapp(db: AsyncSession, tenant_id: str, phone: str) -> Optio
         return None
 
 
-def render_for(p: SiteProspect, preview: bool) -> str:
-    expires = None
-    if preview and p.preview_expires_at:
-        expires = f"تنتهي المعاينة {p.preview_expires_at.date().isoformat()}"
-    return render_site(profile=p.profile or {}, copy=p.site_copy or {}, segment=p.segment, preview=preview,
-                       expires_label=expires, brand_url=settings.SITE_FACTORY_BRAND_URL)
+CONTENT_TYPES = {"html": "text/html; charset=utf-8", "css": "text/css; charset=utf-8", "js": "text/javascript; charset=utf-8",
+                 "xml": "application/xml; charset=utf-8", "txt": "text/plain; charset=utf-8"}
+
+
+def content_type(path: str) -> str:
+    return CONTENT_TYPES.get(path.rsplit(".", 1)[-1] if "." in path else "", "application/octet-stream")
+
+
+def site_prefix(p: SiteProspect, kind: str) -> str:
+    return f"{STORAGE_PREFIX}/{p.tenant_id}/{p.id}/{kind}/"
+
+
+def render_files(p: SiteProspect, preview: bool) -> dict[str, str]:
+    if preview:
+        base = f"/api/v1/site-factory/p/{p.preview_token}/"
+        expires = p.preview_expires_at.date().isoformat() if p.preview_expires_at else None
+    else:
+        base = f"/api/v1/site-factory/s/{p.live_slug}/"
+        expires = None
+    return build_site(profile=p.profile or {}, copy=p.site_copy or {}, segment=p.segment, base=base, preview=preview,
+                      expires_on=expires, brand_url=settings.SITE_FACTORY_BRAND_URL, site_url=public_base() + base)
+
+
+def store_site(p: SiteProspect, preview: bool) -> bool:
+    """Render every page and upload under the prospect's prefix. Returns False on any failure."""
+    from app.services.storage_service import upload_attachment
+    prefix = site_prefix(p, "preview" if preview else "live")
+    ok = all(upload_attachment(prefix + path, text.encode("utf-8"), content_type(path))
+             for path, text in render_files(p, preview).items())
+    if ok:
+        p.site_key = prefix
+    return ok
+
+
+def delete_site_files(p: SiteProspect) -> None:
+    from app.services.storage_service import _client, BUCKET
+    try:
+        c = _client()
+        for obj in c.list_objects(BUCKET, prefix=f"{STORAGE_PREFIX}/{p.tenant_id}/{p.id}/", recursive=True):
+            c.remove_object(BUCKET, obj.object_name)
+    except Exception as e:
+        logger.info("site file cleanup failed for %s: %s", p.id, e)
 
 
 async def build(db: AsyncSession, p: SiteProspect) -> bool:
     """found → built → awaiting_approval (or unreachable)."""
-    from app.services.storage_service import upload_attachment
     reach = await _check_whatsapp(db, p.tenant_id, p.phone)
     p.wa_reachable = reach
     if reach is False:
@@ -290,15 +354,22 @@ async def build(db: AsyncSession, p: SiteProspect) -> bool:
 
     details = await _place_details((p.profile or {}).get("place_id"))
     prof = dict(p.profile or {})
+    name_ar = details.pop("name_ar", None)
+    if name_ar and name_ar != prof.get("name"):
+        # Search ran in English, details in Arabic: keep both so each language shows its own name.
+        prof["name_en"] = prof.get("name_en") or prof.get("name")
+        prof["name"] = name_ar
+        p.business_name = name_ar[:200]
     for k, v in details.items():
         if v and not prof.get(k):
             prof[k] = v
     p.profile = prof
     p.site_copy = await write_copy(p)
+    campaign = await db.get(SiteFactoryCampaign, p.campaign_id) if p.campaign_id else None
+    apply_insights(p, campaign)
     p.preview_token = p.preview_token or secrets.token_urlsafe(18)
     p.preview_expires_at = utcnow() + S.PREVIEW_TTL
-    p.site_key = f"{STORAGE_PREFIX}/{p.tenant_id}/{p.id}.html"
-    if not upload_attachment(p.site_key, render_for(p, preview=True).encode(), "text/html; charset=utf-8"):
+    if not store_site(p, preview=True):
         log_event(p, "build_failed", "storage upload failed")
         await db.commit()
         return False
@@ -584,7 +655,6 @@ async def tick(db: AsyncSession, p: SiteProspect, now: datetime | None = None) -
 # ── payment + publish ───────────────────────────────────────────────────────
 
 async def mark_paid(db: AsyncSession, p: SiteProspect, ref: str, by: str = "paymob") -> None:
-    from app.services.storage_service import upload_attachment
     if p.status == S.PAID or p.status == S.LIVE:
         return
     if p.status != S.PAYMENT_SENT:
@@ -594,8 +664,8 @@ async def mark_paid(db: AsyncSession, p: SiteProspect, ref: str, by: str = "paym
     set_status(p, S.PAID, by)
     base = re.sub(r"[^a-z0-9]+", "-", (p.business_name or "").lower()).strip("-")[:30] or "site"
     p.live_slug = f"{base}-{secrets.token_hex(3)}"
-    p.site_key = f"{STORAGE_PREFIX}/{p.tenant_id}/{p.id}-live.html"
-    upload_attachment(p.site_key, render_for(p, preview=False).encode(), "text/html; charset=utf-8")
+    if not store_site(p, preview=False):
+        log_event(p, "publish_failed", "storage upload failed — use Rebuild to retry")
     set_status(p, S.LIVE, p.live_slug)
     if p.lead_id:
         lead = await db.get(Lead, p.lead_id)
@@ -612,12 +682,7 @@ async def mark_paid(db: AsyncSession, p: SiteProspect, ref: str, by: str = "paym
 async def purge(db: AsyncSession, p: SiteProspect, reason: str, suppress: bool = True) -> None:
     """Delete the business's data and preview; keep only a phone hash so we never re-contact.
     The row stays (status + timestamps, no personal data) for funnel statistics."""
-    from app.services.storage_service import _client, BUCKET
-    if p.site_key:
-        try:
-            _client().remove_object(BUCKET, p.site_key)
-        except Exception:
-            pass
+    delete_site_files(p)
     if suppress and p.phone and not (await db.get(SiteSuppression, phone_hash(p.phone))):
         db.add(SiteSuppression(phone_hash=phone_hash(p.phone), reason=reason))
     if p.lead_id:

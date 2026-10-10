@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.models.models import SiteFactoryCampaign, SiteProspect
 from app.site_factory import service, state as S
 from app.site_factory.segments import SEGMENTS
+from app.site_factory import insights
 
 router = APIRouter()
 public_router = APIRouter()
@@ -31,6 +32,7 @@ class CampaignIn(BaseModel):
     max_new_per_day: int = Field(default=25, ge=1, le=200)
     max_intros_per_day: int = Field(default=15, ge=1, le=60)
     instapay_handle: Optional[str] = None
+    service_prices: dict = Field(default_factory=dict)
     sender_name: str = "محمد"
     brand_name: str = "Sdiek Marketing"
     active: bool = True
@@ -40,6 +42,11 @@ class BulkIds(BaseModel):
     ids: List[str] = Field(min_length=1, max_length=200)
 
 
+class AssignIn(BaseModel):
+    ids: List[str] = Field(min_length=1, max_length=200)
+    user_id: Optional[str] = None      # None = unassign
+
+
 class ManualPaid(BaseModel):
     reference: str = Field(min_length=2, max_length=120)
 
@@ -47,7 +54,7 @@ class ManualPaid(BaseModel):
 def _campaign(c: SiteFactoryCampaign) -> dict:
     return {k: getattr(c, k) for k in (
         "id", "name", "segment", "areas", "keywords", "sources", "price_egp", "max_new_per_day",
-        "max_intros_per_day", "instapay_handle", "sender_name", "brand_name", "active")} | {
+        "max_intros_per_day", "instapay_handle", "service_prices", "sender_name", "brand_name", "active")} | {
         "last_discovery_at": c.last_discovery_at.isoformat() if c.last_discovery_at else None}
 
 
@@ -57,6 +64,9 @@ def _prospect(p: SiteProspect, detail: bool = False) -> dict:
         "gap": p.gap, "phone": p.phone if not (p.phone or "").startswith("purged:") else None,
         "city": p.city, "source": p.source, "status": p.status, "wa_reachable": p.wa_reachable,
         "approved": bool(p.intro_approved_by), "followups_sent": p.followups_sent,
+        "score": p.score, "tier": insights.tier(p.score or 0), "score_reasons": p.score_reasons or [],
+        "services": p.services or [], "package_egp": insights.package_total(p.services or []),
+        "assigned_to": p.assigned_to,
         "preview_url": service.preview_url(p) if p.preview_token else None,
         "live_url": service.live_url(p) if p.live_slug else None,
         "last_inbound": p.last_inbound,
@@ -124,14 +134,25 @@ async def stats(user=Depends(get_current_user), db: AsyncSession = Depends(get_d
 
 
 @router.get("/prospects")
-async def list_prospects(status: Optional[str] = None, campaign_id: Optional[str] = None, limit: int = 100,
+async def list_prospects(status: Optional[str] = None, campaign_id: Optional[str] = None, assigned: Optional[str] = None,
+                         min_score: Optional[int] = None, sort: str = "score", limit: int = 100,
                          user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """`assigned`: "me" | "none" | <user_id>. `sort`: "score" (best first) | "recent"."""
     q = select(SiteProspect).where(SiteProspect.tenant_id == user["tenant_id"])
     if status:
         q = q.where(SiteProspect.status.in_(status.split(",")))
     if campaign_id:
         q = q.where(SiteProspect.campaign_id == campaign_id)
-    rows = (await db.execute(q.order_by(desc(SiteProspect.last_event_at)).limit(min(limit, 500)))).scalars().all()
+    if assigned == "me":
+        q = q.where(SiteProspect.assigned_to == user["user_id"])
+    elif assigned == "none":
+        q = q.where(SiteProspect.assigned_to.is_(None))
+    elif assigned:
+        q = q.where(SiteProspect.assigned_to == assigned)
+    if min_score is not None:
+        q = q.where(SiteProspect.score >= min_score)
+    order = [desc(SiteProspect.score).nullslast(), desc(SiteProspect.last_event_at)] if sort == "score" else [desc(SiteProspect.last_event_at)]
+    rows = (await db.execute(q.order_by(*order).limit(min(limit, 500)))).scalars().all()
     return [_prospect(p) for p in rows]
 
 
@@ -154,6 +175,25 @@ async def approve_intros(body: BulkIds, user=Depends(require_admin_dep), db: Asy
     return {"approved": ok, "skipped": skipped}
 
 
+@router.post("/prospects/assign")
+async def assign_prospects(body: AssignIn, user=Depends(require_admin_dep), db: AsyncSession = Depends(get_db)):
+    """Give prospects to a team member (or unassign). The assignee must be in the same company."""
+    from app.models.models import User
+    if body.user_id:
+        member = await db.get(User, body.user_id)
+        if not member or member.tenant_id != user["tenant_id"]:
+            raise HTTPException(422, "Unknown team member")
+    n = 0
+    for pid in body.ids:
+        p = await db.get(SiteProspect, pid)
+        if p and p.tenant_id == user["tenant_id"]:
+            p.assigned_to = body.user_id
+            service.log_event(p, "assigned", body.user_id or "unassigned")
+            n += 1
+    await db.commit()
+    return {"assigned": n}
+
+
 @router.post("/prospects/reject")
 async def reject_prospects(body: BulkIds, user=Depends(require_admin_dep), db: AsyncSession = Depends(get_db)):
     ok = 0
@@ -168,12 +208,12 @@ async def reject_prospects(body: BulkIds, user=Depends(require_admin_dep), db: A
 @router.post("/prospects/{pid}/rebuild")
 async def rebuild(pid: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Re-render the preview (e.g. after editing copy following a change request)."""
-    from app.services.storage_service import upload_attachment
     p = await _own(db, SiteProspect, pid, user["tenant_id"])
     if not p.site_key or p.status in S.TERMINAL:
         raise HTTPException(409, "No preview to rebuild")
-    upload_attachment(p.site_key, service.render_for(p, preview=p.status != S.LIVE).encode(), "text/html; charset=utf-8")
-    return {"ok": True}
+    ok = service.store_site(p, preview=p.status != S.LIVE)
+    await db.commit()
+    return {"ok": ok}
 
 
 class CopyPatch(BaseModel):
@@ -183,11 +223,14 @@ class CopyPatch(BaseModel):
 @router.put("/prospects/{pid}/copy")
 async def edit_copy(pid: str, body: CopyPatch, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     p = await _own(db, SiteProspect, pid, user["tenant_id"])
-    allowed = {"tagline_ar", "tagline_en", "about_ar", "about_en", "services_ar", "services_en", "cta_ar", "cta_en"}
     merged = dict(p.site_copy or {})
     for k, v in body.fields.items():
-        if k in allowed and (isinstance(v, str) or (isinstance(v, list) and all(isinstance(x, str) for x in v))):
-            merged[k] = v
+        if k in {"tagline_ar", "tagline_en", "intro_ar", "intro_en", "cta_ar", "cta_en"} and isinstance(v, str):
+            merged[k] = v.strip()[:400]
+        elif k in {"about_ar", "about_en"} and isinstance(v, list) and all(isinstance(x, str) for x in v):
+            merged[k] = [x.strip()[:1000] for x in v[:6]]
+        elif k == "services" and isinstance(v, list) and all(isinstance(x, dict) and x.get("name_ar") for x in v):
+            merged[k] = [{f: str(x.get(f, ""))[:400] for f in ("name_ar", "name_en", "desc_ar", "desc_en")} for x in v[:8]]
     p.site_copy = merged
     service.log_event(p, "copy_edited", user["user_id"])
     await db.commit()
@@ -216,35 +259,58 @@ async def mark_paid_manual(pid: str, body: ManualPaid, user=Depends(require_admi
 
 # ── public pages (no auth) ──────────────────────────────────────────────────
 
-def _html(data: bytes, preview: bool) -> HTMLResponse:
-    headers = {"Cache-Control": "no-store" if preview else "public, max-age=300",
-               "Content-Security-Policy": "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; frame-ancestors 'self'"}
+CSP = ("default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src https://fonts.gstatic.com; script-src 'self'; frame-src https://www.google.com; frame-ancestors 'self'")
+
+
+def _serve(prefix: str, path: str, preview: bool) -> Response:
+    """Serve one file of a stored site; directories map to index.html, misses to 404.html."""
+    from app.services.storage_service import get_attachment
+    path = (path or "").lstrip("/")
+    if ".." in path.split("/"):
+        raise HTTPException(400, "Bad path")
+    if path == "" or path.endswith("/"):
+        path += "index.html"
+    elif "." not in path.rsplit("/", 1)[-1]:
+        path += "/index.html"
+    data, _ = get_attachment(prefix + path)
+    status = 200
+    if not data:
+        data, _ = get_attachment(prefix + "404.html")
+        status = 404
+        path = "404.html"
+        if not data:
+            raise HTTPException(404, "Not found")
+    headers = {"Cache-Control": "no-store" if preview else "public, max-age=300", "Content-Security-Policy": CSP,
+               "X-Content-Type-Options": "nosniff"}
     if preview:
         headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
-    return HTMLResponse(data.decode("utf-8"), headers=headers)
+    return Response(content=data, status_code=status, media_type=service.content_type(path), headers=headers)
 
 
-@public_router.get("/p/{token}", response_class=HTMLResponse)
-async def public_preview(token: str, db: AsyncSession = Depends(get_db)):
-    from app.services.storage_service import get_attachment
+@public_router.get("/p/{token}")
+async def preview_root(token: str):
+    return RedirectResponse(url=f"{token}/", status_code=308)
+
+
+@public_router.get("/p/{token}/{path:path}")
+async def public_preview(token: str, path: str = "", db: AsyncSession = Depends(get_db)):
     p = (await db.execute(select(SiteProspect).where(SiteProspect.preview_token == token))).scalar_one_or_none()
     if not p or not p.site_key or p.status in S.TERMINAL or p.status == S.LIVE:
         raise HTTPException(404, "This preview is no longer available")
     if p.preview_expires_at and service.utcnow() > p.preview_expires_at:
         raise HTTPException(410, "This preview has expired")
-    data, _ = get_attachment(p.site_key)
-    if not data:
-        raise HTTPException(404, "Preview not found")
-    return _html(data, preview=True)
+    return _serve(service.site_prefix(p, "preview"), path, preview=True)
 
 
-@public_router.get("/s/{slug}", response_class=HTMLResponse)
-async def public_live(slug: str, db: AsyncSession = Depends(get_db)):
-    from app.services.storage_service import get_attachment
+@public_router.get("/s/{slug}")
+async def live_root(slug: str):
+    return RedirectResponse(url=f"{slug}/", status_code=308)
+
+
+@public_router.get("/s/{slug}/{path:path}")
+async def public_live(slug: str, path: str = "", db: AsyncSession = Depends(get_db)):
     p = (await db.execute(select(SiteProspect).where(SiteProspect.live_slug == slug))).scalar_one_or_none()
-    if not p or p.status != S.LIVE or not p.site_key:
+    if not p or p.status != S.LIVE:
         raise HTTPException(404, "Site not found")
-    data, _ = get_attachment(p.site_key)
-    if not data:
-        raise HTTPException(404, "Site not found")
-    return _html(data, preview=False)
+    return _serve(service.site_prefix(p, "live"), path, preview=False)

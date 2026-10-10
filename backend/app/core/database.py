@@ -53,6 +53,11 @@ async def get_db():
 # existing one, so these are applied idempotently on every startup (Postgres
 # ADD COLUMN IF NOT EXISTS). Keep this list append-only.
 _ENSURE_COLUMNS = [
+    ("site_factory_campaigns", "service_prices", "JSON"),
+    ("site_prospects", "score", "INTEGER"),
+    ("site_prospects", "score_reasons", "JSON"),
+    ("site_prospects", "services", "JSON"),
+    ("site_prospects", "assigned_to", "VARCHAR"),
     ("campaigns", "sequence_id", "VARCHAR"),
     ("campaigns", "audience_filter", "JSON"),
     ("campaigns", "instance_ids", "JSON"),

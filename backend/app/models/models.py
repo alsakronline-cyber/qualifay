@@ -899,6 +899,7 @@ class SiteFactoryCampaign(Base):
     max_new_per_day = Column(Integer, default=25)         # discovery cap
     max_intros_per_day = Column(Integer, default=15)      # on top of the WA warmup cap
     instapay_handle = Column(String, nullable=True)       # shown as the non-card payment option
+    service_prices = Column(JSON, default=dict)           # {"website": 4500, "gbp": 1500, ...} overrides defaults
     sender_name = Column(String, default="محمد")          # signs the intro message
     brand_name = Column(String, default="Sdiek Marketing")
     active = Column(Boolean, default=True, nullable=False, server_default="true")
@@ -927,6 +928,10 @@ class SiteProspect(Base):
     profile = Column(JSON, default=dict)                  # facts collected (address, hours, category, links…)
     site_copy = Column(JSON, default=dict)                # AI-written site copy, facts-only
 
+    score = Column(Integer, nullable=True, index=True)    # 0–100 "worth pursuing" (app.site_factory.insights)
+    score_reasons = Column(JSON, default=list)
+    services = Column(JSON, default=list)                 # recommended services from online data gaps
+    assigned_to = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     status = Column(String, default="found", nullable=False, index=True)
     preview_token = Column(String, unique=True, nullable=True, index=True)
     preview_expires_at = Column(DateTime, nullable=True)

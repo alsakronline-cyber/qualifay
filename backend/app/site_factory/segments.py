@@ -37,37 +37,82 @@ LABEL: dict[str, dict[str, str]] = {
 }
 
 
+SERVICES_PAGE_TITLE = {
+    "manufacturer": {"ar": "منتجاتنا وخدماتنا", "en": "Products & services"},
+    "store": {"ar": "منتجاتنا", "en": "Our products"},
+    "clinic": {"ar": "خدمات العيادة", "en": "Clinic services"},
+}
+CTA = {
+    "manufacturer": {"ar": "اطلب عرض سعر", "en": "Request a quote"},
+    "store": {"ar": "اطلب عبر واتساب", "en": "Order on WhatsApp"},
+    "clinic": {"ar": "احجز موعدًا", "en": "Book an appointment"},
+}
+
+
+def _svc(name_ar, name_en, desc_ar, desc_en):
+    return {"name_ar": name_ar, "name_en": name_en, "desc_ar": desc_ar, "desc_en": desc_en}
+
+
+DEFAULT_SERVICES = {
+    "manufacturer": [
+        _svc("التصنيع حسب الطلب", "Made-to-order production",
+             "نستقبل طلبات التصنيع بالمواصفات والكميات التي تحتاجها. أرسل التفاصيل وسنرد بعرض سعر.",
+             "We take production orders to your specifications and quantities. Send the details and we will reply with a quote."),
+        _svc("التوريد بالكميات", "Bulk supply",
+             "توريد للشركات والتجار. تواصل معنا لمعرفة المتاح ومواعيد التسليم.",
+             "Supply for companies and traders. Contact us for availability and delivery times."),
+        _svc("زيارة المصنع", "Factory visits",
+             "يمكنك ترتيب زيارة للمصنع للاطلاع على المنتجات قبل الطلب.",
+             "You can arrange a factory visit to see products before ordering."),
+    ],
+    "store": [
+        _svc("الطلب عبر واتساب", "Order on WhatsApp",
+             "أرسل لنا اسم المنتج أو صورته على واتساب ونرد عليك بالتوفر والسعر.",
+             "Send us the product name or a photo on WhatsApp and we reply with availability and price."),
+        _svc("زيارة المحل", "Visit the store",
+             "تفضل بزيارتنا في مواعيد العمل لمعاينة المنتجات.",
+             "Visit us during opening hours to see the products."),
+        _svc("الاستفسار عن المنتجات", "Product questions",
+             "اسألنا عن أي منتج قبل الشراء.",
+             "Ask us about any product before you buy."),
+    ],
+    "clinic": [
+        _svc("حجز المواعيد", "Appointments",
+             "احجز موعدك بالاتصال أو برسالة واتساب.",
+             "Book by phone or WhatsApp message."),
+        _svc("الاستفسارات", "Questions",
+             "راسلنا للاستفسار عن مواعيد الطبيب وطريقة الحجز.",
+             "Message us about the doctor's schedule and how to book."),
+        _svc("الموقع ومواعيد العمل", "Location & hours",
+             "تجد العنوان ومواعيد العمل في صفحة التواصل.",
+             "Find the address and opening hours on the contact page."),
+    ],
+}
+
+
 def fallback_copy(segment: str, name: str, city: str | None, category: str | None) -> dict:
-    """Facts-only default copy, Arabic first, with English alongside."""
+    """Facts-only default copy for every page, Arabic first, English alongside."""
+    seg = segment if segment in DEFAULT_SERVICES else "store"
     where_ar = f" في {city}" if city else ""
     where_en = f" in {city}" if city else ""
-    cat = category or ""
-    if segment == "manufacturer":
-        return {
-            "tagline_ar": f"{name} — تصنيع وتوريد{where_ar}",
-            "tagline_en": f"{name} — manufacturing & supply{where_en}",
-            "about_ar": f"{name}{' — ' + cat if cat else ''}{where_ar}. تواصل معنا لطلب عرض سعر أو زيارة المصنع.",
-            "about_en": f"{name}{' — ' + cat if cat else ''}{where_en}. Contact us for a quotation or a factory visit.",
-            "services_ar": ["طلبات الكميات والتوريد", "عروض الأسعار حسب الطلب", "التواصل المباشر مع المصنع"],
-            "services_en": ["Bulk orders & supply", "Quotations on request", "Direct contact with the factory"],
-            "cta_ar": "اطلب عرض سعر", "cta_en": "Request a quote",
-        }
-    if segment == "clinic":
-        return {
-            "tagline_ar": f"{name}{where_ar}",
-            "tagline_en": f"{name}{where_en}",
-            "about_ar": f"{name}{' — ' + cat if cat else ''}{where_ar}. للحجز والاستفسار تواصل معنا عبر الهاتف أو واتساب.",
-            "about_en": f"{name}{' — ' + cat if cat else ''}{where_en}. Call or message us on WhatsApp to book or ask a question.",
-            "services_ar": ["حجز المواعيد", "الاستفسارات عبر واتساب", "مواعيد العمل والعنوان"],
-            "services_en": ["Appointments", "Questions on WhatsApp", "Opening hours & location"],
-            "cta_ar": "احجز موعدًا", "cta_en": "Book an appointment",
-        }
+    cat = f" — {category}" if category else ""
+    tagline = {
+        "manufacturer": (f"{name} — تصنيع وتوريد{where_ar}", f"{name} — manufacturing & supply{where_en}"),
+        "store": (f"{name}{where_ar}", f"{name}{where_en}"),
+        "clinic": (f"{name}{where_ar}", f"{name}{where_en}"),
+    }[seg]
+    how_ar = {"manufacturer": "تواصل معنا لطلب عرض سعر أو ترتيب زيارة.",
+              "store": "زورنا أو اطلب مباشرة عبر واتساب.",
+              "clinic": "للحجز والاستفسار تواصل معنا بالهاتف أو واتساب."}[seg]
+    how_en = {"manufacturer": "Contact us for a quotation or to arrange a visit.",
+              "store": "Visit us or order directly on WhatsApp.",
+              "clinic": "Call or message us on WhatsApp to book or ask a question."}[seg]
     return {
-        "tagline_ar": f"{name}{where_ar}",
-        "tagline_en": f"{name}{where_en}",
-        "about_ar": f"{name}{' — ' + cat if cat else ''}{where_ar}. زورنا أو اطلب عبر واتساب.",
-        "about_en": f"{name}{' — ' + cat if cat else ''}{where_en}. Visit us or order on WhatsApp.",
-        "services_ar": ["الطلب عبر واتساب", "زيارة المحل", "الاستفسار عن المنتجات والأسعار"],
-        "services_en": ["Order on WhatsApp", "Visit the store", "Ask about products & prices"],
-        "cta_ar": "اطلب الآن عبر واتساب", "cta_en": "Order on WhatsApp",
+        "tagline_ar": tagline[0], "tagline_en": tagline[1],
+        "intro_ar": f"{name}{cat}{where_ar}. {how_ar}",
+        "intro_en": f"{name}{cat}{where_en}. {how_en}",
+        "about_ar": [f"{name}{cat}{where_ar}.", how_ar],
+        "about_en": [f"{name}{cat}{where_en}.", how_en],
+        "services": [dict(x) for x in DEFAULT_SERVICES[seg]],
+        "cta_ar": CTA[seg]["ar"], "cta_en": CTA[seg]["en"],
     }

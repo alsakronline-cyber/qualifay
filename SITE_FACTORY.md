@@ -25,6 +25,35 @@ any stage: "لا" / "إيقاف" / "إلغاء" / silence after one follow-up �
 | Follow-up / expiry (hourly) | One follow-up per phase, then expire → purge. Previews expire after 14 days. | `state.due_action`, `service.tick` |
 | Payment | Paymob Unified Checkout link (`sf-<id>` reference, handled by `/webhook/paymob`) and/or InstaPay; **سجّل الدفع** marks a manual payment. On payment the site is published at `/api/v1/site-factory/s/<slug>`. | `payments.py`, `service.mark_paid` |
 
+## The client website (what each business gets)
+A complete static site per business (`builder.py`), Arabic at `/`, English at `/en/`:
+
+| Page | Content |
+|---|---|
+| Home | headline + intro, WhatsApp/phone CTAs, Google rating line (linked, not re-published), services, contact cards, CTA band |
+| About | about paragraphs + quick-facts card (category, city, address, phone) |
+| Services | all services + **one page per service** (description, "how to request" steps, other services) |
+| FAQ | built only from facts (hours, location, how to order/book/quote, services) + `FAQPage` schema |
+| Contact | address/phone/hours cards, **WhatsApp form** (composes a message — no backend, nothing stored), map |
+| Privacy | plain-language policy matching what the site actually does |
+| + | 404, `sitemap.xml` with hreflang, `robots.txt`, `assets/site.css`, `assets/site.js` |
+
+SEO: unique title/description per page, canonical, hreflang (ar/en/x-default), Open Graph, `LocalBusiness`/`MedicalClinic`/`Dentist`/`Store` + `BreadcrumbList` + `Service` + `FAQPage` JSON-LD, local keywords (name + city) in copy. No review markup (Google reviews can't be republished as your own structured data). Previews: `noindex` + `Disallow: /` + banner on every page.
+
+Data collected per business (`profile`): Arabic + English name, phone, address, city, coordinates, category, opening hours, Google rating + review count, Maps place id, Facebook/Instagram links (from OSM tags). Copy is written from these facts only; the owner's edits replace it before publishing.
+
+## Who's worth it, who handles it, what to sell (`insights.py`)
+- **Score 0–100** with readable reasons: segment value, website/Google gap, review volume, rating, hours/address present, WhatsApp reachability, existing social pages. Tiers: hot ≥ 70, warm 50–69, cold < 50. Not on WhatsApp → 0.
+- **Recommended services** from the data gaps, each with the reason and the campaign's price: website (always), Google profile (create if missing, fix if < 10 reviews or no hours), social pages (if none found), WhatsApp catalogue / booking / quote replies (if on WhatsApp).
+- **Assignment**: assign one or many prospects to any team member; filter *mine / unassigned / hot only*; sorted best-first.
+
+## Sdiek Marketing workspace
+Separate company inside Qualifay, created once on the server:
+```
+SDIEK_ADMIN_PASSWORD='…' python -m app.site_factory.setup_workspace --email you@example.com --name "Mohamed Ramadan"
+```
+Creates the workspace, your owner login, and three small trial campaigns (manufacturers 10th of Ramadan / 6th of October, stores Nasr City / Maadi, clinics Maadi / Heliopolis) with default prices (website 4,500 · Google 1,500 · social 2,500 · WhatsApp 2,000 EGP — edit per campaign).
+
 ## Compliance built in
 - **Egypt PDPL 151/2020 / WhatsApp policy:** human approval before first contact; first message
   identifies the sender, asks permission, and offers *إيقاف*; link only after an explicit yes;

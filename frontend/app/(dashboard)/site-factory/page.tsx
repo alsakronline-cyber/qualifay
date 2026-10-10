@@ -1,24 +1,32 @@
 'use client'
 
-// Site Factory — businesses without a website get a private preview site; nothing is sent
-// until a human approves the intro here, and the preview link only goes out after the
-// business replies "yes" (consent). See backend app/site_factory/state.py.
-import { useState } from 'react'
+// Site Factory — businesses without a website get a private multi-page preview site.
+// Each one is scored (who's worth pursuing) and gets recommended services from the data that
+// exists about it online; you assign it to yourself or a teammate. Nothing is sent until a
+// human approves the intro, and the preview link only goes out after the business says
+// "yes" (consent). See backend app/site_factory/state.py + insights.py.
+import { Fragment, useState } from 'react'
 import useSWR from 'swr'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
-import { Globe, Search, Check, X, ExternalLink, Plus, CreditCard, Send, ShieldCheck, Loader2 } from 'lucide-react'
-import { siteFactoryApi } from '@/lib/api'
+import {
+  Globe, Search, Check, X, ExternalLink, Plus, CreditCard, Send, ShieldCheck, Loader2, ChevronDown, UserPlus, Flame,
+} from 'lucide-react'
+import { siteFactoryApi, teamApi } from '@/lib/api'
 
 interface Campaign {
-  id: string; name: string; segment: string; areas: string[]; price_egp: number
+  id: string; name: string; segment: string; areas: string[]; price_egp: number; service_prices?: Record<string, number>
   max_new_per_day: number; max_intros_per_day: number; instapay_handle?: string; active: boolean; last_discovery_at?: string
 }
+interface Service { id: string; title_ar: string; reason_ar: string; price_egp: number }
 interface Prospect {
   id: string; business_name: string; segment: string; gap: string; phone?: string; city?: string; status: string
   approved: boolean; preview_url?: string; live_url?: string; last_inbound?: string; last_event_at?: string
+  score?: number; tier: 'hot' | 'warm' | 'cold'; score_reasons: string[]; services: Service[]; package_egp: number
+  assigned_to?: string | null
 }
+interface Member { id: string; full_name?: string; email: string }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   found: { label: 'تم العثور عليه', cls: 'bg-gray-700 text-gray-300' },
@@ -37,16 +45,27 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   rejected: { label: 'استبعدته', cls: 'bg-gray-800 text-gray-500' },
   unreachable: { label: 'ليس على واتساب', cls: 'bg-gray-800 text-gray-500' },
 }
+const TIER = {
+  hot: { label: 'ساخن', cls: 'bg-red-500/15 text-red-300 border-red-500/30' },
+  warm: { label: 'دافئ', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  cold: { label: 'بارد', cls: 'bg-gray-700/60 text-gray-400 border-gray-600' },
+}
 const SEGMENTS = [
   { v: 'manufacturer', l: 'مصانع' },
   { v: 'store', l: 'محلات' },
   { v: 'clinic', l: 'عيادات وأطباء' },
 ]
+const SERVICE_LABELS: Record<string, string> = { website: 'موقع', gbp: 'جوجل', social: 'سوشيال', whatsapp: 'واتساب' }
 const TABS = [
   { k: 'awaiting_approval', l: 'بانتظار الموافقة' },
   { k: 'intro_sent,opted_in,preview_sent,changes_requested,payment_sent', l: 'محادثات نشطة' },
   { k: 'paid,live', l: 'مبيعات' },
   { k: 'declined,cancelled,expired,rejected,unreachable', l: 'مغلقة' },
+]
+const OWNER_FILTERS = [
+  { k: '', l: 'الكل' },
+  { k: 'me', l: 'المسندة لي' },
+  { k: 'none', l: 'غير مسندة' },
 ]
 const FUNNEL = ['awaiting_approval', 'intro_sent', 'preview_sent', 'payment_sent', 'live']
 
@@ -57,16 +76,24 @@ function Badge({ s }: { s: string }) {
 
 export default function SiteFactoryPage() {
   const [tab, setTab] = useState(TABS[0].k)
+  const [owner, setOwner] = useState('')
+  const [hotOnly, setHotOnly] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
+  const [open, setOpen] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const { data: camps, mutate: mutCamps } = useSWR('sf-campaigns', () => siteFactoryApi.campaigns().then((r) => r.data))
   const { data: stats, mutate: mutStats } = useSWR('sf-stats', () => siteFactoryApi.stats().then((r) => r.data), { refreshInterval: 30000 })
-  const { data: rows, isLoading, mutate } = useSWR(['sf-prospects', tab], () => siteFactoryApi.prospects({ status: tab, limit: 200 }).then((r) => r.data), { refreshInterval: 30000 })
+  const { data: team } = useSWR('sf-team', () => teamApi.list().then((r) => r.data))
+  const { data: rows, isLoading, mutate } = useSWR(['sf-prospects', tab, owner, hotOnly], () =>
+    siteFactoryApi.prospects({ status: tab, assigned: owner || undefined, min_score: hotOnly ? 70 : undefined, sort: 'score', limit: 200 }).then((r) => r.data),
+  { refreshInterval: 30000 })
   const campaigns: Campaign[] = Array.isArray(camps) ? camps : []
   const prospects: Prospect[] = Array.isArray(rows) ? rows : []
+  const members: Member[] = Array.isArray(team) ? team : []
   const s: Record<string, number> = stats || {}
+  const memberName = (id?: string | null) => members.find((m) => m.id === id)?.full_name || members.find((m) => m.id === id)?.email || ''
 
   const refresh = () => { mutate(); mutStats(); setSelected([]) }
   const toggle = (id: string) => setSelected((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]))
@@ -79,6 +106,14 @@ export default function SiteFactoryPage() {
       toast.success(kind === 'approve' ? `تمت الموافقة على ${r.data.approved} — سيُرسل التعريف في ساعات العمل` : `تم استبعاد ${r.data.rejected} وحذف بياناتهم`)
       refresh()
     } catch { toast.error('تعذّر تنفيذ الإجراء') } finally { setBusy(false) }
+  }
+
+  async function assign(ids: string[], userId: string) {
+    try {
+      await siteFactoryApi.assign(ids, userId || null)
+      toast.success(userId ? `تم الإسناد إلى ${memberName(userId)}` : 'تم إلغاء الإسناد')
+      refresh()
+    } catch { toast.error('تعذّر الإسناد') }
   }
 
   async function markPaid(p: Prospect) {
@@ -98,7 +133,7 @@ export default function SiteFactoryPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white font-cairo flex items-center gap-2"><Globe size={22} /> مصنع المواقع</h1>
-          <p className="text-gray-400 text-sm mt-1 font-cairo">نشاطات بدون موقع ← معاينة مجانية ← تواصل بعد موافقتك وموافقتهم ← بيع</p>
+          <p className="text-gray-400 text-sm mt-1 font-cairo">نشاطات بدون موقع ← تقييم واختيار ← موقع كامل كمعاينة ← تواصل بعد موافقتك وموافقتهم ← بيع</p>
         </div>
         <button onClick={() => setShowNew((v) => !v)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary text-black font-semibold text-sm font-cairo">
           <Plus size={16} /> حملة جديدة
@@ -112,7 +147,6 @@ export default function SiteFactoryPage() {
 
       {showNew && <NewCampaign onDone={() => { setShowNew(false); mutCamps() }} />}
 
-      {/* Funnel */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {FUNNEL.map((k) => (
           <div key={k} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -122,7 +156,6 @@ export default function SiteFactoryPage() {
         ))}
       </div>
 
-      {/* Campaigns */}
       {campaigns.length > 0 && (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
           {campaigns.map((c) => (
@@ -131,7 +164,7 @@ export default function SiteFactoryPage() {
                 <p className="text-white font-semibold font-cairo">{c.name}</p>
                 <span className={clsx('text-xs px-2 py-0.5 rounded', c.active ? 'bg-green-500/15 text-green-300' : 'bg-gray-800 text-gray-500')}>{c.active ? 'نشطة' : 'متوقفة'}</span>
               </div>
-              <p className="text-xs text-gray-400 font-cairo">{SEGMENTS.find((x) => x.v === c.segment)?.l} · {c.areas.join('، ')} · {c.price_egp.toLocaleString()} ج</p>
+              <p className="text-xs text-gray-400 font-cairo">{SEGMENTS.find((x) => x.v === c.segment)?.l} · {c.areas.join('، ')}</p>
               <p className="text-xs text-gray-500 font-cairo">حتى {c.max_new_per_day} نشاط جديد و{c.max_intros_per_day} تعريف يوميًا · آخر بحث: {c.last_discovery_at ? format(new Date(c.last_discovery_at), 'yyyy-MM-dd HH:mm') : '—'}</p>
               <button onClick={async () => { await siteFactoryApi.discoverNow(c.id); toast.success('بدأ البحث — النتائج تظهر خلال دقائق') }}
                 className="inline-flex items-center gap-1 text-xs text-gold-primary font-cairo"><Search size={13} /> ابحث الآن</button>
@@ -140,22 +173,47 @@ export default function SiteFactoryPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-gray-800 pb-2">
-        {TABS.map((t) => (
-          <button key={t.k} onClick={() => { setTab(t.k); setSelected([]) }}
-            className={clsx('px-3 py-1.5 rounded-lg text-sm font-cairo', tab === t.k ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white')}>
-            {t.l}
+      {/* Tabs + filters + bulk actions */}
+      <div className="space-y-3 border-b border-gray-800 pb-3">
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((t) => (
+            <button key={t.k} onClick={() => { setTab(t.k); setSelected([]) }}
+              className={clsx('px-3 py-1.5 rounded-lg text-sm font-cairo', tab === t.k ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white')}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {OWNER_FILTERS.map((f) => (
+            <button key={f.k} onClick={() => setOwner(f.k)}
+              className={clsx('px-2.5 py-1 rounded-md text-xs font-cairo border', owner === f.k ? 'border-gold-primary text-gold-primary' : 'border-gray-800 text-gray-400')}>{f.l}</button>
+          ))}
+          <button onClick={() => setHotOnly((v) => !v)}
+            className={clsx('inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-cairo border', hotOnly ? 'border-red-500/50 text-red-300' : 'border-gray-800 text-gray-400')}>
+            <Flame size={12} /> الساخنة فقط (70+)
           </button>
-        ))}
-        {tab === 'awaiting_approval' && (
-          <div className="ms-auto flex gap-2">
-            <button disabled={!selected.length || busy} onClick={() => act('approve')}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 disabled:opacity-40 text-white text-sm font-cairo"><Check size={14} /> موافقة ({selected.length})</button>
-            <button disabled={!selected.length || busy} onClick={() => act('reject')}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 disabled:opacity-40 text-gray-200 text-sm font-cairo"><X size={14} /> استبعاد</button>
-          </div>
-        )}
+          {selected.length > 0 && (
+            <div className="ms-auto flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-1 text-xs text-gray-300 font-cairo">
+                <UserPlus size={14} />
+                <select className="bg-gray-950 border border-gray-800 rounded-md px-2 py-1 text-xs" defaultValue=""
+                  onChange={(e) => { if (e.target.value !== '__') assign(selected, e.target.value); e.target.value = '__' }}>
+                  <option value="__" disabled>إسناد ({selected.length}) إلى…</option>
+                  {members.map((m) => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
+                  <option value="">— بدون إسناد —</option>
+                </select>
+              </label>
+              {tab === 'awaiting_approval' && (
+                <>
+                  <button disabled={busy} onClick={() => act('approve')}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 disabled:opacity-40 text-white text-sm font-cairo"><Check size={14} /> موافقة ({selected.length})</button>
+                  <button disabled={busy} onClick={() => act('reject')}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 disabled:opacity-40 text-gray-200 text-sm font-cairo"><X size={14} /> استبعاد</button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
@@ -167,48 +225,95 @@ export default function SiteFactoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800 text-gray-400 text-xs font-cairo">
-                {tab === 'awaiting_approval' && (
-                  <th className="px-3 py-3 w-8">
-                    <input type="checkbox" aria-label="تحديد الكل" checked={selected.length === prospects.length}
-                      onChange={(e) => setSelected(e.target.checked ? prospects.map((p) => p.id) : [])} />
-                  </th>
-                )}
+                <th className="px-3 py-3 w-8">
+                  <input type="checkbox" aria-label="تحديد الكل" checked={selected.length === prospects.length}
+                    onChange={(e) => setSelected(e.target.checked ? prospects.map((p) => p.id) : [])} />
+                </th>
                 <th className="text-right px-3 py-3">النشاط</th>
-                <th className="text-right px-3 py-3">الفجوة</th>
+                <th className="text-right px-3 py-3">يستحق؟</th>
+                <th className="text-right px-3 py-3">الخدمات المقترحة</th>
+                <th className="text-right px-3 py-3">المسؤول</th>
                 <th className="text-right px-3 py-3">الحالة</th>
-                <th className="text-right px-3 py-3">آخر رد</th>
                 <th className="text-right px-3 py-3">إجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
               {prospects.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-800/40">
-                  {tab === 'awaiting_approval' && (
+                <Fragment key={p.id}>
+                  <tr className="hover:bg-gray-800/40 align-top">
                     <td className="px-3 py-3"><input type="checkbox" aria-label={`تحديد ${p.business_name}`} checked={selected.includes(p.id)} onChange={() => toggle(p.id)} /></td>
+                    <td className="px-3 py-3">
+                      <button onClick={() => setOpen(open === p.id ? null : p.id)} className="text-right">
+                        <p className="text-gray-100 font-cairo inline-flex items-center gap-1">{p.business_name}<ChevronDown size={13} className={clsx('transition', open === p.id && 'rotate-180')} /></p>
+                        <p className="text-xs text-gray-500">{SEGMENTS.find((x) => x.v === p.segment)?.l} · {p.city || '—'} · {p.gap === 'no_gbp' ? 'لا موقع ولا جوجل' : 'بدون موقع'}</p>
+                      </button>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className={clsx('inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border font-cairo', TIER[p.tier]?.cls)}
+                        title={(p.score_reasons || []).join('\n')}>
+                        {p.score ?? '—'} · {TIER[p.tier]?.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(p.services || []).map((sv) => (
+                          <span key={sv.id} title={`${sv.title_ar} — ${sv.reason_ar}`} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 font-cairo">{SERVICE_LABELS[sv.id] || sv.id}</span>
+                        ))}
+                      </div>
+                      {p.package_egp > 0 && <p className="text-[11px] text-gray-500 mt-1 font-cairo">الباقة: {p.package_egp.toLocaleString()} ج</p>}
+                    </td>
+                    <td className="px-3 py-3">
+                      <select aria-label="المسؤول" className="bg-gray-950 border border-gray-800 rounded-md px-2 py-1 text-xs text-gray-200 max-w-[140px]"
+                        value={p.assigned_to || ''} onChange={(e) => assign([p.id], e.target.value)}>
+                        <option value="">—</option>
+                        {members.map((m) => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3"><Badge s={p.status} /></td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-2 text-xs font-cairo">
+                        {(p.live_url || p.preview_url) && (
+                          <a href={p.live_url || p.preview_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-gold-primary">
+                            <ExternalLink size={13} /> {p.live_url ? 'الموقع' : 'المعاينة'}
+                          </a>
+                        )}
+                        {p.status === 'changes_requested' && (
+                          <button onClick={() => resend(p)} className="inline-flex items-center gap-1 text-sky-300"><Send size={13} /> أرسل المعدّلة</button>
+                        )}
+                        {p.status === 'payment_sent' && (
+                          <button onClick={() => markPaid(p)} className="inline-flex items-center gap-1 text-green-300"><CreditCard size={13} /> سجّل الدفع</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {open === p.id && (
+                    <tr className="bg-gray-950/50">
+                      <td />
+                      <td colSpan={6} className="px-3 py-4">
+                        <div className="grid md:grid-cols-3 gap-4 text-xs font-cairo">
+                          <div>
+                            <p className="text-gray-400 mb-2">لماذا هذا التقييم</p>
+                            <ul className="space-y-1 text-gray-300 list-disc ps-4">{(p.score_reasons || []).map((r, i) => <li key={i}>{r}</li>)}</ul>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 mb-2">ماذا نبيع له ولماذا</p>
+                            <ul className="space-y-2">
+                              {(p.services || []).map((sv) => (
+                                <li key={sv.id} className="text-gray-300"><span className="text-white">{sv.title_ar}</span> — {sv.price_egp.toLocaleString()} ج<br /><span className="text-gray-500">{sv.reason_ar}</span></li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="space-y-1 text-gray-400">
+                            <p>الهاتف: <span dir="ltr" className="text-gray-200">{p.phone || '—'}</span></p>
+                            <p>آخر رد: <span className="text-gray-200">{p.last_inbound || '—'}</span></p>
+                            <p>آخر نشاط: {p.last_event_at ? format(new Date(p.last_event_at), 'yyyy-MM-dd HH:mm') : '—'}</p>
+                            {p.assigned_to && <p>المسؤول: <span className="text-gray-200">{memberName(p.assigned_to)}</span></p>}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
                   )}
-                  <td className="px-3 py-3">
-                    <p className="text-gray-100 font-cairo">{p.business_name}</p>
-                    <p className="text-xs text-gray-500">{SEGMENTS.find((x) => x.v === p.segment)?.l} · {p.city || '—'} · <span dir="ltr">{p.phone || '—'}</span></p>
-                  </td>
-                  <td className="px-3 py-3 text-xs text-gray-400 font-cairo">{p.gap === 'no_gbp' ? 'لا موقع ولا خرائط جوجل' : 'بدون موقع'}</td>
-                  <td className="px-3 py-3"><Badge s={p.status} /></td>
-                  <td className="px-3 py-3 text-xs text-gray-400 font-cairo max-w-[220px] truncate" title={p.last_inbound || ''}>{p.last_inbound || '—'}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap gap-2 text-xs font-cairo">
-                      {(p.live_url || p.preview_url) && (
-                        <a href={p.live_url || p.preview_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-gold-primary">
-                          <ExternalLink size={13} /> {p.live_url ? 'الموقع' : 'المعاينة'}
-                        </a>
-                      )}
-                      {p.status === 'changes_requested' && (
-                        <button onClick={() => resend(p)} className="inline-flex items-center gap-1 text-sky-300"><Send size={13} /> أرسل المعدّلة</button>
-                      )}
-                      {p.status === 'payment_sent' && (
-                        <button onClick={() => markPaid(p)} className="inline-flex items-center gap-1 text-green-300"><CreditCard size={13} /> سجّل الدفع</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -219,7 +324,8 @@ export default function SiteFactoryPage() {
 }
 
 function NewCampaign({ onDone }: { onDone: () => void }) {
-  const [f, setF] = useState({ name: '', segment: 'manufacturer', areas: '', price_egp: 4500, max_new_per_day: 25, max_intros_per_day: 15, instapay_handle: '' })
+  const [f, setF] = useState({ name: '', segment: 'manufacturer', areas: '', max_new_per_day: 25, max_intros_per_day: 15, instapay_handle: '' })
+  const [prices, setPrices] = useState({ website: 4500, gbp: 1500, social: 2500, whatsapp: 2000 })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string | number) => setF((x) => ({ ...x, [k]: v }))
 
@@ -227,7 +333,10 @@ function NewCampaign({ onDone }: { onDone: () => void }) {
     if (!f.name.trim() || !f.areas.trim()) { toast.error('اكتب اسم الحملة والمناطق'); return }
     setSaving(true)
     try {
-      await siteFactoryApi.createCampaign({ ...f, areas: f.areas.split(/[,،\n]/).map((a) => a.trim()).filter(Boolean), instapay_handle: f.instapay_handle || null })
+      await siteFactoryApi.createCampaign({
+        ...f, price_egp: prices.website, service_prices: prices,
+        areas: f.areas.split(/[,،\n]/).map((a) => a.trim()).filter(Boolean), instapay_handle: f.instapay_handle || null,
+      })
       toast.success('تم إنشاء الحملة — أول بحث يومي 8:30 صباحًا، أو اضغط «ابحث الآن»')
       onDone()
     } catch { toast.error('تعذّر إنشاء الحملة') } finally { setSaving(false) }
@@ -244,14 +353,20 @@ function NewCampaign({ onDone }: { onDone: () => void }) {
         </select></label>
       <label className="space-y-1 md:col-span-2"><span className="text-xs text-gray-400 font-cairo">المناطق (افصل بفاصلة)</span>
         <input className={input} value={f.areas} onChange={(e) => set('areas', e.target.value)} placeholder="10th of Ramadan, 6th of October" /></label>
-      <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">سعر الموقع (جنيه)</span>
-        <input type="number" className={input} value={f.price_egp} onChange={(e) => set('price_egp', Number(e.target.value))} /></label>
+      <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        {(Object.keys(prices) as (keyof typeof prices)[]).map((k) => (
+          <label key={k} className="space-y-1"><span className="text-xs text-gray-400 font-cairo">سعر {SERVICE_LABELS[k]} (ج)</span>
+            <input type="number" className={input} value={prices[k]} onChange={(e) => setPrices((x) => ({ ...x, [k]: Number(e.target.value) }))} /></label>
+        ))}
+      </div>
       <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">InstaPay (اختياري)</span>
         <input className={input} value={f.instapay_handle} onChange={(e) => set('instapay_handle', e.target.value)} placeholder="name@instapay" dir="ltr" /></label>
-      <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">أقصى نشاطات جديدة يوميًا</span>
-        <input type="number" className={input} value={f.max_new_per_day} onChange={(e) => set('max_new_per_day', Number(e.target.value))} /></label>
-      <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">أقصى رسائل تعريف يوميًا</span>
-        <input type="number" className={input} value={f.max_intros_per_day} onChange={(e) => set('max_intros_per_day', Number(e.target.value))} /></label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">نشاطات جديدة/يوم</span>
+          <input type="number" className={input} value={f.max_new_per_day} onChange={(e) => set('max_new_per_day', Number(e.target.value))} /></label>
+        <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">رسائل تعريف/يوم</span>
+          <input type="number" className={input} value={f.max_intros_per_day} onChange={(e) => set('max_intros_per_day', Number(e.target.value))} /></label>
+      </div>
       <div className="md:col-span-2 flex justify-end">
         <button disabled={saving} onClick={save} className="px-4 py-2 rounded-lg bg-gold-primary text-black font-semibold text-sm font-cairo disabled:opacity-50">إنشاء الحملة</button>
       </div>
