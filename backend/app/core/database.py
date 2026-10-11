@@ -100,8 +100,15 @@ async def init_db():
         # Cap lock waits so a stuck session can never hang boot indefinitely (one once did,
         # holding locks and bricking every restart). Fail-fast → visible crash-loop instead.
         await conn.execute(text("SET lock_timeout = '10s'"))
+        # ALTER TABLE takes an exclusive lock even when IF NOT EXISTS makes it a no-op, so on a
+        # live system every boot queued behind the workers' locks and could time out (failed
+        # deploys, rolled back). Only alter tables whose column is genuinely missing.
+        existing = {(t, c) for t, c in (await conn.execute(text(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_schema = current_schema()"))).all()}
         for table, col, coltype in _ENSURE_COLUMNS:
-            await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
+            if (table, col) not in existing:
+                await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
     # Enum ADD VALUE must run OUTSIDE a transaction block (Postgres won't let a new enum
     # label be added and used within the same tx), so use an autocommit connection.
     # Best-effort per value: a lock/timeout here degrades one feature, it must not brick boot.
