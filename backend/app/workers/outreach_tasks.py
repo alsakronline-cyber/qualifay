@@ -40,6 +40,15 @@ def process_approved_lead(self, lead_id: str, template_id: str = None, override_
 # (Referenced inline in _process_approved_lead and _send_email_outreach.)
 
 
+def outreach_eligible(instances):
+    """Connected numbers allowed to send a first-contact message, least-used first:
+    never a paused number, never one still in its protection period."""
+    from app.workers.drip_tasks import QUIET_DAYS
+    ok = [i for i in instances
+          if not getattr(i, "paused", False) and (i.day_of_life or 0) >= QUIET_DAYS]
+    return sorted(ok, key=lambda i: i.sent_today_wa or 0)
+
+
 async def _load_template(db, tenant_id, template_id):
     if not template_id:
         return None
@@ -193,10 +202,28 @@ async def _process_approved_lead(lead_id: str, template_id: str = None, override
         if instance_id:
             # A scheduler that splits volume across numbers names the one to use.
             inst_q = inst_q.where(WaInstance.id == instance_id)
-        instance = (await db.execute(inst_q.limit(1))).scalars().first()
-        if not instance:
+        candidates = (await db.execute(inst_q)).scalars().all()
+        if not candidates:
             logger.warning(f"No connected WA instance for tenant {lead.tenant_id}")
             return {"error": "no_wa_instance"}
+        # Outreach is a first contact, so the same safety rules as the daily drip apply:
+        # a paused number never sends, and a number in its protection period (new numbers
+        # get banned fast when they open with cold messages) is replies-only.
+        from app.workers.drip_tasks import QUIET_DAYS
+        eligible = outreach_eligible(candidates)
+        if not eligible:
+            db.add(Notification(
+                tenant_id=lead.tenant_id,
+                type=NotificationType.wa_limit,
+                title="لم تُرسل رسالة التواصل",
+                message=(f"العميل «{lead.company or lead.name}» مقبول لكن لا يوجد رقم واتساب جاهز للحملات "
+                         f"(الأرقام متوقفة مؤقتاً أو في فترة الحماية لأول {QUIET_DAYS} يوماً)."),
+                data={"lead_id": lead_id, "link": "/instances"},
+            ))
+            await db.commit()
+            logger.warning(f"No eligible WA instance (paused/protection) for tenant {lead.tenant_id}")
+            return {"error": "no_eligible_wa_instance"}
+        instance = eligible[0]
 
         # Step 2: WA limit check
         allowed, used, cap = await warmup_service.check_wa_limit(instance.id, db)

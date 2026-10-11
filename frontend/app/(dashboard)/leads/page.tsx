@@ -108,39 +108,55 @@ function LeadsContent() {
   )
   const poolLeads: Lead[] = Array.isArray(poolData) ? poolData : (poolData?.items || poolData?.leads || [])
 
+  // Take decided leads off the queue immediately (then revalidate), so reviewing feels instant.
+  const dropFromQueue = useCallback((ids: string[]) => {
+    const gone = new Set(ids)
+    mutateReview((d: { count?: number; leads?: Lead[] } | undefined) => d && ({
+      ...d,
+      count: Math.max((d.count ?? 0) - ids.length, 0),
+      leads: (d.leads || []).filter((l) => !gone.has(l.id)),
+    }), { revalidate: true })
+    setReviewSel((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n })
+  }, [mutateReview])
+
   const handleApprove = useCallback(async (id: string, message?: string) => {
     try {
       await leadsApi.approve(id, message)
-      toast.success(message ? 'تم قبول العميل وإرسال الرسالة' : 'تم قبول العميل المحتمل')
-      mutateReview()
+      toast.success(message ? 'تم القبول وجارٍ إرسال الرسالة' : 'تم القبول — ستُرسل رسالة التواصل ضمن الحد اليومي الآمن')
+      dropFromQueue([id])
     } catch { toast.error('فشل قبول العميل') }
-  }, [mutateReview])
+  }, [dropFromQueue])
 
   const handleReject = useCallback(async (id: string, reason?: string) => {
     try {
       await leadsApi.reject(id, reason)
-      toast.success('تم رفض العميل المحتمل')
-      mutateReview()
+      toast.success('تم الرفض — سنستخدم السبب لتحسين الترشيحات')
+      dropFromQueue([id])
     } catch { toast.error('فشل رفض العميل') }
-  }, [mutateReview])
+  }, [dropFromQueue])
 
   const handleTakeManually = useCallback(async (id: string) => {
     try {
       await leadsApi.takeManually(id)
-      toast.success('تم نقل العميل للمعالجة اليدوية')
-      mutateReview()
+      toast.success('انتقل العميل لمسار المبيعات — بدون رسائل تلقائية')
+      dropFromQueue([id])
     } catch { toast.error('فشل العملية') }
-  }, [mutateReview])
+  }, [dropFromQueue])
 
-  const handleBulkApprove = useCallback(async () => {
-    if (reviewLeads.length === 0) return
-    const ids = reviewLeads.map((l) => l.id)
+  // Bulk approval starts real outreach, so it always says how many and asks first.
+  const [reviewSel, setReviewSel] = useState<Set<string>>(new Set())
+  const toggleReviewSel = useCallback((id: string) => {
+    setReviewSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }, [])
+  const handleBulkApprove = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return
+    if (!confirm(`قبول ${ids.length} عميل وبدء التواصل معهم؟\n\nستُرسل الرسائل تدريجياً بفواصل زمنية وضمن الحد اليومي الآمن لكل رقم — لا تُرسل دفعة واحدة.`)) return
     try {
       await leadsApi.bulkApprove(ids)
-      toast.success(`تم قبول ${ids.length} عميل محتمل`)
-      mutateReview()
+      toast.success(`تم قبول ${ids.length} عميل — بدأ الإرسال التدريجي`)
+      dropFromQueue(ids)
     } catch { toast.error('فشل القبول الجماعي') }
-  }, [reviewLeads, mutateReview])
+  }, [dropFromQueue])
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -157,6 +173,7 @@ function LeadsContent() {
   const handleBulkApproveSelected = useCallback(async () => {
     const ids = Array.from(selectedIds)
     if (!ids.length) return
+    if (!confirm(`بدء التواصل مع ${ids.length} عميل؟\n\nستُرسل الرسائل تدريجياً بفواصل زمنية وضمن الحد اليومي الآمن لكل رقم.`)) return
     try {
       await leadsApi.bulkApprove(ids, outreachTemplate || undefined)
       toast.success(`تم قبول ${ids.length} عميل وبدء التواصل`)
@@ -280,11 +297,19 @@ function LeadsContent() {
       {/* Review Queue */}
       {tab === 'review' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-gray-400 text-sm font-cairo">
-              {reviewLeads.length} عميل بانتظار المراجعة
-            </p>
-            <div className="flex gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-white text-sm font-semibold font-cairo">
+                {reviewData?.count ?? reviewLeads.length} عميل بانتظار قرارك
+                {(reviewData?.count ?? 0) > reviewLeads.length && (
+                  <span className="text-gray-500 font-normal"> (يُعرض أعلى {reviewLeads.length} تقييماً)</span>
+                )}
+              </p>
+              <p className="text-xs text-gray-500 font-cairo mt-1">
+                «قبول للتواصل» يرسل له رسالة ضمن الحد اليومي الآمن · «سأتولاه» تتواصل معه بنفسك · اختصارات: A قبول، R رفض، M سأتولاه
+              </p>
+            </div>
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => mutateReview()}
                 className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
@@ -294,11 +319,19 @@ function LeadsContent() {
               </button>
               {reviewLeads.length > 1 && (
                 <button
-                  onClick={handleBulkApprove}
+                  onClick={() => setReviewSel(reviewSel.size === reviewLeads.length ? new Set() : new Set(reviewLeads.map((l) => l.id)))}
+                  className="text-gray-400 hover:text-white text-sm px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors font-cairo"
+                >
+                  {reviewSel.size === reviewLeads.length ? 'إلغاء التحديد' : 'تحديد الكل'}
+                </button>
+              )}
+              {reviewSel.size > 0 && (
+                <button
+                  onClick={() => handleBulkApprove(Array.from(reviewSel))}
                   className="flex items-center gap-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 text-sm px-3 py-1.5 rounded-lg transition-colors font-cairo"
                 >
                   <CheckCheck size={14} />
-                  قبول الكل ({reviewLeads.length})
+                  قبول المحدد ({reviewSel.size})
                 </button>
               )}
             </div>
@@ -311,8 +344,10 @@ function LeadsContent() {
           ) : reviewLeads.length === 0 ? (
             <div className="text-center py-16 text-gray-500">
               <CheckCheck size={40} className="mx-auto mb-3 text-gray-700" />
-              <p className="font-cairo">لا يوجد عملاء بانتظار المراجعة</p>
-              <p className="text-xs text-gray-600 mt-1">All caught up!</p>
+              <p className="font-cairo text-gray-300">لا يوجد عملاء بانتظار قرارك</p>
+              <p className="text-xs text-gray-500 mt-1 font-cairo">
+                سيظهر هنا كل عميل جديد يقيّمه الذكاء الاصطناعي كمناسب. لجمع المزيد اذهب إلى «جمع البيانات».
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -323,6 +358,8 @@ function LeadsContent() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onTakeManually={handleTakeManually}
+                  selected={reviewSel.has(lead.id)}
+                  onToggleSelect={toggleReviewSel}
                 />
               ))}
             </div>

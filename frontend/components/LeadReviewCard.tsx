@@ -10,7 +10,12 @@ interface LeadReviewCardProps {
   onApprove: (id: string, message?: string) => void
   onReject: (id: string, reason?: string) => void
   onTakeManually: (id: string) => void
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }
+
+// One-tap reasons — rejection feedback is stored to improve future scoring, so make it easy.
+const REJECT_REASONS = ['غير مناسب لنشاطنا', 'بيانات غير صحيحة', 'منافس', 'عميل حالي / مكرر']
 
 const sourceLabels: Record<LeadSource, string> = {
   google_maps: 'خرائط جوجل',
@@ -44,7 +49,7 @@ function BANTBar({ label, value }: { label: string; value?: number }) {
   const pct = Math.min((value ?? 0) / 25, 1) * 100
   return (
     <div className="flex items-center gap-2">
-      <span className="w-4 text-xs font-bold text-gray-400">{label}</span>
+      <span className="w-16 shrink-0 text-xs text-gray-400 font-cairo">{label}</span>
       <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
         <div
           className={clsx(
@@ -64,6 +69,8 @@ export default function LeadReviewCard({
   onApprove,
   onReject,
   onTakeManually,
+  selected = false,
+  onToggleSelect,
 }: LeadReviewCardProps) {
   const [rejectMode, setRejectMode] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -85,10 +92,10 @@ export default function LeadReviewCard({
     setLoading(null)
   }
 
-  async function handleReject() {
-    if (!rejectMode) { setRejectMode(true); return }
+  async function handleReject(reason?: string) {
+    if (!rejectMode && reason === undefined) { setRejectMode(true); return }
     setLoading('reject')
-    await onReject(lead.id, rejectReason || undefined)
+    await onReject(lead.id, (reason ?? rejectReason) || undefined)
     setLoading(null)
     setRejectMode(false)
     setRejectReason('')
@@ -100,10 +107,39 @@ export default function LeadReviewCard({
     setLoading(null)
   }
 
+  // Keyboard review: focus a card (Tab or click), then A = approve, R = reject, M = take manually.
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget || loading) return
+    const k = e.key.toLowerCase()
+    if (k === 'a') { e.preventDefault(); handleApprove() }
+    else if (k === 'r') { e.preventDefault(); handleReject() }
+    else if (k === 'm') { e.preventDefault(); handleManual() }
+  }
+
+  const reach = [
+    lead.phone && { label: 'واتساب', ok: true },
+    lead.email && { label: 'بريد', ok: true },
+  ].filter(Boolean) as { label: string; ok: boolean }[]
+
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3 hover:border-gray-700 transition-colors">
+    <div
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      aria-label={`مراجعة ${lead.company || lead.name || 'عميل'} — A قبول، R رفض، M يدوي`}
+      className={clsx('bg-gray-900 border rounded-xl p-4 space-y-3 transition-colors focus:outline-none focus:ring-2 focus:ring-gold-primary/60',
+        selected ? 'border-gold-primary/60' : 'border-gray-800 hover:border-gray-700')}
+    >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(lead.id)}
+            aria-label="تحديد للقبول الجماعي"
+            className="mt-1.5 w-4 h-4 accent-gold-primary shrink-0 cursor-pointer"
+          />
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-base font-semibold text-white font-cairo truncate">
@@ -121,6 +157,11 @@ export default function LeadReviewCard({
           <div className="text-sm text-gray-400 mt-0.5 font-cairo">
             {[lead.industry, lead.city, lead.company_size].filter(Boolean).join(' · ')}
           </div>
+          <div className="flex gap-1.5 mt-1.5">
+            {reach.length ? reach.map((r) => (
+              <span key={r.label} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 font-cairo">✓ {r.label}</span>
+            )) : <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-cairo">لا توجد وسيلة تواصل</span>}
+          </div>
         </div>
 
         {/* BANT score circle */}
@@ -134,12 +175,20 @@ export default function LeadReviewCard({
         </div>
       </div>
 
-      {/* BANT mini bars */}
+      {/* Why this lead — the one line a reviewer actually needs */}
+      {lead.bant_reason && (
+        <div className="text-xs bg-gray-800/50 rounded-lg p-2.5 font-cairo leading-relaxed">
+          <span className="text-gold-primary font-semibold">لماذا هذا العميل؟ </span>
+          <span className="text-gray-300 line-clamp-3">{lead.bant_reason}</span>
+        </div>
+      )}
+
+      {/* Score breakdown */}
       <div className="space-y-1.5">
-        <BANTBar label="B" value={lead.bant_budget} />
-        <BANTBar label="A" value={lead.bant_authority} />
-        <BANTBar label="N" value={lead.bant_need} />
-        <BANTBar label="T" value={lead.bant_timeline} />
+        <BANTBar label="الميزانية" value={lead.bant_budget} />
+        <BANTBar label="صلاحية القرار" value={lead.bant_authority} />
+        <BANTBar label="الحاجة" value={lead.bant_need} />
+        <BANTBar label="التوقيت" value={lead.bant_timeline} />
       </div>
 
       {/* AI notes (expandable) */}
@@ -159,11 +208,6 @@ export default function LeadReviewCard({
             </p>
           )}
         </div>
-      )}
-
-      {/* BANT reason */}
-      {lead.bant_reason && (
-        <p className="text-xs text-gray-500 italic line-clamp-2 font-cairo">{lead.bant_reason}</p>
       )}
 
       {/* Unverified warning — a lead the system couldn't confirm as real/reachable */}
@@ -193,9 +237,19 @@ export default function LeadReviewCard({
 
       {/* Reject reason input */}
       {rejectMode && (
+        <div className="flex flex-wrap gap-1.5">
+          {REJECT_REASONS.map((r) => (
+            <button key={r} onClick={() => handleReject(r)} disabled={loading !== null}
+              className="text-xs px-2 py-1 rounded-full border border-gray-700 text-gray-300 hover:border-red-500/50 hover:text-red-300 font-cairo disabled:opacity-50">
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
+      {rejectMode && (
         <input
           type="text"
-          placeholder="سبب الرفض (اختياري)..."
+          placeholder="أو اكتب سبباً آخر ثم Enter (اختياري)..."
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-red-500 font-cairo"
@@ -219,11 +273,11 @@ export default function LeadReviewCard({
           ) : (
             <CheckCircle size={15} />
           )}
-          {hasDraft ? 'قبول وإرسال' : 'قبول'}
+          {hasDraft ? 'قبول وإرسال' : 'قبول للتواصل'}
         </button>
 
         <button
-          onClick={handleReject}
+          onClick={() => handleReject()}
           disabled={loading !== null}
           className={clsx(
             'flex-1 flex items-center justify-center gap-1.5 border rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo',
@@ -243,6 +297,7 @@ export default function LeadReviewCard({
         <button
           onClick={handleManual}
           disabled={loading !== null}
+          title="ينتقل العميل لمسار المبيعات وتتواصل معه بنفسك — بدون رسائل تلقائية"
           className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
         >
           {loading === 'manual' ? (
@@ -250,7 +305,7 @@ export default function LeadReviewCard({
           ) : (
             <UserCheck size={15} />
           )}
-          يدوي
+          سأتولاه
         </button>
       </div>
 
