@@ -135,6 +135,18 @@ class EvolutionService:
         await asyncio.sleep(2)
         return await self.get_qr(instance_name)
 
+    async def pairing_code(self, instance_name: str, number: str, webhook_url: str = None) -> Optional[str]:
+        """Link by phone number instead of QR: WhatsApp → Linked devices → Link with phone
+        number. Works where QR scans keep failing ("couldn't link device"). Starts from a
+        fresh Evolution instance, like regenerate_qr, then asks for an 8-character code."""
+        await self.regenerate_qr(instance_name, webhook_url)
+        try:
+            data = await self._get(f"/instance/connect/{instance_name}?number={number}")
+        except Exception as e:
+            logger.error(f"pairing code failed for '{instance_name}': {e}")
+            return None
+        return data.get("pairingCode") or (data.get("qrcode") or {}).get("pairingCode")
+
     # ─── Messaging ──────────────────────────────────────────
 
     async def send_text(self, instance_name: str, jid: str, text: str) -> dict:

@@ -355,6 +355,36 @@ async def reconnect_instance(
     return {"reconnecting": True, "instance_id": instance_id, "qr": qr}
 
 
+class PairingRequest(BaseModel):
+    phone: str
+
+
+@router.post("/{instance_id}/pairing-code")
+async def pairing_code(
+    instance_id: str,
+    body: PairingRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get an 8-character code to link the number by phone instead of scanning a QR."""
+    require_admin(current_user)
+    instance = (await db.execute(select(WaInstance).where(
+        WaInstance.id == instance_id,
+        WaInstance.tenant_id == current_user["tenant_id"],
+    ))).scalar_one_or_none()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    from app.lib.phone import normalize_egyptian_phone as normalize_phone
+    phone = normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(status_code=400, detail="رقم غير صالح — اكتب الرقم مثل 01012345678")
+    code = await evolution_service.pairing_code(
+        instance.instance_name, phone.lstrip("+"), "http://localhost/api/v1/webhook/evolution")
+    if not code:
+        raise HTTPException(status_code=502, detail="تعذّر إنشاء الكود — حاول مرة أخرى بعد دقيقة")
+    return {"pairing_code": code, "phone": phone}
+
+
 @router.get("/{instance_id}/warmup")
 async def get_warmup_status(
     instance_id: str,

@@ -72,6 +72,8 @@ export const leadsApi = {
 
   reviewQueue: () => API.get('/v1/leads/review-queue'),
 
+  stats: () => API.get('/v1/leads/stats'),
+
   get: (id: string) => API.get(`/v1/leads/${id}`),
 
   getOne: (id: string) => API.get(`/v1/leads/${id}`),
@@ -138,6 +140,8 @@ export const instancesApi = {
   getStatus: (id: string) => API.get(`/v1/instances/${id}/status`),
   getWarmup: (id: string) => API.get(`/v1/instances/${id}/warmup`),
   reconnect: (id: string) => API.post(`/v1/instances/${id}/reconnect`),
+
+  pairingCode: (id: string, phone: string) => API.post(`/v1/instances/${id}/pairing-code`, { phone }),
   disconnect: (id: string) => API.post(`/v1/instances/${id}/disconnect`),
   sync: (id: string) => API.post(`/v1/instances/${id}/sync`),
   toggleAI: (id: string, enabled: boolean) =>

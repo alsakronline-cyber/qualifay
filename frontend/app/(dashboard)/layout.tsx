@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { clsx } from 'clsx'
@@ -39,7 +39,7 @@ import {
   Rocket,
   Globe,
 } from 'lucide-react'
-import { authApi, notificationsApi, onboardingApi } from '@/lib/api'
+import { authApi, leadsApi, notificationsApi, onboardingApi } from '@/lib/api'
 import type { AuthUser, Notification } from '@/lib/types'
 import useSWR from 'swr'
 import ThemeToggle from '@/components/theme-toggle'
@@ -54,37 +54,61 @@ interface NavItem {
   platformOnly?: boolean   // platform owner (is_admin) only — the cross-tenant console
 }
 
-const navItems: NavItem[] = [
-  { href: '/', label: 'الرئيسية', labelEn: 'Dashboard', icon: LayoutDashboard },
-  { href: '/growth', label: 'النمو التلقائي', labelEn: 'Autonomous Growth', icon: Rocket, adminOnly: true },
-  { href: '/activity', label: 'نشاط المساعد', labelEn: 'AI Activity', icon: Sparkles, adminOnly: true },
-  { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3, adminOnly: true },
-  { href: '/leads', label: 'العملاء المحتملون', labelEn: 'Leads', icon: Users },
-  { href: '/inbox', label: 'صندوق الوارد', labelEn: 'Inbox', icon: MessageSquare },
-  { href: '/pipeline', label: 'خط الأنابيب', labelEn: 'Pipeline', icon: KanbanSquare },
-  { href: '/sequences', label: 'التسلسلات', labelEn: 'Sequences', icon: GitBranch, adminOnly: true },
-  { href: '/submissions', label: 'الطلبات والحجوزات', labelEn: 'Conversions', icon: CalendarCheck },
-  { href: '/documents', label: 'المستندات', labelEn: 'Documents', icon: FileSpreadsheet },
-  { href: '/campaigns', label: 'الحملات', labelEn: 'Campaigns', icon: Megaphone, adminOnly: true },
-  { href: '/instances', label: 'واتساب', labelEn: 'WhatsApp', icon: Smartphone, adminOnly: true },
-  { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail, adminOnly: true },
-  { href: '/templates', label: 'القوالب', labelEn: 'Templates', icon: FileText },
-  { href: '/scrape', label: 'جمع البيانات', labelEn: 'Scrape', icon: Bot, adminOnly: true },
-  { href: '/site-factory', label: 'مصنع المواقع', labelEn: 'Site Factory', icon: Globe, adminOnly: true },
-  { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog, adminOnly: true },
-  { href: '/webhooks', label: 'الويب هوك', labelEn: 'Webhooks', icon: Webhook, adminOnly: true },
-  { href: '/ab-tests', label: 'اختبارات A/B', labelEn: 'A/B Tests', icon: FlaskConical, adminOnly: true },
-  { href: '/monitoring', label: 'المراقبة', labelEn: 'Monitoring', icon: Activity, adminOnly: true },
-  { href: '/settings', label: 'الإعدادات', labelEn: 'Settings', icon: Settings, adminOnly: true },
-  { href: '/billing', label: 'الفوترة', labelEn: 'Billing', icon: CreditCard, adminOnly: true },
+interface NavGroup {
+  label: string
+  labelEn: string
+  items: NavItem[]
+}
+
+// Grouped by the job the user is doing, in the order the product flows:
+// find leads → talk to them → send outreach → configure channels → run the workspace.
+const navGroups: NavGroup[] = [
+  { label: 'نظرة عامة', labelEn: 'Overview', items: [
+    { href: '/', label: 'الرئيسية', labelEn: 'Dashboard', icon: LayoutDashboard },
+    { href: '/analytics', label: 'التحليلات', labelEn: 'Analytics', icon: BarChart3, adminOnly: true },
+    { href: '/activity', label: 'نشاط المساعد الذكي', labelEn: 'AI Activity', icon: Sparkles, adminOnly: true },
+  ] },
+  { label: 'العملاء المحتملون', labelEn: 'Prospecting', items: [
+    { href: '/leads', label: 'العملاء المحتملون', labelEn: 'Leads', icon: Users },
+    { href: '/scrape', label: 'جمع البيانات', labelEn: 'Scrape', icon: Bot, adminOnly: true },
+    { href: '/growth', label: 'النمو التلقائي', labelEn: 'Autonomous Growth', icon: Rocket, adminOnly: true },
+    { href: '/site-factory', label: 'مصنع المواقع', labelEn: 'Site Factory', icon: Globe, adminOnly: true },
+  ] },
+  { label: 'المبيعات', labelEn: 'Sales', items: [
+    { href: '/inbox', label: 'المحادثات', labelEn: 'Inbox', icon: MessageSquare },
+    { href: '/pipeline', label: 'مسار المبيعات', labelEn: 'Pipeline', icon: KanbanSquare },
+    { href: '/submissions', label: 'الطلبات والحجوزات', labelEn: 'Conversions', icon: CalendarCheck },
+    { href: '/documents', label: 'المستندات', labelEn: 'Documents', icon: FileSpreadsheet },
+  ] },
+  { label: 'التواصل', labelEn: 'Outreach', items: [
+    { href: '/campaigns', label: 'الحملات', labelEn: 'Campaigns', icon: Megaphone, adminOnly: true },
+    { href: '/sequences', label: 'رسائل المتابعة', labelEn: 'Sequences', icon: GitBranch, adminOnly: true },
+    { href: '/templates', label: 'القوالب', labelEn: 'Templates', icon: FileText },
+    { href: '/ab-tests', label: 'اختبارات A/B', labelEn: 'A/B Tests', icon: FlaskConical, adminOnly: true },
+  ] },
+  { label: 'القنوات', labelEn: 'Channels', items: [
+    { href: '/instances', label: 'أرقام واتساب', labelEn: 'WhatsApp', icon: Smartphone, adminOnly: true },
+    { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail, adminOnly: true },
+  ] },
+  { label: 'مساحة العمل', labelEn: 'Workspace', items: [
+    { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog, adminOnly: true },
+    { href: '/settings', label: 'الإعدادات', labelEn: 'Settings', icon: Settings, adminOnly: true },
+    { href: '/billing', label: 'الاشتراك والفوترة', labelEn: 'Billing', icon: CreditCard, adminOnly: true },
+    { href: '/webhooks', label: 'التكاملات (Webhooks)', labelEn: 'Webhooks', icon: Webhook, adminOnly: true },
+    { href: '/monitoring', label: 'المراقبة', labelEn: 'Monitoring', icon: Activity, adminOnly: true },
+  ] },
   // Platform owner console (is_admin) — cross-tenant.
-  { href: '/admin', label: 'لوحة المالك', labelEn: 'Platform', icon: ShieldCheck, platformOnly: true },
-  { href: '/admin/companies', label: 'الشركات', labelEn: 'Companies', icon: Building2, platformOnly: true },
-  { href: '/admin/accounts', label: 'الحسابات', labelEn: 'Accounts', icon: UsersRound, platformOnly: true },
-  { href: '/admin/system', label: 'صحة النظام', labelEn: 'System', icon: Activity, platformOnly: true },
-  { href: '/admin/audit', label: 'سجل الإجراءات', labelEn: 'Audit', icon: ScrollText, platformOnly: true },
-  { href: '/admin/config', label: 'حدود الخطط', labelEn: 'Plan limits', icon: SlidersHorizontal, platformOnly: true },
+  { label: 'إدارة المنصة', labelEn: 'Platform', items: [
+    { href: '/admin', label: 'لوحة المالك', labelEn: 'Platform', icon: ShieldCheck, platformOnly: true },
+    { href: '/admin/companies', label: 'الشركات', labelEn: 'Companies', icon: Building2, platformOnly: true },
+    { href: '/admin/accounts', label: 'الحسابات', labelEn: 'Accounts', icon: UsersRound, platformOnly: true },
+    { href: '/admin/system', label: 'صحة النظام', labelEn: 'System', icon: Activity, platformOnly: true },
+    { href: '/admin/audit', label: 'سجل الإجراءات', labelEn: 'Audit', icon: ScrollText, platformOnly: true },
+    { href: '/admin/config', label: 'حدود الخطط', labelEn: 'Plan limits', icon: SlidersHorizontal, platformOnly: true },
+  ] },
 ]
+
+const navItems: NavItem[] = navGroups.flatMap((g) => g.items)
 
 function useAuth() {
   const router = useRouter()
@@ -115,7 +139,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const { lang } = useLang()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [pendingCount, setPendingCount] = useState(0)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
   const [impersonating, setImpersonating] = useState<string | null>(null)
@@ -216,8 +239,33 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   // enforces all of this too — the UI just avoids dead ends.
   const isAdmin = !!user?.is_tenant_admin
   const isPlatform = !!user?.is_admin
-  const visibleNav = navItems.filter((i) =>
-    (i.platformOnly ? isPlatform : true) && (i.adminOnly ? isAdmin : true))
+  const canSee = (i: NavItem) => (i.platformOnly ? isPlatform : true) && (i.adminOnly ? isAdmin : true)
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter(canSee) }))
+    .filter((g) => g.items.length > 0)
+
+  // The most specific nav entry for the current page (so /admin/companies doesn't match /admin).
+  const current = navItems
+    .filter((i) => isActive(i.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]
+
+  // Leads waiting for a human decision — the core "human in the loop" step, so it's badged.
+  const { data: leadStats } = useSWR(user ? '/leads/stats' : null,
+    () => leadsApi.stats().then((r) => r.data), { refreshInterval: 60000 })
+  const pendingCount: number = leadStats?.pending_review || 0
+
+  // Close the notifications panel on outside click / Escape.
+  const notifRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!notifOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setNotifOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [notifOpen])
 
   // Guard: bounce anyone who directly hits a route their role can't access.
   useEffect(() => {
@@ -263,38 +311,48 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          {visibleNav.map((item) => {
-            const Icon = item.icon
-            const active = isActive(item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={clsx(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group',
-                  active
-                    ? 'bg-gold-primary/10 text-gold-primary border border-gold-primary/20'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                )}
-              >
-                <Icon
-                  size={18}
-                  className={clsx(active ? 'text-gold-primary' : 'text-gray-400 group-hover:text-white')}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium font-cairo leading-none">{lang === 'en' ? item.labelEn : item.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{lang === 'en' ? item.label : item.labelEn}</div>
-                </div>
-                {item.href === '/leads' && pendingCount > 0 && (
-                  <span className="text-xs bg-gold-primary text-gray-950 font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                    {pendingCount}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4" aria-label={lang === 'en' ? 'Main' : 'التنقل الرئيسي'}>
+          {visibleGroups.map((group) => (
+            <div key={group.labelEn}>
+              <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 font-cairo">
+                {lang === 'en' ? group.labelEn : group.label}
+              </div>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  const active = current?.href === item.href
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      aria-current={active ? 'page' : undefined}
+                      className={clsx(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-cairo transition-colors duration-150 group',
+                        active
+                          ? 'bg-gold-primary/10 text-gold-primary font-semibold'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                      )}
+                    >
+                      <Icon
+                        size={17}
+                        className={clsx('shrink-0', active ? 'text-gold-primary' : 'text-gray-500 group-hover:text-white')}
+                      />
+                      <span className="flex-1 min-w-0 truncate">{lang === 'en' ? item.labelEn : item.label}</span>
+                      {item.href === '/leads' && pendingCount > 0 && (
+                        <span
+                          title={lang === 'en' ? 'Waiting for your review' : 'بانتظار مراجعتك'}
+                          className="text-[11px] bg-gold-primary text-gray-950 font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center"
+                        >
+                          {pendingCount > 99 ? '99+' : pendingCount}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* User */}
@@ -331,20 +389,26 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <div className="hidden sm:block">
-              <h1 className="text-sm font-semibold text-white font-cairo">
-                {user?.tenant?.name || 'Qualifay'}
-              </h1>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-            </div>
+            {/* Where am I: section › page, so deep pages are never anonymous. */}
+            <nav aria-label="breadcrumb" className="flex items-center gap-1.5 text-sm font-cairo min-w-0">
+              <span className="hidden sm:inline text-gray-500 truncate">{user?.tenant?.name || 'Qualifay'}</span>
+              {current && (
+                <>
+                  <ChevronRight size={14} className="hidden sm:inline text-gray-600 rtl:rotate-180 shrink-0" />
+                  <span className="font-semibold text-white truncate">{lang === 'en' ? current.labelEn : current.label}</span>
+                </>
+              )}
+            </nav>
           </div>
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
             {/* Notifications */}
-            <div className="relative">
+            <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setNotifOpen((v) => !v)}
+                aria-label={lang === 'en' ? 'Notifications' : 'الإشعارات'}
+                aria-expanded={notifOpen}
                 className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
               >
                 <Bell size={18} />

@@ -9,30 +9,99 @@ import { instancesApi } from '@/lib/api'
 import type { WaInstance } from '@/lib/types'
 import WarmupIndicator from '@/components/WarmupIndicator'
 
-function QrModal({ instanceId, onClose }: { instanceId: string; onClose: () => void }) {
+function PairingPanel({ instanceId }: { instanceId: string }) {
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function getCode() {
+    if (!phone.trim()) { toast.error('اكتب رقم الواتساب أولاً'); return }
+    setLoading(true); setCode(null)
+    try {
+      const r = await instancesApi.pairingCode(instanceId, phone.trim())
+      setCode(r.data.pairing_code)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      toast.error(err?.response?.data?.detail || 'تعذّر إنشاء الكود')
+    } finally { setLoading(false) }
+  }
+
+  const pretty = code && code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
+
+  return (
+    <div className="space-y-3">
+      <label className="block text-xs text-gray-400 font-cairo">رقم الواتساب الذي تريد ربطه</label>
+      <div className="flex gap-2">
+        <input dir="ltr" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && getCode()} placeholder="01012345678"
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold-primary" />
+        <button onClick={getCode} disabled={loading}
+          className="px-4 rounded-lg bg-gold-primary text-gray-950 font-semibold text-sm font-cairo disabled:opacity-50">
+          {loading ? '...' : code ? 'كود جديد' : 'إنشاء الكود'}
+        </button>
+      </div>
+      {loading && <p className="text-xs text-gray-500 font-cairo">جارٍ تجهيز الكود — قد يستغرق حتى 10 ثوانٍ</p>}
+      {pretty && (
+        <div className="text-center space-y-2 pt-1">
+          <div dir="ltr" className="text-3xl font-mono font-bold tracking-[0.2em] text-gold-primary select-all">{pretty}</div>
+          <button onClick={() => { navigator.clipboard?.writeText(code!); toast.success('تم النسخ') }}
+            className="text-xs text-gray-400 hover:text-white underline font-cairo">نسخ الكود</button>
+        </div>
+      )}
+      <ol className="text-xs text-gray-400 font-cairo space-y-1 list-decimal pr-4 pt-1">
+        <li>افتح واتساب على هذا الرقم ← الأجهزة المرتبطة ← ربط جهاز</li>
+        <li>اضغط «الربط برقم الهاتف بدلاً من ذلك»</li>
+        <li>اكتب الكود خلال دقيقة واحدة</li>
+      </ol>
+    </div>
+  )
+}
+
+function QrModal({ instanceId, onClose, onConnected }: { instanceId: string; onClose: () => void; onConnected?: () => void }) {
+  const [mode, setMode] = useState<'qr' | 'phone'>('qr')
   // A WhatsApp QR expires (~1 min unscanned) and the session closes; on open, ask the
   // backend to regenerate a fresh QR (logout+connect) before we start polling for it.
   useEffect(() => {
-    instancesApi.reconnect(instanceId).catch(() => {})
-  }, [instanceId])
+    if (mode === 'qr') instancesApi.reconnect(instanceId).catch(() => {})
+  }, [instanceId, mode])
   const { data, isLoading, error } = useSWR(
-    `instances/${instanceId}/qr`,
+    mode === 'qr' ? `instances/${instanceId}/qr` : null,
     () => instancesApi.getQr(instanceId).then((r) => r.data),
     { refreshInterval: 3000 }
   )
+  // Close by itself the moment the phone finishes linking, whichever method was used.
+  const { data: st } = useSWR(`instances/${instanceId}/status`,
+    () => instancesApi.getStatus(instanceId).then((r) => r.data), { refreshInterval: 3000 })
+  const linked = ['open', 'connected'].includes(String(st?.state || st?.status || st?.instance?.state || ''))
+  useEffect(() => {
+    if (!linked) return
+    toast.success('تم ربط الرقم بنجاح ✅')
+    onConnected?.(); onClose()
+  }, [linked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm relative">
         <button
           onClick={onClose}
+          aria-label="إغلاق"
           className="absolute top-4 left-4 text-gray-400 hover:text-white"
         >
           <X size={18} />
         </button>
         <h3 className="text-lg font-semibold text-white font-cairo text-center mb-4">
-          امسح رمز QR للاتصال
+          ربط رقم واتساب
         </h3>
+        <div className="grid grid-cols-2 gap-1 p-1 mb-4 bg-gray-800 rounded-lg text-sm font-cairo" role="tablist">
+          {([['qr', 'مسح رمز QR'], ['phone', 'برقم الهاتف']] as const).map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)}
+              className={clsx('py-1.5 rounded-md transition-colors',
+                mode === k ? 'bg-gray-950 text-white font-semibold' : 'text-gray-400 hover:text-white')}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {mode === 'phone' && <PairingPanel instanceId={instanceId} />}
         {isLoading && (
           <div className="flex justify-center py-8">
             <div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" />
@@ -53,6 +122,9 @@ function QrModal({ instanceId, onClose }: { instanceId: string; onClose: () => v
             <p className="text-xs text-gray-500 font-cairo text-center">
               يتجدد الرمز كل 20 ثانية. افتح واتساب → الأجهزة المرتبطة → ربط جهاز
             </p>
+            <button onClick={() => setMode('phone')} className="text-xs text-gold-primary hover:underline font-cairo">
+              ظهرت رسالة «تعذّر ربط الجهاز»؟ اربط برقم الهاتف بدلاً من ذلك
+            </button>
           </div>
         )}
         {data?.qr_image_url && !data?.qr_code && (
@@ -234,7 +306,7 @@ export default function InstancesPage() {
   return (
     <div className="space-y-5">
       {qrModalId && (
-        <QrModal instanceId={qrModalId} onClose={() => setQrModalId(null)} />
+        <QrModal instanceId={qrModalId} onClose={() => setQrModalId(null)} onConnected={() => mutate()} />
       )}
       {deleteTarget && (
         <DeleteConfirmModal instance={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={() => mutate()} />
