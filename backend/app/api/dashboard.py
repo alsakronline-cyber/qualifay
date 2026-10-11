@@ -323,3 +323,121 @@ async def mark_notification_read(
     notif.read_at = datetime.utcnow()
     await db.commit()
     return {"read": True, "notification_id": notification_id}
+
+
+@router.get("/home")
+async def get_home(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Everything the home screen needs in one read-only call: what needs the user now,
+    today's sending against limits, this week's results, and setup progress."""
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from sqlalchemy import text
+    from app.models.models import EmailAccount, Tenant
+    from app.services.warmup_service import warmup_service
+    from app.services.email_account_service import account_cap
+    from app.workers.drip_tasks import QUIET_DAYS, NEW_CAP_DAYS, _cold_room, _refresh_instance_status
+
+    tid = current_user["tenant_id"]
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+
+    async def scalar(sql, **p):
+        return (await db.execute(text(sql), {"t": tid, **p})).scalar() or 0
+
+    pending_review = await scalar(
+        "SELECT count(*) FROM leads WHERE tenant_id=:t AND stage='pending_review' AND status='active'")
+    unanswered = await scalar(
+        "SELECT count(*) FROM conversations WHERE tenant_id=:t AND COALESCE(unread_count,0) > 0"
+        " AND last_message_at >= :w", w=now - timedelta(days=7))   # old unread backlog isn't actionable
+
+    # ── WhatsApp numbers, described the way a client thinks about them ──
+    # Stored status goes stale when a webhook is missed; read the live state first.
+    try:
+        await _refresh_instance_status(db, tid)
+    except Exception:
+        pass
+    numbers = []
+    for i in (await db.execute(select(WaInstance).where(WaInstance.tenant_id == tid)
+                               .order_by(WaInstance.created_at))).scalars().all():
+        allowed, used, cap = await warmup_service.check_wa_limit(i.id, db)
+        day = i.day_of_life or 0
+        connected = i.status in ("open", "connected")
+        if not connected:
+            state = "disconnected"
+        elif getattr(i, "paused", False):
+            state = "paused"
+        elif day < QUIET_DAYS:
+            state = "quiet"            # linked, replies only — no campaign sends yet
+        elif day < QUIET_DAYS + NEW_CAP_DAYS:
+            state = "warming"
+        else:
+            state = "active"
+        numbers.append({
+            "id": i.id, "name": i.instance_name, "phone": i.phone_number, "state": state,
+            "day": day, "quiet_days_left": max(QUIET_DAYS - day, 0),
+            "sent_today": used,
+            "daily_limit": _cold_room(day, cap) if state in ("active", "warming") else 0,
+        })
+
+    accounts = (await db.execute(select(EmailAccount).where(EmailAccount.tenant_id == tid))).scalars().all()
+    email = {
+        "accounts": len(accounts),
+        "sent_today": sum(a.sent_today or 0 for a in accounts),
+        "daily_limit": sum(account_cap(a) for a in accounts if not a.paused),
+    }
+
+    # ── This week's results (first contacts → replies → meetings → won) ──
+    contacted = await scalar("""
+        SELECT count(*) FROM leads WHERE tenant_id=:t AND (
+          (raw_data->>'wa_contacted_at' ~ '^[0-9]{4}-' AND (raw_data->>'wa_contacted_at')::timestamp >= :w) OR
+          (raw_data->>'email_contacted_at' ~ '^[0-9]{4}-' AND (raw_data->>'email_contacted_at')::timestamp >= :w))""",
+        w=week_ago)
+    # Replies from the people contacted this week — so the funnel compares like with like.
+    replied = await scalar("""
+        SELECT count(DISTINCT l.id) FROM leads l
+        JOIN conversations c ON c.lead_id = l.id
+        JOIN messages m ON m.conversation_id = c.id AND m.direction = 'inbound' AND m.created_at >= :w
+        WHERE l.tenant_id=:t AND (
+          (l.raw_data->>'wa_contacted_at' ~ '^[0-9]{4}-' AND (l.raw_data->>'wa_contacted_at')::timestamp >= :w) OR
+          (l.raw_data->>'email_contacted_at' ~ '^[0-9]{4}-' AND (l.raw_data->>'email_contacted_at')::timestamp >= :w))""",
+        w=week_ago)
+    booked = await scalar("""SELECT count(*) FROM leads WHERE tenant_id=:t
+        AND stage IN ('meeting','proposal','negotiation') AND updated_at >= :w""", w=week_ago)
+    won = await scalar("SELECT count(*) FROM leads WHERE tenant_id=:t AND stage='won' AND updated_at >= :w",
+                       w=week_ago)
+
+    # Next daily send: 10:00 Cairo (beat schedule "drip-daily").
+    cairo = datetime.now(ZoneInfo("Africa/Cairo"))
+    nxt = cairo.replace(hour=10, minute=0, second=0, microsecond=0)
+    if cairo >= nxt:
+        nxt += timedelta(days=1)
+
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tid))).scalar_one_or_none()
+    total_leads = await scalar("SELECT count(*) FROM leads WHERE tenant_id=:t AND status='active'")
+
+    return {
+        "attention": {
+            "pending_review": pending_review,
+            "unanswered": unanswered,
+            "disconnected": [n["name"] for n in numbers if n["state"] == "disconnected"],
+        },
+        "today": {
+            "whatsapp_sent": sum(n["sent_today"] for n in numbers),
+            "whatsapp_limit": sum(n["daily_limit"] for n in numbers),
+            "email_sent": email["sent_today"], "email_limit": email["daily_limit"],
+            "next_run": nxt.isoformat(),
+        },
+        "numbers": numbers,
+        "week": {"contacted": contacted, "replied": replied, "booked": booked, "won": won},
+        "setup": {
+            "whatsapp": any(n["state"] != "disconnected" for n in numbers),
+            "email": email["accounts"] > 0,
+            "leads": total_leads > 0,
+        },
+        "total_leads": total_leads,
+        "trial_ends_at": tenant.trial_ends_at.isoformat() if tenant and tenant.trial_ends_at else None,
+        "plan": getattr(tenant.plan, "value", tenant.plan) if tenant else None,
+    }

@@ -225,6 +225,7 @@ export const aiApi = {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export const dashboardApi = {
   stats: () => API.get('/v1/dashboard/stats'),
+  home: () => API.get('/v1/dashboard/home'),
   activity: () => API.get('/v1/dashboard/activity'),
   analytics: () => API.get('/v1/dashboard/analytics'),
 }
