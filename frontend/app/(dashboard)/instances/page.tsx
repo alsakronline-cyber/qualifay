@@ -7,7 +7,8 @@ import { clsx } from 'clsx'
 import { Plus, QrCode, RefreshCw, Wifi, WifiOff, AlertTriangle, X, Trash2, Download, Pause, Play } from 'lucide-react'
 import { instancesApi } from '@/lib/api'
 import type { WaInstance } from '@/lib/types'
-import WarmupIndicator from '@/components/WarmupIndicator'
+import { dashboardApi } from '@/lib/api'
+import { NUMBER_STATE, QUIET_DAYS, FULL_DAYS, type NumberRow } from '@/lib/wa-state'
 
 function PairingPanel({ instanceId }: { instanceId: string }) {
   const [phone, setPhone] = useState('')
@@ -57,8 +58,10 @@ function PairingPanel({ instanceId }: { instanceId: string }) {
   )
 }
 
-function QrModal({ instanceId, onClose, onConnected }: { instanceId: string; onClose: () => void; onConnected?: () => void }) {
-  const [mode, setMode] = useState<'qr' | 'phone'>('qr')
+function QrModal({ instanceId, onClose, onConnected, initialMode = 'qr' }: {
+  instanceId: string; onClose: () => void; onConnected?: () => void; initialMode?: 'qr' | 'phone'
+}) {
+  const [mode, setMode] = useState<'qr' | 'phone'>(initialMode)
   // A WhatsApp QR expires (~1 min unscanned) and the session closes; on open, ask the
   // backend to regenerate a fresh QR (logout+connect) before we start polling for it.
   useEffect(() => {
@@ -249,19 +252,16 @@ export default function InstancesPage() {
   )
   const instances: WaInstance[] = data?.items || data || []
 
-  const [qrModalId, setQrModalId] = useState<string | null>(null)
+  // Client-facing state (protection period, campaign limit) — same source as the home page.
+  const { data: home, mutate: mutateHome } = useSWR('/dashboard/home',
+    () => dashboardApi.home().then((r) => r.data), { refreshInterval: 30000 })
+  const health: Record<string, NumberRow> = Object.fromEntries(
+    ((home?.numbers || []) as NumberRow[]).map((n) => [n.id, n]))
+  const refresh = () => { mutate(); mutateHome() }
+
+  const [qrModal, setQrModal] = useState<{ id: string; mode: 'qr' | 'phone' } | null>(null)
   const [addModal, setAddModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<WaInstance | null>(null)
-
-  const handleReconnect = useCallback(async (id: string) => {
-    try {
-      await instancesApi.reconnect(id)
-      toast.success('جارٍ إعادة الاتصال...')
-      setTimeout(() => mutate(), 3000)
-    } catch {
-      toast.error('فشل إعادة الاتصال')
-    }
-  }, [mutate])
 
   const handleSync = useCallback(async (id: string) => {
     try {
@@ -283,7 +283,7 @@ export default function InstancesPage() {
 
   const handleDisconnect = useCallback(async (id: string) => {
     // Real logout — gated behind a confirm because it needs a QR re-scan to restore.
-    if (!confirm('قطع الاتصال يسجّل خروج الرقم من واتساب — ستحتاج إلى مسح رمز QR لإعادة الربط. للإيقاف المؤقت للإرسال دون فقد الجلسة استخدم "إيقاف مؤقت". متابعة؟')) return
+    if (!confirm('تسجيل الخروج يفصل الرقم عن واتساب وستحتاج لإعادة ربطه. لإيقاف الحملات فقط دون فصل الرقم استخدم «إيقاف الحملات». متابعة؟')) return
     try {
       await instancesApi.disconnect(id)
       toast.success('تم قطع الاتصال')
@@ -305,8 +305,8 @@ export default function InstancesPage() {
 
   return (
     <div className="space-y-5">
-      {qrModalId && (
-        <QrModal instanceId={qrModalId} onClose={() => setQrModalId(null)} onConnected={() => mutate()} />
+      {qrModal && (
+        <QrModal instanceId={qrModal.id} initialMode={qrModal.mode} onClose={() => setQrModal(null)} onConnected={refresh} />
       )}
       {deleteTarget && (
         <DeleteConfirmModal instance={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={() => mutate()} />
@@ -317,12 +317,14 @@ export default function InstancesPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">نسخ واتساب</h1>
-          <p className="text-gray-400 text-sm mt-1">WhatsApp Instances</p>
+          <h1 className="text-2xl font-bold text-white font-cairo">أرقام واتساب</h1>
+          <p className="text-gray-400 text-sm mt-1 font-cairo">
+            الأرقام التي ترسل منها حملاتك وتستقبل عليها الردود. الرقم الجديد يرد فقط أول {QUIET_DAYS} يوماً لحمايته من الحظر.
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <button
-            onClick={() => mutate()}
+            onClick={refresh}
             className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm px-3 py-2 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
           >
             <RefreshCw size={14} />
@@ -333,17 +335,17 @@ export default function InstancesPage() {
             className="flex items-center gap-2 bg-gradient-to-r from-gold-primary to-gold-dark text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg hover:opacity-90 transition-all font-cairo"
           >
             <Plus size={16} />
-            إضافة نسخة
+            إضافة رقم
           </button>
         </div>
       </div>
 
       {/* Warning banner */}
-      {instances.some((i) => i.sent_today_wa >= i.daily_wa_cap * 0.9) && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-          <AlertTriangle size={18} className="text-yellow-400 shrink-0" />
-          <p className="text-sm text-yellow-300 font-cairo">
-            بعض النسخ اقتربت من الحد اليومي. تحقق من مؤشرات الإحماء أدناه.
+      {Object.values(health).some((n) => n.state === 'disconnected') && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-red-400 shrink-0" />
+          <p className="text-sm text-red-300 font-cairo">
+            رقم أو أكثر غير متصل — لن يرسل أو يستقبل حتى تعيد ربطه. استخدم زر «إعادة الربط» في البطاقة.
           </p>
         </div>
       )}
@@ -355,80 +357,108 @@ export default function InstancesPage() {
       ) : instances.length === 0 ? (
         <div className="text-center py-20 text-gray-600">
           <QrCode size={48} className="mx-auto mb-3 text-gray-700" />
-          <p className="font-cairo">لا توجد نسخ واتساب بعد</p>
-          <p className="text-sm text-gray-700 mt-1 mb-4">No WhatsApp instances yet</p>
+          <p className="font-cairo text-gray-300">لم تربط أي رقم واتساب بعد</p>
+          <p className="text-sm text-gray-500 mt-1 mb-4 font-cairo">اربط رقماً لتبدأ استقبال الرسائل؛ تبدأ الحملات منه بعد فترة الحماية.</p>
           <button
             onClick={() => setAddModal(true)}
             className="bg-gradient-to-r from-gold-primary to-gold-dark text-gray-950 font-semibold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all font-cairo"
           >
-            إضافة أول نسخة
+            ربط أول رقم
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {instances.map((inst) => {
             const statusCfg = getStatusConfig(inst.status)
-            const usageRatio = inst.daily_wa_cap > 0 ? inst.sent_today_wa / inst.daily_wa_cap : 0
+            const h = health[inst.id]
+            const st = h ? NUMBER_STATE[h.state] : null
+            const linked = h ? h.state !== 'disconnected' : (inst.status === 'connected' || inst.status === 'open')
+            // Progress toward full sending: protection (days 0-13) → reduced (14-20) → full (21+).
+            const ageProgress = h ? Math.min(100, (h.day / FULL_DAYS) * 100) : 0
             return (
               <div
                 key={inst.id}
-                className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4 hover:border-gray-700 transition-colors"
+                className={clsx('bg-gray-900 border rounded-xl p-5 space-y-4 transition-colors',
+                  linked ? 'border-gray-800 hover:border-gray-700' : 'border-red-500/30')}
               >
                 {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-white font-cairo">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-white font-cairo truncate">
                       {inst.display_name || inst.instance_name}
                     </h3>
-                    <p className="text-sm text-gray-500">{inst.phone_number || 'لم يُربط بعد'}</p>
+                    <p className="text-sm text-gray-500" dir="ltr">{inst.phone_number || 'لم يُربط بعد'}</p>
                   </div>
-                  <span className={clsx('text-xs px-2 py-1 rounded-lg border font-cairo font-semibold', statusCfg.bg, statusCfg.color)}>
-                    {statusCfg.label}
-                  </span>
-                  <button
-                    onClick={() => setDeleteTarget(inst)}
-                    className="text-gray-600 hover:text-red-400 p-1 rounded transition-colors"
-                    title="حذف النسخة"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className={clsx('text-xs px-2 py-1 rounded-lg border font-cairo font-semibold',
+                      st ? st.tone : clsx(statusCfg.bg, statusCfg.color))}>
+                      {st ? st.label : statusCfg.label}
+                    </span>
+                    <button
+                      onClick={() => setDeleteTarget(inst)}
+                      className="text-gray-600 hover:text-red-400 p-1 rounded transition-colors"
+                      title="حذف الرقم" aria-label="حذف الرقم"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Warmup indicator */}
-                <WarmupIndicator instance={inst} />
+                {h && st && <p className="text-xs text-gray-400 font-cairo leading-relaxed">{st.hint(h)}</p>}
+
+                {/* Health: today's campaign sending + progress toward the full daily limit */}
+                {h && linked && (
+                  <div className="bg-gray-800/50 rounded-lg p-3 space-y-2.5 text-xs font-cairo">
+                    <div className="flex justify-between text-gray-400">
+                      <span>حملات اليوم</span>
+                      <span className="text-gray-200 tabular-nums">
+                        {h.daily_limit > 0 ? `${h.sent_today} / ${h.daily_limit}` : 'لا إرسال حملات اليوم'}
+                      </span>
+                    </div>
+                    {h.daily_limit > 0 && (
+                      <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-wa-green rounded-full" style={{ width: `${Math.min(100, (h.sent_today / h.daily_limit) * 100)}%` }} />
+                      </div>
+                    )}
+                    {h.day < FULL_DAYS && (
+                      <>
+                        <div className="flex justify-between text-gray-400">
+                          <span>عمر الرقم</span>
+                          <span className="text-gray-200">اليوم {h.day} من {FULL_DAYS}</span>
+                        </div>
+                        <div className="relative h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-400/80 rounded-full" style={{ width: `${ageProgress}%` }} />
+                          <span className="absolute top-0 h-full w-px bg-gray-300" style={{ insetInlineStart: `${(QUIET_DAYS / FULL_DAYS) * 100}%` }} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex gap-2">
-                  {(inst.status === 'disconnected' || inst.status === 'qr_needed' || inst.status === 'connecting') && (
+                  {!linked && (
                     <button
-                      onClick={() => setQrModalId(inst.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-gold-primary/10 hover:bg-gold-primary/20 text-gold-primary border border-gold-primary/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
+                      onClick={() => setQrModal({ id: inst.id, mode: inst.status === 'disconnected' ? 'phone' : 'qr' })}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-gold-primary text-gray-950 hover:opacity-90 rounded-lg py-2 text-sm font-semibold transition-opacity font-cairo"
                     >
-                      <QrCode size={13} />
-                      ربط QR
+                      <Wifi size={14} />
+                      {inst.status === 'disconnected' ? 'إعادة الربط' : 'إكمال الربط'}
                     </button>
                   )}
-                  {inst.status === 'disconnected' && (
-                    <button
-                      onClick={() => handleReconnect(inst.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
-                    >
-                      <Wifi size={13} />
-                      إعادة اتصال
-                    </button>
-                  )}
-                  {(inst.status === 'connected' || inst.status === 'open') && (
+                  {linked && (
                     <button
                       onClick={() => handleSync(inst.id)}
+                      title="استيراد المحادثات السابقة من واتساب"
                       className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo"
                     >
-                      <Download size={13} />مزامنة
+                      <Download size={13} />مزامنة المحادثات
                     </button>
                   )}
                   {/* Pause/resume — the safe daily control: stops sending, keeps the session. */}
-                  {(inst.status === 'connected' || inst.status === 'open') && (
+                  {linked && (
                     <button
-                      onClick={() => handlePause(inst.id, !inst.paused)}
+                      onClick={async () => { await handlePause(inst.id, !inst.paused); mutateHome() }}
                       className={clsx(
                         'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-colors font-cairo border',
                         inst.paused
@@ -436,14 +466,15 @@ export default function InstancesPage() {
                           : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
                       )}
                     >
-                      {inst.paused ? <><Play size={13} />استئناف</> : <><Pause size={13} />إيقاف مؤقت</>}
+                      {inst.paused ? <><Play size={13} />استئناف الحملات</> : <><Pause size={13} />إيقاف الحملات</>}
                     </button>
                   )}
                   {/* Disconnect — demoted: real logout, gated behind a confirm. */}
-                  {(inst.status === 'connected' || inst.status === 'open') && (
+                  {linked && (
                     <button
                       onClick={() => handleDisconnect(inst.id)}
-                      title="تسجيل خروج الرقم (يتطلب مسح QR لإعادة الربط)"
+                      title="تسجيل خروج الرقم من واتساب (يتطلب إعادة الربط)"
+                      aria-label="تسجيل خروج الرقم"
                       className="shrink-0 flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-gray-700 hover:border-red-500/30 rounded-lg py-2 px-2.5 text-xs font-semibold transition-colors font-cairo"
                     >
                       <WifiOff size={13} />

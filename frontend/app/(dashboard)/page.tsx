@@ -8,19 +8,9 @@ import {
   Send, Clock, Circle, PartyPopper,
 } from 'lucide-react'
 import { dashboardApi } from '@/lib/api'
+import { NUMBER_STATE, type NumberRow } from '@/lib/wa-state'
 
 type Icon = React.ComponentType<{ size?: number; className?: string }>
-
-interface NumberRow {
-  id: string
-  name: string
-  phone?: string | null
-  state: 'active' | 'warming' | 'quiet' | 'paused' | 'disconnected'
-  day: number
-  quiet_days_left: number
-  sent_today: number
-  daily_limit: number
-}
 
 interface Home {
   attention: { pending_review: number; unanswered: number; disconnected: string[] }
@@ -31,20 +21,6 @@ interface Home {
   total_leads: number
   trial_ends_at: string | null
   plan: string | null
-}
-
-// What each number state means, in the client's words — so "not sending" never looks broken.
-const STATE: Record<NumberRow['state'], { label: string; tone: string; hint: (n: NumberRow) => string }> = {
-  active: { label: 'نشط', tone: 'text-green-400 bg-green-500/10 border-green-500/30',
-    hint: (n) => `أرسل ${n.sent_today} من ${n.daily_limit} اليوم` },
-  warming: { label: 'يزيد تدريجياً', tone: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
-    hint: (n) => `حد يومي مخفّض (${n.daily_limit}) لحماية الرقم — أرسل ${n.sent_today} اليوم` },
-  quiet: { label: 'فترة الحماية', tone: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-    hint: (n) => `رقم جديد: يرد على الرسائل فقط — تبدأ الحملات بعد ${n.quiet_days_left} يوم` },
-  paused: { label: 'متوقف مؤقتاً', tone: 'text-gray-300 bg-gray-500/10 border-gray-500/30',
-    hint: () => 'لا يرسل حملات — الردود في صندوق الوارد تعمل' },
-  disconnected: { label: 'غير متصل', tone: 'text-red-400 bg-red-500/10 border-red-500/30',
-    hint: () => 'أعد ربط الرقم لاستئناف الإرسال والردود' },
 }
 
 function AttentionCard({ href, icon: I, count, title, cta, tone }: {
@@ -270,7 +246,7 @@ export default function DashboardPage() {
           ) : (
             <ul className="divide-y divide-gray-800">
               {numbers.map((n) => {
-                const s = STATE[n.state]
+                const s = NUMBER_STATE[n.state]
                 return (
                   <li key={n.id} className="py-2.5">
                     <div className="flex items-center justify-between gap-2">
