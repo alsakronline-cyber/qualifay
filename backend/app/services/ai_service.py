@@ -165,12 +165,13 @@ Rules:
             "summary": message[:100],
         })
 
-    async def quality_gate(self, lead_data: dict) -> dict:
+    async def quality_gate(self, lead_data: dict, seller: str = "") -> dict:
         """
         Quality gate using OR fast model. Filters out junk/spam leads.
         Returns: {keep: bool, reason: str, quality_score: int}
+        `seller` (the tenant's brief) sets the relevant markets; without it, Egypt is assumed.
         """
-        system = """You are a B2B lead quality gate for an Egyptian sales CRM.
+        system = """You are a B2B lead quality gate for a sales CRM.
 Evaluate if this lead is worth processing (real business, reachable, relevant).
 Return ONLY valid JSON:
 {
@@ -178,7 +179,10 @@ Return ONLY valid JSON:
   "reason": "short explanation",
   "quality_score": 0-100
 }
-Reject if: no company name AND no phone, obviously fake data, personal (not business), competitor, or duplicate signals."""
+Reject if: no company name AND no phone or email, obviously fake data, personal (not business), competitor, or duplicate signals."""
+        if seller:
+            system += ("\nJudge relevance against THIS seller's markets and customers (do not assume Egypt;"
+                       " a lead in the seller's target regions is relevant):\n" + seller)
 
         prompt = f"Lead data:\n{json.dumps(lead_data, ensure_ascii=False, indent=2)}"
         result = await self._or_fast(
@@ -807,7 +811,7 @@ def tenant_context_str(profile: dict) -> str:
     fields = [
         ("business_name", "Business"), ("industry", "Industry"), ("sells", "Sells"),
         ("value_prop", "Why customers choose us"), ("ideal_customer", "Ideal customer"),
-        ("tone", "Preferred tone"), ("price_range", "Price range"),
+        ("tone", "Preferred tone"), ("price_range", "Price range"), ("cities", "Target markets"),
     ]
     parts = []
     for key, label in fields:

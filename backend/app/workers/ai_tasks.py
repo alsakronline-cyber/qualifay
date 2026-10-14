@@ -185,7 +185,10 @@ async def _qualify_lead(lead_id: str):
         }
 
         # Step 1: Quality gate
-        gate = await ai_service.quality_gate(lead_dict)
+        from app.services.ai_service import tenant_context_str
+        gate = await ai_service.quality_gate(
+            {**lead_dict, "email": lead.email, "website": lead.website},
+            seller=tenant_context_str(tenant.tenant_profile or {}))
         if not gate.get("keep", True):
             lead.stage = LeadStage.archived
             lead.ai_notes = f"[Quality Gate] Rejected: {gate.get('reason', 'unknown')}"
