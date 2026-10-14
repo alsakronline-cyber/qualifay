@@ -19,6 +19,7 @@ celery_app = Celery(
         "app.workers.orchestrator_tasks",
         "app.workers.billing_tasks",
         "app.workers.drip_tasks",
+        "app.workers.report_tasks",
         "app.site_factory.tasks",
     ],
 )
@@ -100,6 +101,11 @@ celery_app.conf.update(
         "drip-daily": {
             "task": "drip.run_daily",
             "schedule": crontab(hour=10, minute=0),
+        },
+        # Evening summary of the day's outreach, for tenants that opted in.
+        "daily-outreach-report": {
+            "task": "report.daily_outreach",
+            "schedule": crontab(hour=23, minute=50),
         },
         "enforce-trials": {
             "task": "billing.enforce_trials",

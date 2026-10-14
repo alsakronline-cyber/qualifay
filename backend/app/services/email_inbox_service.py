@@ -238,6 +238,7 @@ async def poll_inbound_email() -> dict:
             batch = await asyncio.to_thread(_fetch_unseen, host, port, user, pwd, business_addr)
             for m in batch:
                 m["mailbox_tenant_id"] = tenant_id_mb   # which tenant owns this inbox (if any)
+                m["mailbox_addr"] = (business_addr or "").lower()
             messages.extend(batch)
         except Exception as e:
             logger.warning(f"IMAP fetch failed ({host or 'system'}): {e}")
@@ -265,6 +266,9 @@ async def poll_inbound_email() -> dict:
         for m in messages:
             addr = m["from_addr"]
             if not addr:
+                continue
+            # Mail the tenant sent to itself (e.g. its daily report) is not a lead reply.
+            if m.get("mailbox_addr") and addr == m["mailbox_addr"]:
                 continue
             tid_owner = m.get("mailbox_tenant_id")
             done_key = f"qualifay:{tid_owner}:imap_done" if tid_owner else None
