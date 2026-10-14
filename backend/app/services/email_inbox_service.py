@@ -135,9 +135,20 @@ def _plain_body(msg) -> str:
     return body.strip()
 
 
-def _fetch_unseen(host=None, port=None, user=None, pwd=None):
-    """Blocking IMAP fetch for one mailbox. Returns a list of dicts for UNSEEN messages,
-    and marks them Seen so they aren't re-ingested. Defaults to the system mailbox."""
+def tenant_mailbox_search(business_addr: str, since: str) -> str:
+    """IMAP search for a tenant's mailbox: only mail addressed to the business address the
+    tenant sends from, plus delivery-failure notices — never the owner's other mail (a
+    tenant may connect a personal Gmail that also receives their private email)."""
+    a = business_addr.replace('"', "")
+    return (f'(SINCE {since} OR OR TO "{a}" CC "{a}" '
+            f'OR FROM "mailer-daemon" FROM "postmaster")')
+
+
+def _fetch_unseen(host=None, port=None, user=None, pwd=None, business_addr=None):
+    """Blocking IMAP fetch for one mailbox. Defaults to the system mailbox (UNSEEN, marked
+    Seen after reading). For a tenant mailbox (business_addr given) it reads only mail to
+    that address from the last 2 days WITHOUT marking it read — the owner still sees it as
+    new in their own mail app; re-reads are de-duplicated by Message-ID upstream."""
     host = host or settings.IMAP_HOST
     port = port or settings.IMAP_PORT
     user = user or settings.SMTP_USER
@@ -149,13 +160,18 @@ def _fetch_unseen(host=None, port=None, user=None, pwd=None):
     imap = imaplib.IMAP4_SSL(host, port)
     try:
         imap.login(user, pwd)
-        imap.select("INBOX")
-        typ, data = imap.search(None, "UNSEEN")
+        imap.select("INBOX", readonly=bool(business_addr))
+        if business_addr:
+            from datetime import date, timedelta
+            since = (date.today() - timedelta(days=2)).strftime("%d-%b-%Y")
+            typ, data = imap.search(None, tenant_mailbox_search(business_addr, since))
+        else:
+            typ, data = imap.search(None, "UNSEEN")
         if typ != "OK":
             return []
         ids = data[0].split()
         for mid in ids[-100:]:  # cap per run
-            typ, msg_data = imap.fetch(mid, "(RFC822)")
+            typ, msg_data = imap.fetch(mid, "(BODY.PEEK[])" if business_addr else "(RFC822)")
             if typ != "OK" or not msg_data or not msg_data[0]:
                 continue
             msg = email.message_from_bytes(msg_data[0][1])
@@ -168,7 +184,8 @@ def _fetch_unseen(host=None, port=None, user=None, pwd=None):
                 "body": _plain_body(msg),
                 "attachments": _extract_attachments(msg),
             })
-            imap.store(mid, "+FLAGS", "\\Seen")
+            if not business_addr:
+                imap.store(mid, "+FLAGS", "\\Seen")
     finally:
         try:
             imap.close()
@@ -190,7 +207,7 @@ async def poll_inbound_email() -> dict:
 
     # (tenant_id, host, port, user, pwd). tenant_id None => shared system mailbox, whose
     # senders can't be attributed to a tenant, so we never auto-create leads from it.
-    mailboxes = [(None, None, None, None, None)]
+    mailboxes = [(None, None, None, None, None, None)]
     try:
         from app.models.models import EmailAccount
         from sqlalchemy import select
@@ -199,14 +216,15 @@ async def poll_inbound_email() -> dict:
                 select(EmailAccount).where(EmailAccount.imap_host.isnot(None))
             )).scalars().all()
         for a in accts:
-            mailboxes.append((a.tenant_id, a.imap_host, a.imap_port or 993, a.smtp_user, decrypt(a.smtp_password_enc)))
+            mailboxes.append((a.tenant_id, a.imap_host, a.imap_port or 993, a.smtp_user,
+                              decrypt(a.smtp_password_enc), a.from_email))
     except Exception as e:
         logger.debug(f"listing email accounts for poll failed: {e}")
 
     messages = []
-    for tenant_id_mb, host, port, user, pwd in mailboxes:
+    for tenant_id_mb, host, port, user, pwd, business_addr in mailboxes:
         try:
-            batch = await asyncio.to_thread(_fetch_unseen, host, port, user, pwd)
+            batch = await asyncio.to_thread(_fetch_unseen, host, port, user, pwd, business_addr)
             for m in batch:
                 m["mailbox_tenant_id"] = tenant_id_mb   # which tenant owns this inbox (if any)
             messages.extend(batch)
@@ -227,11 +245,23 @@ async def poll_inbound_email() -> dict:
     bounced = 0
     auto_leads = 0
     AUTO_LEAD_CAP = 50   # per poll cycle — a spam flood must not mint unlimited leads
+    # Tenant mailboxes are read without marking mail Seen, so the same messages come back each
+    # poll for 2 days; remember which were handled (bounce counting must not repeat).
+    from app.core.redis import get_redis
+    r = await get_redis()
+
     async with AsyncSessionLocal() as db:
         for m in messages:
             addr = m["from_addr"]
             if not addr:
                 continue
+            tid_owner = m.get("mailbox_tenant_id")
+            done_key = f"qualifay:{tid_owner}:imap_done" if tid_owner else None
+            if done_key and m["message_id"]:
+                if await r.sismember(done_key, m["message_id"]):
+                    continue
+                await r.sadd(done_key, m["message_id"])
+                await r.expire(done_key, 14 * 86400)
 
             # Bounce / delivery-failure notice? Suppress the dead address and count it,
             # so the warmup cap pauses sending if bounces spike.
@@ -239,10 +269,12 @@ async def poll_inbound_email() -> dict:
                 bounced += await _handle_bounce(db, m)
                 continue
 
-            # Match to a lead by email (most recent wins if several tenants share it).
-            lead = (await db.execute(
-                select(Lead).where(Lead.email.ilike(addr)).order_by(Lead.created_at.desc())
-            )).scalars().first()
+            # Match to a lead by email. On a tenant's own mailbox only that tenant's leads
+            # are candidates — a reply must never land in another company's CRM.
+            q = select(Lead).where(Lead.email.ilike(addr))
+            if tid_owner:
+                q = q.where(Lead.tenant_id == tid_owner)
+            lead = (await db.execute(q.order_by(Lead.created_at.desc()))).scalars().first()
             if not lead:
                 # No lead yet. If this arrived on a tenant-owned mailbox, auto-create a lead
                 # so every inbound email stays synced into that tenant's CRM (mirroring how
@@ -345,10 +377,12 @@ async def _handle_bounce(db, m: dict) -> int:
         return 0
 
     handled = 0
+    owner = m.get("mailbox_tenant_id")
     for a in dict.fromkeys(addrs):  # de-dupe, keep order
-        leads = (await db.execute(
-            select(Lead).where(Lead.email.ilike(a))
-        )).scalars().all()
+        q = select(Lead).where(Lead.email.ilike(a))
+        if owner:   # a bounce in a tenant's own mailbox only concerns that tenant's leads
+            q = q.where(Lead.tenant_id == owner)
+        leads = (await db.execute(q)).scalars().all()
         for lead in leads:
             lead.raw_data = {**(lead.raw_data or {}), "bounced_email": lead.email}
             lead.email = None  # stop re-emailing a dead address (kept in raw_data)
