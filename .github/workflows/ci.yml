@@ -31,6 +31,56 @@ jobs:
         working-directory: backend
         run: python -m pytest tests/ -q
 
+  backend-integration:
+    name: Backend (integration — Postgres + Redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: qualifay_test
+          POSTGRES_USER: qualifay
+          POSTGRES_PASSWORD: qualifay
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U qualifay" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      RUN_INTEGRATION: "1"
+      DATABASE_URL: postgresql+asyncpg://qualifay:qualifay@127.0.0.1:5432/qualifay_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      SECRET_KEY: ci-secret
+      EVOLUTION_API_KEY: ci-evolution
+      GROQ_API_KEY: ci
+      OPENROUTER_API_KEY: ci
+      DEFAULT_ADMIN_PASSWORD: ci-admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Migrations apply cleanly and match the models
+        working-directory: backend
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: API + end-to-end tests
+        working-directory: backend
+        run: python -m pytest tests/integration -q
+
   frontend:
     name: Frontend (build + typecheck)
     runs-on: ubuntu-latest
