@@ -17,6 +17,7 @@ import {
   Megaphone,
   Smartphone,
   Mail,
+  MailOpen,
   FileText,
   Settings,
   CreditCard,
@@ -89,6 +90,7 @@ const navGroups: NavGroup[] = [
   { label: 'القنوات', labelEn: 'Channels', items: [
     { href: '/instances', label: 'أرقام واتساب', labelEn: 'WhatsApp', icon: Smartphone, adminOnly: true },
     { href: '/email-accounts', label: 'حسابات البريد', labelEn: 'Email', icon: Mail, adminOnly: true },
+    { href: '/email-reports', label: 'تقارير البريد', labelEn: 'Email reports', icon: MailOpen },
   ] },
   { label: 'مساحة العمل', labelEn: 'Workspace', items: [
     { href: '/team', label: 'الفريق', labelEn: 'Team', icon: UserCog, adminOnly: true },

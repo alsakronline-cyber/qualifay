@@ -84,8 +84,18 @@ async def _send_email(db, lead, subject, body) -> bool:
     body, unsub_url = with_unsubscribe(body, lead)
     try:
         if account:
-            await email_service.send_via_account(account, lead.email, subject, body,
-                                                 unsubscribe_url=unsub_url)
+            from app.services import email_tracking
+            from app.models.models import Tenant
+            tenant = (await db.execute(select(Tenant).where(Tenant.id == lead.tenant_id))).scalar_one_or_none()
+            track = email_tracking.tracking_enabled(tenant)
+            send = await email_tracking.start_send(db, lead, account, subject, "sequence", track)
+            try:
+                await email_service.send_via_account(
+                    account, lead.email, subject, body, unsubscribe_url=unsub_url,
+                    html_body=email_tracking.html_version(body, email_tracking.pixel_url(send.id)) if track else None)
+            except Exception:
+                await db.delete(send)
+                raise
             await record_account_send(account, db)
         else:
             # Never from the platform's system mailbox — a client's prospects must only hear

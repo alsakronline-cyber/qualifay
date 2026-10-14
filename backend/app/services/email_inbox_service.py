@@ -346,7 +346,10 @@ async def poll_inbound_email() -> dict:
             if not conv.lead_id:
                 conv.lead_id = lead.id
             # "Unsubscribe" (reply or the List-Unsubscribe mailto) → never email them again.
+            from app.services.email_tracking import mark_latest
+            await mark_latest(db, "replied_at", tenant_id=lead.tenant_id, lead_id=lead.id)
             if is_opt_out(m.get("subject", ""), m.get("body", "")):
+                await mark_latest(db, "unsubscribed_at", tenant_id=lead.tenant_id, lead_id=lead.id)
                 lead.status = LeadStatus.unsubscribed
                 lead.raw_data = {**(lead.raw_data or {}), "unsubscribed_via": "email"}
                 logger.info(f"lead {lead.id} unsubscribed by email reply")
@@ -404,6 +407,8 @@ async def _handle_bounce(db, m: dict) -> int:
             q = q.where(Lead.tenant_id == owner)
         leads = (await db.execute(q)).scalars().all()
         for lead in leads:
+            from app.services.email_tracking import mark_latest
+            await mark_latest(db, "bounced_at", tenant_id=lead.tenant_id, lead_id=lead.id)
             lead.raw_data = {**(lead.raw_data or {}), "bounced_email": lead.email}
             lead.email = None  # stop re-emailing a dead address (kept in raw_data)
             await warmup_service.record_email_bounce(str(lead.tenant_id))

@@ -398,6 +398,24 @@ async def _update_subscription_by_provider(
         logger.info(f"Subscription {sub.id} ({provider}/{external_id}) updated to {status}")
 
 
+# ─── Email open tracking ──────────────────────────────────────
+
+@router.get("/open/{token}")
+async def email_open_pixel(token: str, db: AsyncSession = Depends(get_db)):
+    """The 1×1 image in tracked emails. Always returns the image (never an error a mail
+    client could show); a valid signed token records an open."""
+    from fastapi.responses import Response
+    from app.services.email_tracking import PIXEL_GIF, read_open_token, record_open
+    send_id = read_open_token(token)
+    if send_id:
+        try:
+            await record_open(db, send_id)
+        except Exception as e:
+            logger.warning(f"open tracking failed: {e}")
+    return Response(PIXEL_GIF, media_type="image/gif",
+                    headers={"Cache-Control": "no-store, no-cache, must-revalidate, private"})
+
+
 # ─── Email Unsubscribe ────────────────────────────────────────
 
 _UNSUB_PAGE = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">

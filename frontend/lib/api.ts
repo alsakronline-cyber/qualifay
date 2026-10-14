@@ -354,6 +354,11 @@ export const emailApi = {
   updateAccount: (id: string, body: Record<string, unknown>) => API.patch(`/v1/email/accounts/${id}`, body),
   deleteAccount: (id: string) => API.delete(`/v1/email/accounts/${id}`),
   testAccount: (id: string, to?: string) => API.post(`/v1/email/accounts/${id}/test`, { to: to || null }),
+  // Email reports: sent / opened / bounced / replied / unsubscribed
+  analytics: (days: number) => API.get('/v1/email/analytics', { params: { days } }),
+  sends: (params: { days: number; status?: string; search?: string; page?: number; page_size?: number }) =>
+    API.get('/v1/email/sends', { params }),
+  setTracking: (enabled: boolean) => API.put('/v1/email/tracking', { enabled }),
 }
 
 // ── Message Templates ─────────────────────────────────────────────────────────

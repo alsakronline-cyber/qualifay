@@ -468,14 +468,22 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
         subject = "بخصوص التعاون معكم" if _ai_lang in ("ar", "masri") else f"Quick note for {lead.company or lead.name or 'you'}"
 
     from app.services.unsubscribe import with_unsubscribe
+    from app.services import email_tracking
+    from app.models.models import Tenant
     body, unsub_url = with_unsubscribe(body or "", lead)
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == lead.tenant_id))).scalar_one_or_none()
+    track = bool(account) and email_tracking.tracking_enabled(tenant)
+    send = await email_tracking.start_send(db, lead, account, subject, "outreach", track)
+    html_body = email_tracking.html_version(body, email_tracking.pixel_url(send.id)) if track else None
     try:
         if account:
             await email_service.send_via_account(account, lead.email, subject, body,
-                                                 unsubscribe_url=unsub_url)
+                                                 unsubscribe_url=unsub_url, html_body=html_body)
         else:
             await email_service.send(lead.email, subject, body)
     except Exception as e:
+        await db.delete(send)
+        await db.commit()
         logger.error(f"Email send failed for lead {lead.id}: {e}")
         return {"error": "email_send_failed", "detail": str(e)}
 

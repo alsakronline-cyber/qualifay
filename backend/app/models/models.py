@@ -586,6 +586,30 @@ class Campaign(Base):
     wa_instance = relationship("WaInstance", back_populates="campaigns")
 
 
+# ─── EmailSend ────────────────────────────────────────────────
+
+class EmailSend(Base):
+    """One outbound cold email to a lead (first outreach or a sequence step), and what
+    happened to it afterwards: opened (tracking pixel), bounced, replied, unsubscribed.
+    Feeds the Email reports page."""
+    __tablename__ = "email_sends"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    lead_id = Column(String, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True)
+    account_id = Column(String, nullable=True)
+    to_email = Column(String, nullable=False, index=True)
+    subject = Column(String, nullable=True)
+    source = Column(String, nullable=False, default="outreach")   # outreach | sequence
+    tracked = Column(Boolean, nullable=False, default=False, server_default="false")  # open pixel included
+    sent_at = Column(DateTime, nullable=False, default=func.now(), index=True)
+    opened_at = Column(DateTime, nullable=True)      # first open
+    open_count = Column(Integer, nullable=False, default=0, server_default="0")
+    bounced_at = Column(DateTime, nullable=True)
+    replied_at = Column(DateTime, nullable=True)
+    unsubscribed_at = Column(DateTime, nullable=True)
+
+
 # ─── ConsentLog ───────────────────────────────────────────────
 
 class ConsentLog(Base):

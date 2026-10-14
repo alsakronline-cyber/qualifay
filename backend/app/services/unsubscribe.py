@@ -70,6 +70,8 @@ async def unsubscribe_lead(db, lead_id: str, tenant_id: Optional[str], via: str)
     if not lead:
         return False
     if lead.status != LeadStatus.unsubscribed:
+        from app.services.email_tracking import mark_latest
+        await mark_latest(db, "unsubscribed_at", tenant_id=lead.tenant_id, lead_id=lead.id)
         lead.status = LeadStatus.unsubscribed
         lead.raw_data = {**(lead.raw_data or {}), "unsubscribed_via": via}
         logger.info(f"Lead {lead.id} unsubscribed via {via}")
