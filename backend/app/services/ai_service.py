@@ -193,8 +193,10 @@ Scoring guide: budget(25pts) + authority(25pts) + need(30pts) + timeline(20pts) 
             system += (
                 "\n\nScore FIT with this seller, not generic quality. NEED means how much this lead"
                 " plausibly needs what the seller sells. A lead outside the seller's ideal customer"
-                " must score below 40 however big it is. In `reason`, say in one sentence why it"
-                f" does or does not fit.\n\nSELLER:\n{seller}"
+                " must score below 40 however big it is. For a cold prospect with no conversation yet,"
+                " budget, decision-maker and timing are normally unknown — do NOT penalise that; score"
+                " mainly on fit: strong fit 65-90, partial fit 45-64, poor fit under 40. In `reason`,"
+                f" say in one sentence why it does or does not fit.\n\nSELLER:\n{seller}"
             )
 
         history_text = "\n".join([
