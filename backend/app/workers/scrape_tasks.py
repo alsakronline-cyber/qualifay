@@ -229,30 +229,24 @@ async def _run_scrape_job_async(task, job_id: str):
                 db.add(lead)
                 await db.flush()  # Get lead.id before commit
 
-                # Queue BANT qualification
-                try:
-                    from app.workers.ai_tasks import qualify_lead
-                    qualify_lead.delay(lead.id)
-                except Exception as e:
-                    logger.warning(f"Failed to queue qualify_lead for {lead.id}: {e}")
-
-                # P7: Queue URL enrichment if URLs present
+                # Read the lead's real website first (contact email + what they do), THEN
+                # score it — scoring blind made fit judgements on a name alone. Enrichment
+                # never raises, so the chain always reaches qualification.
                 raw_d = raw_lead.raw_data or {}
                 has_urls = any([
                     raw_lead.website,
                     raw_d.get("facebook_url"),
                     raw_d.get("linkedin_url"),
                 ])
-                if has_urls:
-                    try:
-                        from app.workers.ai_tasks import enrich_lead_from_urls
-                        enrich_lead_from_urls.apply_async(
-                            args=[lead.id, job.tenant_id],
-                            queue="ai",
-                            countdown=5,
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to queue enrich_lead_from_urls for {lead.id}: {e}")
+                try:
+                    from app.workers.ai_tasks import qualify_lead, enrich_lead_from_urls
+                    if has_urls:
+                        (enrich_lead_from_urls.si(lead.id, job.tenant_id).set(queue="ai", countdown=5)
+                         | qualify_lead.si(lead.id).set(queue="ai")).apply_async()
+                    else:
+                        qualify_lead.delay(lead.id)
+                except Exception as e:
+                    logger.warning(f"Failed to queue enrich/qualify for {lead.id}: {e}")
 
                 leads_found += 1
                 job.leads_found = leads_found

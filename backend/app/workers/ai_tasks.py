@@ -227,7 +227,11 @@ async def _qualify_lead(lead_id: str):
         lead.verified_real = is_real
 
         # Step 3: BANT score
-        bant = await ai_service.score_bant(lead_dict)
+        from app.services.ai_service import tenant_context_str
+        seller = tenant_context_str(tenant.tenant_profile or {})
+        site_desc = (lead.raw_data or {}).get("description")
+        bant = await ai_service.score_bant(
+            {**lead_dict, **({"website_description": site_desc} if site_desc else {})}, seller=seller)
         lead.bant_score = bant.get("score", 0)
         lead.bant_budget = bant.get("budget")
         lead.bant_authority = bant.get("authority")
@@ -398,7 +402,7 @@ async def _async_enrich_lead(lead_id: str, tenant_id: str):
             logger.warning(f"enrich_lead_from_urls: lead {lead_id} not found")
             return
 
-        raw = lead.raw_data or {}
+        raw = dict(lead.raw_data or {})   # copy, so reassigning is seen as a change
         urls_to_check = [u for u in [
             raw.get("website"), raw.get("facebook_url"),
             raw.get("linkedin_url"), lead.website
@@ -408,15 +412,33 @@ async def _async_enrich_lead(lead_id: str, tenant_id: str):
             logger.debug(f"enrich_lead_from_urls: no URLs for lead {lead_id}")
             return
 
+        # Read the real website. Contact emails come ONLY from what the site publishes —
+        # never from the model, which would invent plausible addresses that then bounce.
+        from app.services.site_contacts import fetch_site_text, pick_emails
+        site = lead.website or raw.get("website")
+        page_text = ""
+        if site:
+            page_text = await fetch_site_text(site)
+            if not lead.email:
+                found = pick_emails(page_text, site)
+                if found:
+                    lead.email = found[0]
+                    raw["email_source"] = "website"
+        # Save the real contact now, so a later AI failure can't lose it.
+        lead.raw_data = raw
+        await db.commit()
+        raw = dict(raw)
+        if not page_text.strip():
+            return
+
         prompt = (
-            f"Extract company information from these URLs: {urls_to_check}\n\n"
+            "From this company's own website text, describe the company.\n\n"
+            f"WEBSITE TEXT:\n{' '.join(page_text.split())[:6000]}\n\n"
             "Return JSON only:\n"
             "{\n"
-            '  "company_size": "1-10|11-50|51-200|200+",\n'
+            '  "company_size": "1-10|11-50|51-200|200+ or null",\n'
             '  "industry": "string",\n'
-            '  "description": "string (max 100 chars)",\n'
-            '  "email": "string or null",\n'
-            '  "phone": "string or null"\n'
+            '  "description": "string (max 100 chars)"\n'
             "}"
         )
 
@@ -443,12 +465,7 @@ async def _async_enrich_lead(lead_id: str, tenant_id: str):
         # Only fill empty fields (don't overwrite user data)
         if enriched.get("industry") and not lead.industry:
             lead.industry = enriched["industry"]
-        if enriched.get("email") and not lead.email:
-            lead.email = enriched["email"]
-        if enriched.get("phone") and not lead.phone:
-            lead.phone = enriched["phone"]
-
-        raw = lead.raw_data or {}
+        # Email/phone are deliberately NOT taken from the model (see above).
         if enriched.get("company_size"):
             raw["company_size"] = enriched["company_size"]
         if enriched.get("description"):

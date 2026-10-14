@@ -170,10 +170,12 @@ Reject if: no company name AND no phone, obviously fake data, personal (not busi
         )
         return self._parse_json(result, {"keep": True, "reason": "Quality gate error — defaulting to keep", "quality_score": 50})
 
-    async def score_bant(self, lead_data: dict, messages: list = []) -> dict:
+    async def score_bant(self, lead_data: dict, messages: list = [], seller: str = "") -> dict:
         """
         BANT scoring using OR reasoning model.
         Returns: {score, budget, authority, need, timeline, reason}
+        `seller` is the tenant's business brief: when given, the score measures fit with
+        what THIS seller sells and who they sell to, not generic lead quality.
         """
         system = """You are a B2B BANT (Budget, Authority, Need, Timeline) scoring expert for the Egyptian market.
 Analyze the lead data and any conversation messages to produce a BANT score.
@@ -187,6 +189,13 @@ Return ONLY valid JSON:
   "reason": "2-3 sentence explanation of score"
 }
 Scoring guide: budget(25pts) + authority(25pts) + need(30pts) + timeline(20pts) = 100"""
+        if seller:
+            system += (
+                "\n\nScore FIT with this seller, not generic quality. NEED means how much this lead"
+                " plausibly needs what the seller sells. A lead outside the seller's ideal customer"
+                " must score below 40 however big it is. In `reason`, say in one sentence why it"
+                f" does or does not fit.\n\nSELLER:\n{seller}"
+            )
 
         history_text = "\n".join([
             f"{'Customer' if m.get('direction') == 'inbound' else 'Agent'}: {m.get('content', '')}"
