@@ -40,9 +40,9 @@ export default function MonitoringPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo flex items-center gap-2"><Activity size={22} /> المراقبة</h1>
+          <h1 className="text-xl font-bold text-white font-cairo flex items-center gap-2 sm:text-2xl tracking-tight"><Activity size={22} /> المراقبة</h1>
           <p className="text-gray-400 text-sm mt-1">حالة الخدمات والنسخ الاحتياطي</p>
         </div>
         <button onClick={backup} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg font-cairo">
@@ -66,7 +66,7 @@ export default function MonitoringPage() {
             {(Object.keys(LABELS) as Array<keyof typeof data.services>).map((k) => {
               const svc = data.services[k]; const meta = LABELS[k]; const Icon = meta.icon
               return (
-                <div key={k} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center gap-3">
+                <div key={k} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex items-center gap-3 shadow-card">
                   <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center', svc.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400')}><Icon size={18} /></div>
                   <div className="flex-1">
                     <div className="text-sm font-medium text-white font-cairo">{meta.label}</div>
@@ -81,7 +81,7 @@ export default function MonitoringPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {data.disk && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
                 <div className="flex items-center gap-2 text-sm text-white font-cairo mb-2"><HardDrive size={16} /> القرص</div>
                 <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                   <div className={clsx('h-full', data.disk.used_pct > 85 ? 'bg-red-500' : 'bg-gold-primary')} style={{ width: `${data.disk.used_pct}%` }} />
@@ -89,7 +89,7 @@ export default function MonitoringPage() {
                 <div className="text-xs text-gray-400 mt-1.5 font-cairo">{data.disk.free_gb} GB متاح من {data.disk.total_gb} GB · مستخدم {data.disk.used_pct}%</div>
               </div>
             )}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
               <div className="flex items-center gap-2 text-sm text-white font-cairo mb-2"><DownloadCloud size={16} /> آخر نسخة احتياطية</div>
               {data.last_backup ? (
                 <div className="text-xs text-gray-400 font-cairo space-y-0.5">

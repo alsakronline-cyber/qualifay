@@ -207,11 +207,11 @@ export default function DocEditor() {
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">{DOC_LABEL[form.doc_type]} {number && <span className="font-mono text-gold-primary text-lg">{number}</span>}</h1>
+        <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">{DOC_LABEL[form.doc_type]} {number && <span className="font-mono text-gold-primary text-lg">{number}</span>}</h1>
       </div>
 
       {/* Header fields */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
         <div><label className="block text-xs text-gray-400 font-cairo mb-1">الحالة</label>
           <select value={form.status} onChange={(e) => set('status', e.target.value)} className={inp}>
             {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -223,7 +223,7 @@ export default function DocEditor() {
       </div>
 
       {/* Customer */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3 shadow-card">
         <h2 className="text-sm font-bold text-white font-cairo">بيانات العميل</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input placeholder="اسم الشركة" value={form.customer_company} onChange={(e) => set('customer_company', e.target.value)} className={inp} dir="auto" />
@@ -236,9 +236,9 @@ export default function DocEditor() {
       </div>
 
       {/* Line items */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-2 shadow-card">
         <h2 className="text-sm font-bold text-white font-cairo mb-1">البنود</h2>
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="w-full text-sm">
             <thead className="text-gray-400 text-xs font-cairo">
               <tr><th className="text-right pb-1 w-[42%]">الوصف</th><th className="pb-1">الكمية</th><th className="pb-1">سعر الوحدة</th><th className="pb-1">خصم %</th><th className="text-left pb-1">الإجمالي</th><th></th></tr>
@@ -284,7 +284,7 @@ export default function DocEditor() {
 
       {/* Totals + discount/tax */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3 shadow-card">
           <div><label className="block text-xs text-gray-400 font-cairo mb-1">الخصم</label>
             <div className="flex gap-2">
               <select value={form.discount_type} onChange={(e) => set('discount_type', e.target.value)} className={`${inp} w-28`}>
@@ -292,14 +292,14 @@ export default function DocEditor() {
               </select>
               <input type="number" value={form.discount_value} onChange={(e) => set('discount_value', parseFloat(e.target.value) || 0)} className={inp} />
             </div></div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
             <div><label className="block text-xs text-gray-400 font-cairo mb-1">ضريبة القيمة المضافة %</label>
               <input type="number" value={form.tax_rate} onChange={(e) => set('tax_rate', parseFloat(e.target.value) || 0)} className={inp} /></div>
             <div><label className="block text-xs text-gray-400 font-cairo mb-1">العملة</label>
               <input value={form.currency} onChange={(e) => set('currency', e.target.value)} className={inp} dir="ltr" /></div>
           </div>
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 font-cairo text-sm space-y-2">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 font-cairo text-sm space-y-2 shadow-card">
           <div className="flex justify-between text-gray-300"><span>المجموع الفرعي</span><span className="font-mono">{totals.subtotal.toLocaleString()} {form.currency}</span></div>
           <div className="flex justify-between text-gray-300"><span>الخصم</span><span className="font-mono">− {totals.discount.toLocaleString()}</span></div>
           <div className="flex justify-between text-gray-300"><span>ض.ق.م ({form.tax_rate}%)</span><span className="font-mono">{totals.taxTotal.toLocaleString()}</span></div>

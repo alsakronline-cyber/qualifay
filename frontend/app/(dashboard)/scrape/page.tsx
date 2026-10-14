@@ -160,7 +160,7 @@ export default function ScrapePage() {
       {/* Hero: Search For Leads */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">جمع العملاء المحتملين</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">جمع العملاء المحتملين</h1>
           <p className="text-gray-400 text-sm mt-1">ابحث عن عملاء جدد من مصادر متعددة، أو فعّل بحثاً يومياً تلقائياً</p>
         </div>
         <button
@@ -174,7 +174,7 @@ export default function ScrapePage() {
 
       {/* Active schedules */}
       {schedules.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
           <h2 className="text-sm font-semibold text-white font-cairo mb-3 flex items-center gap-2">
             <CalendarClock size={16} className="text-gold-primary" /> عمليات البحث اليومية التلقائية
           </h2>
@@ -202,7 +202,7 @@ export default function ScrapePage() {
       )}
 
       {/* Jobs list */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white font-cairo">مهام البحث</h2>
           <div className="flex items-center gap-2">
@@ -251,8 +251,8 @@ export default function ScrapePage() {
 
       {/* Wizard modal */}
       {wizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={closeWizard}>
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm" onClick={closeWizard}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[92dvh] overflow-hidden flex flex-col rounded-b-none sm:rounded-b-2xl shadow-raised pb-[env(safe-area-inset-bottom)] sm:pb-0" onClick={(e) => e.stopPropagation()}>
             {/* Header + steps */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
               <h3 className="text-lg font-bold text-white font-cairo">بحث عن عملاء</h3>
@@ -308,7 +308,7 @@ export default function ScrapePage() {
               {step === 3 && (
                 <div className="space-y-4">
                   <label className="block text-sm text-gray-300 font-cairo">كم عدد العملاء الذين تريد جمعهم؟</label>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
                     {COUNT_PRESETS.map((c) => (
                       <button key={c} onClick={() => setCount(c)}
                         className={clsx('py-3 rounded-lg border font-bold font-cairo transition-all', count === c ? 'bg-gold-primary/10 border-gold-primary text-gold-primary' : 'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-600')}>

@@ -53,9 +53,9 @@ export default function AcceptInvitePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-gray-950 flex items-center justify-center px-4 py-10">
       <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 pointer-events-none" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gold-primary/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,140vw)] h-[300px] bg-gold-primary/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
@@ -65,7 +65,7 @@ export default function AcceptInvitePage() {
           <h1 className="text-3xl font-bold text-white font-cairo">Qualifay</h1>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-raised">
           {loadingInvite ? (
             <div className="flex items-center justify-center py-10 text-gray-400">
               <Loader2 size={22} className="animate-spin" />

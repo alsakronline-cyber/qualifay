@@ -44,7 +44,7 @@ export default function DocumentsPage() {
         <div className="flex items-center gap-2">
           <FileText size={22} className="text-gold-primary" />
           <div>
-            <h1 className="text-2xl font-bold text-white font-cairo">المستندات</h1>
+            <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">المستندات</h1>
             <p className="text-gray-400 text-sm font-cairo">عروض الأسعار، أوامر البيع، والفواتير</p>
           </div>
         </div>
@@ -75,7 +75,7 @@ export default function DocumentsPage() {
           لا توجد مستندات بعد. <Link href={`/documents/new?type=${tab}`} className="text-gold-primary hover:underline">أنشئ {DOC_LABEL[tab]}</Link>
         </div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl table-wrap shadow-card">
           <table className="w-full text-sm">
             <thead className="bg-gray-800/50 text-gray-400 font-cairo text-xs">
               <tr>

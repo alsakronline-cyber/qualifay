@@ -39,8 +39,8 @@ function Builder({ initial, templates, onClose, onSaved }: { initial?: Seq; temp
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[92dvh] overflow-hidden flex flex-col rounded-b-none sm:rounded-b-2xl shadow-raised pb-[env(safe-area-inset-bottom)] sm:pb-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <h3 className="font-semibold text-white font-cairo">{initial?.id ? 'تعديل التسلسل' : 'تسلسل جديد'}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
@@ -123,9 +123,9 @@ export default function SequencesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">التسلسلات</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">التسلسلات</h1>
           <p className="text-gray-400 text-sm mt-1">Sequences — متابعات تلقائية متعددة الخطوات، تتوقف عند رد العميل</p>
         </div>
         <button onClick={() => setCreating(true)} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg font-cairo">
@@ -144,7 +144,7 @@ export default function SequencesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {sequences.map((s) => (
-            <div key={s.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+            <div key={s.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3 shadow-card">
               <div className="flex items-start justify-between">
                 <h3 className="font-semibold text-white font-cairo">{s.name}</h3>
                 <span className={clsx('text-[10px] px-2 py-0.5 rounded-full border font-cairo', s.active ? 'text-green-400 bg-green-500/10 border-green-500/30' : 'text-gray-400 bg-gray-700 border-gray-600')}>{s.active ? 'نشط' : 'متوقف'}</span>

@@ -27,10 +27,10 @@ export default function AdminAuditPage() {
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-center gap-2">
         <ScrollText size={20} className="text-gold-primary" />
-        <div><h1 className="text-2xl font-bold text-white font-cairo">سجل الإجراءات</h1><p className="text-gray-400 text-sm font-cairo">كل إجراءات المالك على المنصة</p></div>
+        <div><h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">سجل الإجراءات</h1><p className="text-gray-400 text-sm font-cairo">كل إجراءات المالك على المنصة</p></div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl divide-y divide-gray-800">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800 shadow-card">
         {rows.map((e) => {
           const a = ACTION[e.action] || { label: e.action, icon: User, cls: 'text-gray-400' }
           const Icon = a.icon

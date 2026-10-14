@@ -36,6 +36,13 @@ module.exports = {
         'gold-dark': 'rgb(var(--c-accent-strong) / <alpha-value>)',
         'wa-green': '#25D366',
       },
+      boxShadow: {
+        card: 'var(--shadow-card)',
+        raised: 'var(--shadow-raised)',
+      },
+      screens: {
+        xs: '420px',
+      },
       fontFamily: {
         cairo: ['Cairo', 'sans-serif'],
         inter: ['Inter', 'sans-serif'],

@@ -198,7 +198,7 @@ export default function LeadDetailPage() {
         {/* Main column */}
         <div className="lg:col-span-2 space-y-5">
           {/* Header card */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
             <div className="flex items-start justify-between flex-wrap gap-3">
               <div>
                 <h1 className="text-xl font-bold text-white font-cairo">{lead.company || lead.name || '—'}</h1>
@@ -228,7 +228,7 @@ export default function LeadDetailPage() {
 
             {/* BANT breakdown */}
             {(lead.bant_budget !== undefined || lead.bant_authority !== undefined) && (
-              <div className="mt-4 grid grid-cols-4 gap-3">
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {(['budget', 'authority', 'need', 'timeline'] as const).map((dim) => {
                   const key = `bant_${dim}` as keyof Lead
                   const val = lead[key] as number | undefined
@@ -256,7 +256,7 @@ export default function LeadDetailPage() {
           </div>
 
           {/* Edit form */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
             <h2 className="text-sm font-semibold text-white font-cairo mb-4 flex items-center gap-2">
               <User size={14} className="text-gray-400" />
               بيانات العميل
@@ -368,7 +368,7 @@ export default function LeadDetailPage() {
         </div>
 
         {/* Activity column */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-fit">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 h-fit shadow-card">
           <ActivityFeed entityId={id} entityType="lead" />
         </div>
       </div>

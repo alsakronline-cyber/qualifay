@@ -83,8 +83,8 @@ function QrModal({ instanceId, onClose, onConnected, initialMode = 'qr' }: {
   }, [linked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm relative">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-sm relative sm:p-6 max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
         <button
           onClick={onClose}
           aria-label="إغلاق"
@@ -160,8 +160,8 @@ function DeleteConfirmModal({ instance, onClose, onDeleted }: { instance: WaInst
     }
   }
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-sm sm:p-6 max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-red-500/10 rounded-full flex items-center justify-center">
             <Trash2 size={18} className="text-red-400" />
@@ -212,8 +212,8 @@ function AddInstanceModal({ onClose, onAdded }: { onClose: () => void; onAdded: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-sm sm:p-6 max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
         <h3 className="text-lg font-semibold text-white font-cairo mb-4">إضافة نسخة واتساب</h3>
         <input
           type="text"
@@ -315,9 +315,9 @@ export default function InstancesPage() {
         <AddInstanceModal onClose={() => setAddModal(false)} onAdded={() => mutate()} />
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">أرقام واتساب</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">أرقام واتساب</h1>
           <p className="text-gray-400 text-sm mt-1 font-cairo">
             الأرقام التي ترسل منها حملاتك وتستقبل عليها الردود. الرقم الجديد يرد فقط أول {QUIET_DAYS} يوماً لحمايته من الحظر.
           </p>

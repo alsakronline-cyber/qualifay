@@ -203,7 +203,7 @@ export default function OnboardingWizard() {
         </div>
 
         {/* Card */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5 shadow-card">
 
           {/* Step 0 — Business Profile */}
           {step === 0 && (

@@ -49,7 +49,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">الفوترة والخطط</h1>
+        <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">الفوترة والخطط</h1>
         <p className="text-gray-400 text-sm mt-1">Billing & Plans</p>
       </div>
 
@@ -88,7 +88,7 @@ export default function BillingPage() {
               </div>
 
               <div>
-                <span className="text-2xl font-bold text-white">{plan.price}</span>
+                <span className="text-xl font-bold text-white sm:text-2xl tracking-tight">{plan.price}</span>
               </div>
 
               <ul className="space-y-2">

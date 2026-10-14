@@ -41,10 +41,10 @@ export default function AdminConfigPage() {
 
   return (
     <div className="space-y-5 max-w-3xl">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <SlidersHorizontal size={20} className="text-gold-primary" />
-          <div><h1 className="text-2xl font-bold text-white font-cairo">حدود الخطط والميزات</h1><p className="text-gray-400 text-sm font-cairo">0 = بلا حدود</p></div>
+          <div><h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">حدود الخطط والميزات</h1><p className="text-gray-400 text-sm font-cairo">0 = بلا حدود</p></div>
         </div>
         <button onClick={save} disabled={saving} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg disabled:opacity-50 font-cairo">
           <Save size={15} /> {saving ? 'جارٍ...' : 'حفظ'}
@@ -52,7 +52,7 @@ export default function AdminConfigPage() {
       </div>
 
       {/* Plan limits table */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 overflow-x-auto">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 table-wrap shadow-card">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-gray-400 font-cairo text-xs">
@@ -78,7 +78,7 @@ export default function AdminConfigPage() {
       </div>
 
       {/* Feature flags */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-2 shadow-card">
         <h2 className="text-sm font-bold text-white font-cairo mb-2">مفاتيح الميزات</h2>
         {Object.keys(cfg.features).map((k) => (
           <label key={k} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">

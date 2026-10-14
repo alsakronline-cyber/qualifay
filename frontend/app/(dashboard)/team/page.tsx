@@ -55,8 +55,8 @@ function InviteModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-sm space-y-3 sm:p-6 max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-white font-cairo">{result ? 'تم إرسال الدعوة' : 'دعوة عضو'}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
@@ -124,9 +124,9 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">الفريق</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">الفريق</h1>
           <p className="text-gray-400 text-sm mt-1">Team — أعضاء الفريق وصلاحياتهم</p>
         </div>
         <button onClick={() => setInviting(true)} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg font-cairo">
@@ -137,7 +137,7 @@ export default function TeamPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" /></div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl divide-y divide-gray-800">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800 shadow-card">
           {members.map((m) => {
             const pending = m.status === 'invited'
             return (
@@ -183,8 +183,8 @@ export default function TeamPage() {
       {inviting && <InviteModal onClose={() => setInviting(false)} onDone={mutate} />}
 
       {resendUrl && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setResendUrl(null)}>
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setResendUrl(null)}>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-sm space-y-3 sm:p-6 max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2"><Mail size={16} className="text-gold-primary" /><h3 className="font-semibold text-white font-cairo">رابط الدعوة</h3></div>
             <CopyField url={resendUrl} />
             <button onClick={() => setResendUrl(null)} className="w-full py-2.5 rounded-lg bg-gold-primary text-gray-950 font-semibold text-sm font-cairo">تم</button>

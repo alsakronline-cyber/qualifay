@@ -136,7 +136,7 @@ export default function SiteFactoryPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo flex items-center gap-2"><Globe size={22} /> مصنع المواقع</h1>
+          <h1 className="text-xl font-bold text-white font-cairo flex items-center gap-2 sm:text-2xl tracking-tight"><Globe size={22} /> مصنع المواقع</h1>
           <p className="text-gray-400 text-sm mt-1 font-cairo">نجمع البيانات ← أنت تختار التصميم وتبني ← تراجع وتوافق ← تواصل بعد موافقة العميل ← بيع</p>
         </div>
         <button onClick={() => setShowNew((v) => !v)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-primary text-black font-semibold text-sm font-cairo">
@@ -153,8 +153,8 @@ export default function SiteFactoryPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {FUNNEL.map((k) => (
-          <div key={k} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-2xl font-bold text-white">{(k === 'live' ? (s.live || 0) + (s.paid || 0) : s[k] || 0).toLocaleString()}</p>
+          <div key={k} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
+            <p className="text-xl font-bold text-white sm:text-2xl tracking-tight">{(k === 'live' ? (s.live || 0) + (s.paid || 0) : s[k] || 0).toLocaleString()}</p>
             <p className="text-xs text-gray-400 font-cairo mt-1">{STATUS[k].label}</p>
           </div>
         ))}
@@ -163,7 +163,7 @@ export default function SiteFactoryPage() {
       {campaigns.length > 0 && (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
           {campaigns.map((c) => (
-            <div key={c.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
+            <div key={c.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-2 shadow-card">
               <div className="flex justify-between items-center gap-2">
                 <p className="text-white font-semibold font-cairo">{c.name}</p>
                 <span className={clsx('text-xs px-2 py-0.5 rounded', c.active ? 'bg-green-500/15 text-green-300' : 'bg-gray-800 text-gray-500')}>{c.active ? 'نشطة' : 'متوقفة'}</span>
@@ -179,10 +179,10 @@ export default function SiteFactoryPage() {
 
       {/* Tabs + filters + bulk actions */}
       <div className="space-y-3 border-b border-gray-800 pb-3">
-        <div className="flex flex-wrap gap-2">
+        <div className="scroll-strip">
           {TABS.map((t) => (
             <button key={t.k} onClick={() => { setTab(t.k); setSelected([]) }}
-              className={clsx('px-3 py-1.5 rounded-lg text-sm font-cairo', tab === t.k ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white')}>
+              className={clsx('px-3 py-1.5 rounded-lg text-sm font-cairo whitespace-nowrap shrink-0', tab === t.k ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white')}>
               {t.l}
             </button>
           ))}
@@ -225,7 +225,7 @@ export default function SiteFactoryPage() {
       ) : prospects.length === 0 ? (
         <p className="text-center text-gray-500 py-16 font-cairo">لا يوجد شيء هنا بعد</p>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl table-wrap shadow-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800 text-gray-400 text-xs font-cairo">
@@ -353,7 +353,7 @@ function NewCampaign({ onDone }: { onDone: () => void }) {
 
   const input = 'w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 font-cairo'
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 grid md:grid-cols-2 gap-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 grid md:grid-cols-2 gap-4 shadow-card">
       <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">اسم الحملة</span>
         <input className={input} value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="مصانع العاشر — دفعة 1" /></label>
       <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">الشريحة</span>
@@ -370,7 +370,7 @@ function NewCampaign({ onDone }: { onDone: () => void }) {
       </div>
       <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">InstaPay (اختياري)</span>
         <input className={input} value={f.instapay_handle} onChange={(e) => set('instapay_handle', e.target.value)} placeholder="name@instapay" dir="ltr" /></label>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
         <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">نشاطات جديدة/يوم</span>
           <input type="number" className={input} value={f.max_new_per_day} onChange={(e) => set('max_new_per_day', Number(e.target.value))} /></label>
         <label className="space-y-1"><span className="text-xs text-gray-400 font-cairo">رسائل تعريف/يوم</span>

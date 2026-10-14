@@ -108,7 +108,7 @@ function KanbanColumn({
   return (
     <div
       className={clsx(
-        'flex flex-col min-w-[230px] max-w-[260px] bg-gray-900/50 border rounded-xl overflow-hidden transition-colors',
+        'flex flex-col w-[82vw] xs:w-[260px] sm:w-auto sm:min-w-[240px] sm:max-w-[272px] snap-start shrink-0 bg-gray-900/60 border rounded-2xl overflow-hidden transition-colors shadow-card',
         column.color,
         isOver && 'ring-2 ring-gold-primary/50 bg-gold-primary/5'
       )}
@@ -211,14 +211,15 @@ export default function PipelinePage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">خط الأنابيب</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">خط الأنابيب</h1>
           <p className="text-gray-400 text-sm mt-1">Sales Pipeline — {leads.length} lead</p>
         </div>
       </div>
 
-      <div className="overflow-x-auto pb-4">
+      {/* Columns swipe with snap on phones; scroll freely on larger screens. */}
+      <div className="overflow-x-auto overscroll-x-contain pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory sm:snap-none scroll-px-4">
         <div className="flex gap-3 min-w-max">
           {COLUMNS.map((col) => (
             <KanbanColumn

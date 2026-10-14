@@ -37,6 +37,12 @@
   --scrollbar-thumb: #52525b;
   --scrollbar-thumb-hover: #71717a;
   --selection-bg: rgba(212, 212, 216, 0.25);
+
+  /* Elevation. Dark surfaces separate by tone + a hairline highlight; light surfaces by a
+     soft, layered shadow. Cards use --shadow-card, hover/raised states --shadow-raised. */
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px -6px rgb(0 0 0 / 0.6);
+  --header-bg: rgb(24 24 27 / 0.8);
 }
 
 /* Light theme — the ramp is mirrored (dark surfaces → light, light text → dark) so a
@@ -54,7 +60,7 @@
   --c-gray-700: 228 228 231;   /* borders */
   --c-gray-800: 244 244 245;   /* secondary surfaces, hover */
   --c-gray-900: 255 255 255;   /* cards, sidebar (pure white, elevated) */
-  --c-gray-950: 250 250 250;   /* page background — soft white */
+  --c-gray-950: 245 245 247;   /* page background — soft grey so white cards lift off it */
 
   /* Accent on white = graphite, so `text-gray-950` (near-white here) stays readable on it. */
   --c-accent: 39 39 42;
@@ -70,10 +76,89 @@
   --scrollbar-thumb: #d4d4d8;
   --scrollbar-thumb-hover: #a1a1aa;
   --selection-bg: rgba(39, 39, 42, 0.15);
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-raised: 0 2px 4px rgb(16 24 40 / 0.04), 0 12px 24px -8px rgb(16 24 40 / 0.12);
+  --header-bg: rgb(255 255 255 / 0.8);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   font-family: 'Inter', sans-serif;
+  /* Keep content clear of notches / home indicators on phones. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@layer base {
+  /* Form controls — one consistent, modern look everywhere without touching every page:
+     comfortable height, rounded corners, a visible focus ring. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  select,
+  textarea {
+    @apply rounded-lg transition-shadow;
+  }
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply outline-none ring-2 ring-gold-primary/40 border-gold-primary;
+  }
+  /* iOS zooms the page when a focused field's text is under 16px — keep it at 16px on
+     phones, the design size from sm up. */
+  @media (max-width: 639px) {
+    input:not([type='checkbox']):not([type='radio']),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+  button, a, [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:focus-visible, a:focus-visible, [role='button']:focus-visible {
+    @apply outline-none ring-2 ring-gold-primary/50 ring-offset-2 ring-offset-gray-950;
+  }
+  h1 { letter-spacing: -0.01em; }
+}
+
+@layer components {
+  /* Surfaces. `card` = a raised panel; `card-hover` adds the lift for clickable cards. */
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-2xl shadow-card;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-raised hover:border-gray-700 hover:-translate-y-0.5;
+  }
+  /* Tables: scroll sideways on narrow screens instead of squashing columns. */
+  .table-wrap {
+    @apply overflow-x-auto overscroll-x-contain;
+  }
+  .table-wrap > table {
+    @apply min-w-[640px];
+  }
+  .table-wrap thead th {
+    @apply text-xs font-semibold text-gray-400 bg-gray-800/40 whitespace-nowrap;
+  }
+  .table-wrap tbody tr {
+    @apply transition-colors hover:bg-gray-800/40;
+  }
+  /* Horizontal chip/tab strips that scroll on phones rather than wrapping awkwardly. */
+  .scroll-strip {
+    @apply flex gap-2 overflow-x-auto overscroll-x-contain -mx-4 px-4 sm:mx-0 sm:px-0;
+    scrollbar-width: none;
+  }
+  .scroll-strip::-webkit-scrollbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Ease the flip between light and dark so it feels intentional, not jarring. */

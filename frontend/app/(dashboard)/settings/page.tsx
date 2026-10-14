@@ -61,7 +61,7 @@ function ScraperKeysPanel() {
 
   const inp = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gold-primary'
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 shadow-card">
       <div className="flex items-center gap-2">
         <KeyRound size={18} className="text-gold-primary" />
         <h2 className="text-base font-semibold text-white font-cairo">مفاتيح مصادر الجمع (API)</h2>
@@ -122,7 +122,7 @@ function LogoPanel() {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 shadow-card">
       <div className="flex items-center gap-2">
         <ImagePlus size={18} className="text-gold-primary" />
         <h2 className="text-base font-semibold text-white font-cairo">شعار الشركة</h2>
@@ -170,7 +170,7 @@ function LanguagePanel() {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 shadow-card">
       <div className="flex items-center gap-2">
         <Languages size={18} className="text-gold-primary" />
         <h2 className="text-base font-semibold text-white font-cairo">{t('lang.title')}</h2>
@@ -178,7 +178,7 @@ function LanguagePanel() {
       <p className="text-xs text-gray-500 font-cairo -mt-2">{t('lang.desc')}</p>
       <div>
         <label className="block text-sm text-gray-300 font-cairo mb-2">{t('lang.ai')}</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
           {options.map((o) => (
             <button
               key={o.value} onClick={() => setChoice(o.value)}
@@ -268,7 +268,7 @@ function CompanyProfilePanel() {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 shadow-card">
       <div className="flex items-center gap-2">
         <Building2 size={18} className="text-gold-primary" />
         <h2 className="text-base font-semibold text-white font-cairo">بيانات الشركة</h2>
@@ -408,7 +408,7 @@ function AutomationPanel() {
   const fields = TASK_TYPES[type]?.fields || []
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-5">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-5 shadow-card">
       <h2 className="text-base font-semibold text-white font-cairo flex items-center gap-2">
         <Bot size={17} className="text-gold-primary" /> أتمتة LinkedIn وفيسبوك (إضافة المتصفح)
       </h2>
@@ -443,7 +443,7 @@ function AutomationPanel() {
       {/* New task form */}
       <div className="bg-gray-800/40 rounded-lg p-4 space-y-3">
         <p className="text-sm font-cairo text-gray-300 font-medium">إضافة مهمة جديدة</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-500 font-cairo mb-1">المنصة</label>
             <select value={platform} onChange={(e) => { const p = e.target.value as 'linkedin' | 'facebook'; setPlatform(p); setType(p === 'linkedin' ? 'linkedin_search' : 'facebook_group_watch') }}
@@ -559,7 +559,7 @@ function EmailPanel() {
   )
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 shadow-card">
       <div className="flex items-center gap-2">
         <Mail size={18} className="text-gray-400" />
         <h2 className="text-base font-semibold text-white font-cairo">نظام البريد الإلكتروني</h2>
@@ -619,12 +619,12 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">{t('settings.title')}</h1>
+        <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">{t('settings.title')}</h1>
       </div>
 
       <LanguagePanel />
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 shadow-card">
         <h2 className="text-base font-semibold text-white font-cairo">{t('settings.account')}</h2>
         <div>
           <label className="block text-sm text-gray-300 font-cairo mb-1.5">{t('settings.name')}</label>
@@ -680,7 +680,7 @@ export default function SettingsPage() {
       <ScraperKeysPanel />
 
       {/* Plan info */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3 shadow-card">
         <h2 className="text-base font-semibold text-white font-cairo">{t('settings.plan')}</h2>
         <div className="flex items-center gap-3">
           <span className="text-2xl font-bold text-gold-primary capitalize">{user?.tenant?.plan || '—'}</span>

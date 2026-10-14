@@ -49,8 +49,8 @@ function CreateModal({ sequences, onClose, onDone }: { sequences: Seq[]; onClose
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-md space-y-4 max-h-[92dvh] overflow-y-auto sm:p-6 rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-white font-cairo">حملة جديدة</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
@@ -72,7 +72,7 @@ function CreateModal({ sequences, onClose, onDone }: { sequences: Seq[]; onClose
         {/* Audience */}
         <div className="border border-gray-800 rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-gold-primary font-cairo"><Users size={13} /> الجمهور (فلتر العملاء)</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
             <select value={af.stage} onChange={(e) => setF('stage', e.target.value)} className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white font-cairo">
               {STAGE_OPTS.map((s) => <option key={s} value={s}>{s === '' ? 'كل المراحل' : STAGE_LABELS[s] || s}</option>)}
             </select>
@@ -133,9 +133,9 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo flex items-center gap-2"><Megaphone size={22} /> الحملات</h1>
+          <h1 className="text-xl font-bold text-white font-cairo flex items-center gap-2 sm:text-2xl tracking-tight"><Megaphone size={22} /> الحملات</h1>
           <p className="text-gray-400 text-sm mt-1">اربط جمهوراً بتسلسل رسائل — والمزامنة تبقيه حياً</p>
         </div>
         <button onClick={() => setCreating(true)} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg font-cairo">
@@ -152,7 +152,7 @@ export default function CampaignsPage() {
           {campaigns.map((c) => {
             const st = STATUS[c.status as keyof typeof STATUS] || STATUS.draft
             return (
-              <div key={c.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <div key={c.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="flex-1 min-w-0">
                     <div className="text-white font-medium font-cairo truncate">{c.name}</div>
@@ -173,7 +173,7 @@ export default function CampaignsPage() {
                   )}
                   <button onClick={() => { if (confirm('حذف الحملة؟ سيتوقف تسلسل رسائلها.')) act(() => campaignsApi.remove(c.id), 'تم الحذف') }} className="text-gray-500 hover:text-red-400"><Trash2 size={15} /></button>
                 </div>
-                <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-800">
+                <div className="grid grid-cols-2 xs:grid-cols-4 gap-2 pt-3 border-t border-gray-800">
                   <Stat label="مُسجَّل" value={c.stats.enrolled} />
                   <Stat label="نشط" value={c.stats.active} />
                   <Stat label="ردّ" value={c.stats.replied} />

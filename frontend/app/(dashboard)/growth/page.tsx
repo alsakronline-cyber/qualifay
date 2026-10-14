@@ -36,7 +36,7 @@ const AUTONOMY_LABEL: Record<string, string> = { full: 'وكيل كامل', copi
 
 function Stat({ label, value, icon: Icon, color }: { label: string; value: number; icon: React.ComponentType<{ size?: number; className?: string }>; color: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center shadow-card">
       <Icon size={16} className={clsx('mx-auto mb-1', color)} />
       <div className="text-xl font-bold text-white">{value}</div>
       <div className="text-[11px] text-gray-400 font-cairo">{label}</div>
@@ -79,22 +79,22 @@ export default function GrowthPage() {
       <div className="flex items-center gap-2">
         <Rocket size={22} className="text-gold-primary" />
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">النمو التلقائي</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">النمو التلقائي</h1>
           <p className="text-gray-400 text-sm font-cairo">اختر مصادرك، والنظام يجمع ويؤهّل ويبدأ التواصل تلقائياً حسب وضع التشغيل.</p>
         </div>
       </div>
 
       {/* Context: profile + plan + autonomy */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 shadow-card">
           <div className="text-xs text-gray-500 font-cairo mb-0.5">المجال / المدن</div>
           <div className="text-sm text-white font-cairo truncate">{data.profile.industry || '—'} {data.profile.cities ? `· ${data.profile.cities}` : ''}</div>
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 shadow-card">
           <div className="text-xs text-gray-500 font-cairo mb-0.5">حد الخطة الشهري</div>
           <div className="text-sm text-white font-cairo">{data.monthly_lead_limit.toLocaleString()} عميل · خطة {data.plan}</div>
         </div>
-        <Link href="/activity" className="bg-gray-900 border border-gray-800 hover:border-gold-primary/40 rounded-xl p-3 transition-colors">
+        <Link href="/activity" className="bg-gray-900 border border-gray-800 hover:border-gold-primary/40 rounded-2xl p-3 transition-colors shadow-card">
           <div className="text-xs text-gray-500 font-cairo mb-0.5">وضع التشغيل</div>
           <div className="text-sm text-gold-primary font-cairo">{AUTONOMY_LABEL[data.autonomy] || data.autonomy} ←</div>
         </Link>
@@ -132,7 +132,7 @@ export default function GrowthPage() {
       </div>
 
       {/* Derived quantity + time + activate */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center gap-4 flex-wrap">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex items-center gap-4 flex-wrap shadow-card">
         <div className="flex items-center gap-2 text-sm text-gray-300 font-cairo">
           <Zap size={15} className="text-gold-primary" />
           {selected.size ? <>~<b className="text-white">{perDay}</b> عميل/يوم لكل مصدر · <b className="text-white">{(perSource * selected.size).toLocaleString()}</b>/شهر إجمالاً</> : 'اختر مصادر لرؤية الكمية'}

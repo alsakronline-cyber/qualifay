@@ -51,10 +51,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-gray-950 flex items-center justify-center px-4 py-10">
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 pointer-events-none" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gold-primary/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,140vw)] h-[300px] bg-gold-primary/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md">
         {/* Logo / Brand */}
@@ -67,7 +67,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-raised">
           <h2 className="text-xl font-semibold text-white mb-6 font-cairo text-center">
             تسجيل الدخول / Login
           </h2>

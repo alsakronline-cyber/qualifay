@@ -89,10 +89,10 @@ export default function RegisterPage() {
   // After signup: instruct the user to confirm their email (no login until verified).
   if (sentTo) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+      <div className="relative min-h-[100dvh] overflow-hidden bg-gray-950 flex items-center justify-center px-4 py-10">
         <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 pointer-events-none" />
         <div className="relative w-full max-w-md">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl text-center">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-raised text-center">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gold-primary/15 mb-4">
               <MailCheck size={26} className="text-gold-primary" />
             </div>
@@ -117,9 +117,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 py-10">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-gray-950 flex items-center justify-center px-4 py-10">
       <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 pointer-events-none" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gold-primary/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,140vw)] h-[300px] bg-gold-primary/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
@@ -130,7 +130,7 @@ export default function RegisterPage() {
           <p className="text-gray-400 mt-1 text-sm">ابدأ تجربتك المجانية لمدة 30 يوماً</p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-raised">
           <h2 className="text-xl font-semibold text-white mb-6 font-cairo text-center">
             إنشاء حساب جديد / Create Account
           </h2>

@@ -138,6 +138,14 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const { lang } = useLang()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Escape closes the mobile drawer (keyboard + screen-reader users have no overlay to tap).
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSidebarOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [sidebarOpen])
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
@@ -278,33 +286,37 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [user, isAdmin, isPlatform, pathname, router])
 
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden">
+    // 100dvh, not 100vh: on phones the browser's toolbars would otherwise hide the bottom.
+    <div className="flex h-[100dvh] bg-gray-950 overflow-hidden">
       {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/60 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <div
+        aria-hidden="true"
+        className={clsx(
+          'fixed inset-0 z-20 bg-black/50 backdrop-blur-sm transition-opacity duration-300 lg:hidden',
+          sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        onClick={() => setSidebarOpen(false)}
+      />
 
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 right-0 z-30 w-64 bg-gray-900 border-l border-gray-800 flex flex-col transition-transform duration-300 lg:static lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+          'fixed inset-y-0 right-0 z-30 w-72 max-w-[85vw] lg:w-64 bg-gray-900 border-l border-gray-800 flex flex-col transition-transform duration-300 ease-out lg:static lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0 shadow-raised' : 'translate-x-full lg:translate-x-0'
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+        <div className="flex items-center justify-between h-16 px-5 border-b border-gray-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-primary to-gold-dark flex items-center justify-center text-gray-950 font-bold text-sm">
+            <div className="w-9 h-9 rounded-xl shadow-card bg-gradient-to-br from-gold-primary to-gold-dark flex items-center justify-center text-gray-950 font-bold text-sm">
               Q
             </div>
             <span className="font-bold text-white font-cairo text-lg">Qualifay</span>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden text-gray-400 hover:text-white"
+            aria-label={lang === 'en' ? 'Close menu' : 'إغلاق القائمة'}
+            className="lg:hidden p-2 -m-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
           >
             <X size={18} />
           </button>
@@ -328,15 +340,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                       onClick={() => setSidebarOpen(false)}
                       aria-current={active ? 'page' : undefined}
                       className={clsx(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-cairo transition-colors duration-150 group',
+                        'relative flex items-center gap-3 px-3 py-2.5 lg:py-2 rounded-xl text-sm font-cairo transition-colors duration-150 group',
                         active
-                          ? 'bg-gold-primary/10 text-gold-primary font-semibold'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                          ? 'bg-gray-800 text-white font-semibold shadow-card before:absolute before:inset-y-2 before:-start-3 before:w-1 before:rounded-e-full before:bg-gold-primary'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-800/70'
                       )}
                     >
                       <Icon
                         size={17}
-                        className={clsx('shrink-0', active ? 'text-gold-primary' : 'text-gray-500 group-hover:text-white')}
+                        className={clsx('shrink-0 transition-colors', active ? 'text-white' : 'text-gray-500 group-hover:text-white')}
                       />
                       <span className="flex-1 min-w-0 truncate">{lang === 'en' ? item.labelEn : item.label}</span>
                       {item.href === '/leads' && pendingCount > 0 && (
@@ -358,7 +370,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         {/* User */}
         {user && (
           <div className="px-3 py-3 border-t border-gray-800">
-            <div className="flex items-center gap-3 px-2 py-2 rounded-lg">
+            <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-gray-800/60 transition-colors">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-primary to-gold-dark flex items-center justify-center text-gray-950 font-bold text-xs">
                 {user.name?.charAt(0) || 'U'}
               </div>
@@ -369,7 +381,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               <button
                 onClick={handleLogout}
                 title="تسجيل الخروج"
-                className="text-gray-500 hover:text-red-400 transition-colors"
+                aria-label="تسجيل الخروج"
+                className="p-2 -m-1 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut size={16} />
               </button>
@@ -379,13 +392,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="relative z-10 h-16 bg-[var(--header-bg)] backdrop-blur-md border-b border-gray-800 px-4 sm:px-6 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden text-gray-400 hover:text-white"
+              aria-label={lang === 'en' ? 'Open menu' : 'فتح القائمة'}
+              aria-expanded={sidebarOpen}
+              className="lg:hidden p-2 -m-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
             >
               <Menu size={20} />
             </button>
@@ -401,7 +416,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <ThemeToggle />
             {/* Notifications */}
             <div className="relative" ref={notifRef}>
@@ -420,7 +435,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               </button>
 
               {notifOpen && (
-                <div className="absolute left-0 top-full mt-2 w-80 bg-gray-900 border border-gray-800 rounded-xl shadow-2xl z-50">
+                <div className="fixed inset-x-3 top-[4.25rem] sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-2 sm:w-96 bg-gray-900 border border-gray-800 rounded-2xl shadow-raised z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
                     <span className="font-semibold text-white font-cairo text-sm">الإشعارات</span>
                     <button
@@ -434,7 +449,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                       تحديد الكل كمقروء
                     </button>
                   </div>
-                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-800">
+                  <div className="max-h-[60dvh] sm:max-h-96 overflow-y-auto overscroll-contain divide-y divide-gray-800">
                     {notifications.length === 0 ? (
                       <p className="text-center text-gray-500 py-6 text-sm font-cairo">لا توجد إشعارات</p>
                     ) : (
@@ -471,15 +486,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
         {/* Impersonation banner — visible while the owner is "viewing as" a company. */}
         {impersonating && (
-          <div className="bg-gold-primary text-gray-950 px-4 py-2 flex items-center justify-center gap-3 text-sm font-cairo shrink-0">
+          <div className="bg-gold-primary text-gray-950 px-4 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm font-cairo shrink-0">
             <span>أنت تتصفّح كـ <b>{impersonating}</b> (وضع المالك)</span>
             <button onClick={exitImpersonation} className="underline font-semibold">العودة لحساب المالك ←</button>
           </div>
         )}
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {children}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
         </main>
       </div>
     </div>

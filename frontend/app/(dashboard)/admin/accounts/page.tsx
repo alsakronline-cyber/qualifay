@@ -22,8 +22,8 @@ function PwModal({ acct, onClose }: { acct: Acct; onClose: () => void }) {
     finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-sm space-y-3 sm:p-6 max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between"><h3 className="font-semibold text-white font-cairo">كلمة مرور جديدة</h3><button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button></div>
         <p className="text-xs text-gray-400 font-cairo" dir="ltr">{acct.email}</p>
         <input type="text" dir="ltr" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="كلمة المرور الجديدة"
@@ -56,7 +56,7 @@ export default function AdminAccountsPage() {
     <div className="space-y-5 max-w-5xl">
       <div className="flex items-center gap-2">
         <UsersRound size={20} className="text-gold-primary" />
-        <div><h1 className="text-2xl font-bold text-white font-cairo">الحسابات</h1><p className="text-gray-400 text-sm font-cairo">كل مستخدمي المنصة</p></div>
+        <div><h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">الحسابات</h1><p className="text-gray-400 text-sm font-cairo">كل مستخدمي المنصة</p></div>
       </div>
 
       <div className="relative max-w-sm">
@@ -68,7 +68,7 @@ export default function AdminAccountsPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" /></div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl divide-y divide-gray-800">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800 shadow-card">
           {accts.map((a) => {
             const rb = roleBadge(a); const RI = rb.I
             const suspended = a.status === 'suspended'; const unverified = a.status === 'unverified'

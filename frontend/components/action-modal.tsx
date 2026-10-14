@@ -45,8 +45,8 @@ export default function ActionModal({ conversationId, onClose, onDone }: { conve
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-5 space-y-4 max-h-[92dvh] overflow-y-auto sm:p-6 rounded-b-none sm:rounded-b-2xl shadow-raised pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-white font-cairo">إجراء تحويل</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>

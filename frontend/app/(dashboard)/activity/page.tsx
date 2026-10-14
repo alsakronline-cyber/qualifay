@@ -33,7 +33,7 @@ function AutonomyControl() {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
       <h2 className="text-sm font-bold text-white font-cairo mb-1">وضع التشغيل التلقائي</h2>
       <p className="text-xs text-gray-500 font-cairo mb-3">يتحكّم في مدى تصرّف النظام نيابةً عنك. اختر «متوقّف» لإيقاف كل شيء.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -131,9 +131,9 @@ export default function ActivityPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo flex items-center gap-2"><Sparkles size={22} /> نشاط المساعد الذكي</h1>
+          <h1 className="text-xl font-bold text-white font-cairo flex items-center gap-2 sm:text-2xl tracking-tight"><Sparkles size={22} /> نشاط المساعد الذكي</h1>
           <p className="text-gray-400 text-sm mt-1">ماذا فعل نظامك تلقائياً — كل دورة قرار مسجّلة</p>
         </div>
         <button onClick={runNow} disabled={running} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg disabled:opacity-50 font-cairo">
@@ -159,7 +159,7 @@ export default function ActivityPage() {
               return (
                 <div key={r.id} className="relative pr-6">
                   <div className={clsx('absolute right-0 top-3 w-3 h-3 rounded-full border-2 border-gray-950', st.cls.split(' ')[1])} />
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={clsx('inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-cairo', st.cls)}>
                         <Icon size={11} /> {st.label}

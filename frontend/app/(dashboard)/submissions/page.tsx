@@ -37,7 +37,7 @@ export default function SubmissionsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">الطلبات والحجوزات</h1>
+        <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">الطلبات والحجوزات</h1>
         <p className="text-gray-400 text-sm mt-1">Conversions — الحجوزات والطلبات وعروض الأسعار المؤكدة</p>
       </div>
 
@@ -50,7 +50,7 @@ export default function SubmissionsPage() {
           <p className="text-xs text-gray-600 mt-1">أنشئ إجراءً من داخل المحادثة (زر "إجراء")</p>
         </div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl table-wrap shadow-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800">

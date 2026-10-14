@@ -62,7 +62,7 @@ export default function AdminCompaniesPage() {
       <div className="flex items-center gap-2">
         <Building2 size={20} className="text-gold-primary" />
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">الشركات</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">الشركات</h1>
           <p className="text-gray-400 text-sm font-cairo">{tenants.length} شركة على المنصة</p>
         </div>
       </div>

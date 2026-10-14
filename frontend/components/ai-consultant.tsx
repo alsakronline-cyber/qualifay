@@ -100,7 +100,7 @@ export default function AIConsultant() {
         </div>
 
         {draft.icp?.summary && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
             <div className="text-xs font-bold text-gold-primary font-cairo mb-1">العميل المثالي</div>
             <p className="text-sm text-gray-300 font-cairo">{draft.icp.summary}</p>
           </div>
@@ -123,7 +123,7 @@ export default function AIConsultant() {
           </div>
         </Section>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
           {draft.flow?.type && <MiniCard icon={<CalendarCheck size={15} />} label="مسار التحويل" value={draft.flow.type} />}
           {draft.ab_test && <MiniCard icon={<FlaskConical size={15} />} label="اختبار A/B" value="افتتاحيتان" />}
         </div>
@@ -230,7 +230,7 @@ export default function AIConsultant() {
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-2 shadow-card">
       <div className="flex items-center gap-1.5 text-xs font-bold text-gold-primary font-cairo">{icon} {title}</div>
       {children}
     </div>
@@ -239,7 +239,7 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 
 function MiniCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex items-center gap-2">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 flex items-center gap-2 shadow-card">
       <div className="text-gold-primary">{icon}</div>
       <div><div className="text-[11px] text-gray-500 font-cairo">{label}</div><div className="text-sm text-white font-cairo">{value}</div></div>
     </div>

@@ -14,9 +14,9 @@ interface Analytics {
 
 function KPI({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
       <div className="flex items-center gap-2 text-gray-400 text-xs font-cairo mb-1.5">{icon}{label}</div>
-      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="text-xl font-bold text-white sm:text-2xl tracking-tight">{value}</div>
       {sub && <div className="text-[11px] text-gray-500 font-cairo mt-0.5">{sub}</div>}
     </div>
   )
@@ -46,7 +46,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white font-cairo">التحليلات</h1>
+        <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">التحليلات</h1>
         <p className="text-gray-400 text-sm mt-1">Analytics — أداء التحويل عبر القنوات والمراحل</p>
       </div>
 
@@ -59,7 +59,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Funnel */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
         <h2 className="text-sm font-semibold text-white font-cairo mb-4">قمع التحويل</h2>
         <div className="space-y-2.5">
           {FUNNEL.map((s) => (
@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
         ].map((c) => {
           const d = data.channels[c.key]
           return (
-            <div key={c.key} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div key={c.key} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
               <div className="flex items-center gap-2 mb-3">{c.icon}<h3 className="font-semibold text-white font-cairo">{c.label}</h3></div>
               <div className="text-3xl font-bold text-white">{d.reply_rate}%</div>
               <p className="text-xs text-gray-500 font-cairo mt-1">معدل الرد · {d.replied} من {d.conversations} محادثة</p>
@@ -92,7 +92,7 @@ export default function AnalyticsPage() {
           )
         })}
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
           <div className="flex items-center gap-2 mb-3"><GitBranch size={15} className="text-gold-primary" /><h3 className="font-semibold text-white font-cairo">التسلسلات</h3></div>
           <div className="space-y-1.5 text-sm font-cairo">
             <div className="flex justify-between"><span className="text-gray-400">جارٍ</span><span className="text-white">{data.sequences.active || 0}</span></div>
@@ -103,7 +103,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Reachability */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-card">
         <h2 className="text-sm font-semibold text-white font-cairo mb-3">إمكانية الوصول (واتساب)</h2>
         <div className="grid grid-cols-3 gap-3 text-center">
           <div><div className="text-xl font-bold text-wa-green">{data.reachability.on_whatsapp}</div><div className="text-[11px] text-gray-500 font-cairo">على واتساب</div></div>

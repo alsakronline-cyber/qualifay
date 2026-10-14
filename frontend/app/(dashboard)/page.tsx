@@ -27,7 +27,7 @@ function AttentionCard({ href, icon: I, count, title, cta, tone }: {
   href: string; icon: Icon; count: number | string; title: string; cta: string; tone: string
 }) {
   return (
-    <Link href={href} className={clsx('group flex items-center gap-3 rounded-xl border p-4 transition-colors hover:bg-gray-800/60', tone)}>
+    <Link href={href} className={clsx('group flex items-center gap-3 rounded-2xl border bg-gray-900 p-4 shadow-card transition-all duration-200 hover:shadow-raised hover:-translate-y-0.5', tone)}>
       <I size={20} className="shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-white font-cairo">
@@ -43,13 +43,13 @@ function AttentionCard({ href, icon: I, count, title, cta, tone }: {
 function Meter({ icon: I, label, sent, limit, empty }: { icon: Icon; label: string; sent: number; limit: number; empty: string }) {
   const pct = limit > 0 ? Math.min(100, (sent / limit) * 100) : 0
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
       <div className="flex items-center gap-2 text-sm text-gray-400 font-cairo">
         <I size={16} /> {label}
       </div>
       {limit > 0 ? (
         <>
-          <div className="mt-2 text-2xl font-bold text-white">
+          <div className="mt-2 text-xl font-bold text-white sm:text-2xl tracking-tight">
             {sent}<span className="text-sm text-gray-500 font-normal"> / {limit}</span>
           </div>
           <div className="mt-2 h-1.5 bg-gray-800 rounded-full overflow-hidden" role="progressbar"
@@ -165,7 +165,7 @@ export default function DashboardPage() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">لوحة التحكم</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">لوحة التحكم</h1>
           <p className="text-sm text-gray-400 font-cairo mt-1">ما يحتاج انتباهك، وما أنجزه النظام اليوم.</p>
         </div>
         {trialDays !== null && trialDays >= 0 && trialDays <= 30 && (
@@ -181,7 +181,7 @@ export default function DashboardPage() {
       <section aria-labelledby="att">
         <h2 id="att" className="text-sm font-bold text-gray-300 font-cairo mb-3">يحتاج انتباهك</h2>
         {allClear ? (
-          <div className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
             <PartyPopper size={20} className="text-green-400" />
             <p className="text-sm text-gray-300 font-cairo">كل شيء تحت السيطرة — لا توجد مهام بانتظارك الآن.</p>
           </div>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
             empty={numbers.length ? 'لا توجد أرقام جاهزة لإرسال الحملات اليوم.' : 'لم يتم ربط أي رقم بعد.'} />
           <Meter icon={Mail} label="رسائل البريد" sent={today.email_sent} limit={today.email_limit}
             empty="لم يتم ربط حساب بريد بعد." />
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
             <div className="flex items-center gap-2 text-sm text-gray-400 font-cairo"><Clock size={16} /> الإرسال القادم</div>
             <div className="mt-2 text-lg font-bold text-white font-cairo">{cairoTime(today.next_run)}</div>
             <p className="mt-1 text-xs text-gray-500 font-cairo">بتوقيت القاهرة، برسائل متباعدة وبالحدود الآمنة.</p>
@@ -221,7 +221,7 @@ export default function DashboardPage() {
 
       <div className="grid lg:grid-cols-5 gap-6">
         {/* This week's results */}
-        <section aria-labelledby="week" className="lg:col-span-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <section aria-labelledby="week" className="lg:col-span-3 bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
           <div className="flex items-baseline justify-between mb-4">
             <h2 id="week" className="text-sm font-bold text-white font-cairo">نتائج آخر 7 أيام</h2>
             {week.contacted > 0 && <span className="text-xs text-gray-400 font-cairo">نسبة الرد {replyRate}%</span>}
@@ -234,7 +234,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Numbers health */}
-        <section aria-labelledby="nums" className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <section aria-labelledby="nums" className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
           <div className="flex items-center justify-between mb-3">
             <h2 id="nums" className="text-sm font-bold text-white font-cairo">أرقام واتساب</h2>
             <Link href="/instances" className="text-xs text-gold-primary hover:underline font-cairo">إدارة</Link>
@@ -246,7 +246,7 @@ export default function DashboardPage() {
           ) : (
             <ul className="divide-y divide-gray-800">
               {numbers.map((n) => {
-                const s = NUMBER_STATE[n.state]
+                const s = NUMBER_STATE[n.state] ?? NUMBER_STATE.disconnected
                 return (
                   <li key={n.id} className="py-2.5">
                     <div className="flex items-center justify-between gap-2">

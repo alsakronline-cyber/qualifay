@@ -126,7 +126,7 @@ export default function LeadReviewCard({
       tabIndex={0}
       onKeyDown={onKeyDown}
       aria-label={`مراجعة ${lead.company || lead.name || 'عميل'} — A قبول، R رفض، M يدوي`}
-      className={clsx('bg-gray-900 border rounded-xl p-4 space-y-3 transition-colors focus:outline-none focus:ring-2 focus:ring-gold-primary/60',
+      className={clsx('bg-gray-900 border rounded-2xl p-4 sm:p-5 space-y-3 shadow-card transition-all duration-200 hover:shadow-raised focus:outline-none focus:ring-2 focus:ring-gold-primary/60',
         selected ? 'border-gold-primary/60' : 'border-gray-800 hover:border-gray-700')}
     >
       {/* Header row */}
@@ -157,7 +157,7 @@ export default function LeadReviewCard({
           <div className="text-sm text-gray-400 mt-0.5 font-cairo">
             {[lead.industry, lead.city, lead.company_size].filter(Boolean).join(' · ')}
           </div>
-          <div className="flex gap-1.5 mt-1.5">
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
             {reach.length ? reach.map((r) => (
               <span key={r.label} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 font-cairo">✓ {r.label}</span>
             )) : <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-cairo">لا توجد وسيلة تواصل</span>}
@@ -262,11 +262,11 @@ export default function LeadReviewCard({
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-2 pt-1">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
         <button
           onClick={handleApprove}
           disabled={loading !== null}
-          className="flex-1 flex items-center justify-center gap-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
+          className="col-span-2 sm:col-span-1 flex-1 flex items-center justify-center gap-1.5 whitespace-nowrap bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl py-2.5 sm:py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
         >
           {loading === 'approve' ? (
             <span className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
@@ -280,7 +280,7 @@ export default function LeadReviewCard({
           onClick={() => handleReject()}
           disabled={loading !== null}
           className={clsx(
-            'flex-1 flex items-center justify-center gap-1.5 border rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo',
+            'flex-1 flex items-center justify-center gap-1.5 border rounded-xl py-2.5 sm:py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo',
             rejectMode
               ? 'bg-red-500/20 text-red-400 border-red-500/50'
               : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30'
@@ -298,7 +298,7 @@ export default function LeadReviewCard({
           onClick={handleManual}
           disabled={loading !== null}
           title="ينتقل العميل لمسار المبيعات وتتواصل معه بنفسك — بدون رسائل تلقائية"
-          className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
+          className="flex-1 flex items-center justify-center gap-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-xl py-2.5 sm:py-2 text-sm font-semibold transition-colors disabled:opacity-50 font-cairo"
         >
           {loading === 'manual' ? (
             <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />

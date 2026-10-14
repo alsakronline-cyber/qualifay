@@ -12,7 +12,7 @@ import type { Conversation, Message, WaInstance } from '@/lib/types'
 import { PIPELINE_STAGES } from '@/lib/stages'
 import { renderTemplate } from '@/lib/templates'
 import ActionModal from '@/components/action-modal'
-import { CalendarCheck } from 'lucide-react'
+import { CalendarCheck, ArrowRight } from 'lucide-react'
 
 function MediaBubble({ conversationId, message }: { conversationId: string; message: Message }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -179,9 +179,9 @@ function ComposeModal({ onClose, onSent }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden max-h-[92dvh] overflow-y-auto rounded-b-none sm:rounded-b-2xl shadow-raised pb-[env(safe-area-inset-bottom)] sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800">
@@ -595,9 +595,10 @@ export default function InboxPage() {
   }, [selectedId, editedSuggestion, selectedConv, mutateMsgs, mutateConvs])
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
+    // Phone: one pane at a time (list, or the open thread with a back button). md+: side by side.
+    <div className="flex h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-8rem)] lg:h-[calc(100dvh-9rem)] -mx-4 -my-1 sm:m-0 overflow-hidden sm:rounded-2xl border-y sm:border border-gray-800 bg-gray-900 shadow-card">
       {/* Conversation list */}
-      <div className="w-72 shrink-0 border-l border-gray-800 flex flex-col overflow-hidden">
+      <div className={clsx('w-full md:w-72 lg:w-80 shrink-0 md:border-l border-gray-800 flex-col overflow-hidden', selectedId ? 'hidden md:flex' : 'flex')}>
         <div className="px-4 py-3 border-b border-gray-800">
           <div className="flex items-center justify-between gap-2">
             <div>
@@ -746,10 +747,18 @@ export default function InboxPage() {
 
       {/* Message thread */}
       {selectedConv ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Thread header */}
-          <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-            <div>
+          <div className="px-3 sm:px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                onClick={() => setSelectedId(null)}
+                aria-label="رجوع إلى المحادثات"
+                className="md:hidden p-2 -m-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 shrink-0"
+              >
+                <ArrowRight size={18} className="ltr:rotate-180" />
+              </button>
+            <div className="min-w-0">
               {editingName ? (
                 <div className="flex items-center gap-1.5">
                   <input
@@ -802,20 +811,21 @@ export default function InboxPage() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            </div>
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               {/* Conversion action: book / order / quote / callback for this chat. */}
               <button
                 onClick={() => setShowAction(true)}
                 title="إجراء تحويل (حجز/طلب/عرض)"
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-gold-primary/30 bg-gold-primary/10 text-gold-primary hover:bg-gold-primary/20 transition-colors font-cairo"
               >
-                <CalendarCheck size={13} /> إجراء
+                <CalendarCheck size={13} /> <span className="hidden sm:inline">إجراء</span>
               </button>
               {/* Pipeline phase for this chat — empty until the user (or AI sync) sets one. */}
               <select
                 value={PIPELINE_STAGES.some((s) => s.value === selectedConv.stage) ? selectedConv.stage : ''}
                 onChange={(e) => handleSetStage(e.target.value)}
-                className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-200 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo cursor-pointer"
+                className="max-w-[7rem] sm:max-w-none text-xs px-2 sm:px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-200 focus:outline-none focus:ring-1 focus:ring-gold-primary font-cairo cursor-pointer"
               >
                 <option value="" disabled>المرحلة…</option>
                 {PIPELINE_STAGES.map((s) => (
@@ -832,7 +842,8 @@ export default function InboxPage() {
                 )}
               >
                 {selectedConv.ai_enabled ? <Bot size={12} /> : <BotOff size={12} />}
-                {selectedConv.ai_enabled ? 'ذكاء اصطناعي: تفعيل' : 'ذكاء اصطناعي: إيقاف'}
+                <span className="hidden sm:inline">{selectedConv.ai_enabled ? 'ذكاء اصطناعي: تفعيل' : 'ذكاء اصطناعي: إيقاف'}</span>
+                <span className="sm:hidden">AI</span>
               </button>
             </div>
           </div>
@@ -857,7 +868,7 @@ export default function InboxPage() {
                 </button>
                 <div
                   className={clsx(
-                    'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm relative shadow-sm',
+                    'max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 sm:px-4 py-2.5 text-sm relative shadow-sm break-words',
                     msg.direction === 'outbound'
                       ? 'bubble-out rounded-tr-sm'
                       : 'bubble-in rounded-tl-sm'
@@ -1071,7 +1082,7 @@ export default function InboxPage() {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-gray-600">
+        <div className="hidden md:flex flex-1 items-center justify-center text-gray-600">
           <div className="text-center">
             <MessageSquare size={48} className="mx-auto mb-3 text-gray-700" />
             <p className="font-cairo">اختر محادثة لعرضها</p>

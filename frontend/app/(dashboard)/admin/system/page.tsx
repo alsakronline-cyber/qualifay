@@ -36,11 +36,11 @@ export default function AdminSystemPage() {
     <div className="space-y-5 max-w-4xl">
       <div className="flex items-center gap-2">
         <Activity size={20} className="text-gold-primary" />
-        <div><h1 className="text-2xl font-bold text-white font-cairo">صحة النظام</h1><p className="text-gray-400 text-sm font-cairo">حالة الخدمات والنسخ الاحتياطي</p></div>
+        <div><h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">صحة النظام</h1><p className="text-gray-400 text-sm font-cairo">حالة الخدمات والنسخ الاحتياطي</p></div>
       </div>
 
       {/* Services */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-card">
         <Row icon={Database} label="قاعدة البيانات" value={String(s.database ?? '…')} ok={okStr(s.database)} />
         <Row icon={Server} label="Redis" value={String(s.redis ?? '…')} ok={okStr(s.redis)} />
         <Row icon={Smartphone} label="بوابة واتساب (Evolution)" value={String(s.evolution_api ?? '…')} ok={okStr(s.evolution_api)} />
@@ -48,7 +48,7 @@ export default function AdminSystemPage() {
 
       {/* Backup + disk */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2"><DatabaseBackup size={16} className="text-gold-primary" /><h2 className="text-sm font-bold text-white font-cairo">آخر نسخة احتياطية</h2></div>
           {bk && bk.at ? (
             <div className="text-sm text-gray-300 font-cairo space-y-0.5">
@@ -57,7 +57,7 @@ export default function AdminSystemPage() {
             </div>
           ) : <div className="text-sm text-red-400 font-cairo">لا توجد نسخة احتياطية!</div>}
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2"><HardDrive size={16} className="text-gold-primary" /><h2 className="text-sm font-bold text-white font-cairo">القرص</h2></div>
           {s.disk ? (
             <>
@@ -72,7 +72,7 @@ export default function AdminSystemPage() {
 
       {/* Plans */}
       {plans && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-card">
           <div className="flex items-center gap-2 mb-3"><CreditCard size={16} className="text-gold-primary" /><h2 className="text-sm font-bold text-white font-cairo">الخطط</h2>
             <span className="text-xs text-gray-500 mr-auto font-cairo">{plans.paying_tenants} مدفوعة · {plans.trial_tenants} تجربة</span></div>
           <div className="flex flex-wrap gap-2">
@@ -86,7 +86,7 @@ export default function AdminSystemPage() {
       {/* Platform WhatsApp instances */}
       <div>
         <div className="flex items-center gap-2 mb-2"><Smartphone size={16} className="text-gold-primary" /><h2 className="text-sm font-bold text-white font-cairo">أجهزة واتساب (كل المنصة)</h2></div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl divide-y divide-gray-800">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800 shadow-card">
           {instances.map((i) => {
             const connected = ['connected', 'open'].includes(i.status)
             return (

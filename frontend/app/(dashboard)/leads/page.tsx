@@ -246,9 +246,9 @@ function LeadsContent() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">العملاء المحتملون</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">العملاء المحتملون</h1>
           <p className="text-gray-400 text-sm mt-1">Leads Management</p>
         </div>
         <div className="flex items-center gap-2">
@@ -265,7 +265,7 @@ function LeadsContent() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1 w-full sm:w-fit overflow-x-auto shadow-card" role="tablist">
         {([
           { key: 'review', label: 'طابور المراجعة', badge: reviewLeads.length },
           { key: 'all', label: 'كل العملاء' },
@@ -275,7 +275,7 @@ function LeadsContent() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={clsx(
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all font-cairo',
+              'flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all font-cairo',
               tab === t.key
                 ? 'bg-gold-primary text-gray-950 font-semibold'
                 : 'text-gray-400 hover:text-white'
@@ -492,7 +492,7 @@ function LeadsContent() {
               <div className="w-8 h-8 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl table-wrap shadow-card">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
@@ -616,7 +616,7 @@ function LeadsContent() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {poolLeads.map((lead) => (
-                <div key={lead.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+                <div key={lead.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3 shadow-card">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="font-semibold text-white font-cairo">{lead.company || lead.name}</h3>

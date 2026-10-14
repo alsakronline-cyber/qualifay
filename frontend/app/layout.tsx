@@ -1,10 +1,20 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Toaster } from 'react-hot-toast'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Qualifay — نظام إدارة العملاء المحتملين',
   description: 'AI-powered lead qualification and WhatsApp CRM platform',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',  // lets env(safe-area-inset-*) pad around notches
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f5f5f7' },
+    { media: '(prefers-color-scheme: dark)', color: '#09090b' },
+  ],
 }
 
 export default function RootLayout({
@@ -24,7 +34,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-gray-950 text-gray-100 font-cairo antialiased min-h-screen">
+      <body className="bg-gray-950 text-gray-100 font-cairo antialiased min-h-[100dvh]">
         {children}
         <Toaster
           position="top-center"

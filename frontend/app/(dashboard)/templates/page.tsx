@@ -60,16 +60,16 @@ function Editor({ initial, onClose, onSaved }: { initial?: Template; onClose: ()
   const showSubject = f.channel !== 'whatsapp'
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-3xl max-h-[92dvh] overflow-hidden flex flex-col rounded-b-none sm:rounded-b-2xl shadow-raised pb-[env(safe-area-inset-bottom)] sm:pb-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <h3 className="font-semibold text-white font-cairo">{f.id ? 'تعديل القالب' : 'قالب جديد'}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 flex-1 overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 flex-1 overflow-y-auto md:overflow-hidden">
           {/* Editor */}
-          <div className="p-6 space-y-4 overflow-y-auto border-l border-gray-800">
+          <div className="p-5 sm:p-6 space-y-4 md:overflow-y-auto border-b md:border-b-0 md:border-l border-gray-800">
             <div>
               <label className="block text-xs text-gray-400 font-cairo mb-1.5">اسم القالب</label>
               <input value={f.name} onChange={(e) => set('name', e.target.value)} dir="rtl"
@@ -152,9 +152,9 @@ export default function TemplatesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white font-cairo">القوالب</h1>
+          <h1 className="text-xl font-bold text-white font-cairo sm:text-2xl tracking-tight">القوالب</h1>
           <p className="text-gray-400 text-sm mt-1">Templates — رسائل جاهزة للواتساب والبريد، سهلة التعديل</p>
         </div>
         <button onClick={() => setCreating(true)} className="flex items-center gap-1.5 bg-gold-primary text-gray-950 font-semibold text-sm px-4 py-2 rounded-lg font-cairo">
@@ -167,7 +167,7 @@ export default function TemplatesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {templates.map((t) => (
-            <div key={t.id} className="group bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col hover:border-gray-700 transition-colors">
+            <div key={t.id} className="group bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col hover:border-gray-700 transition-colors shadow-card">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h3 className="font-semibold text-white font-cairo truncate">{t.name}</h3>
                 <ChannelBadge channel={t.channel} />
