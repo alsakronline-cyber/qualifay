@@ -378,9 +378,11 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
     # blocked every send for tenants that only have their own mailbox configured.
     from app.services.email_account_service import pick_account, record_account_send
     account = await pick_account(lead.tenant_id, db)
-    if not account and not email_service.is_configured():
-        logger.warning("Email outreach requested but no sender is configured")
-        return {"error": "smtp_not_configured"}
+    if not account:
+        # Outreach goes ONLY from the tenant's own mailbox. The system SMTP belongs to the
+        # platform; using it would email a client's prospects from another company's address.
+        logger.warning(f"Email outreach for tenant {lead.tenant_id} skipped: no email account connected")
+        return {"error": "no_tenant_email_account"}
 
     # Consent compliance (Law 151) — identical gate to the WhatsApp path, including the
     # opt-in exception: the first message to a lead staged as an opt-in request IS the

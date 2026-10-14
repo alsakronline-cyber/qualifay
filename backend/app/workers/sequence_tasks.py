@@ -85,12 +85,10 @@ async def _send_email(db, lead, subject, body) -> bool:
             await email_service.send_via_account(account, lead.email, subject, body)
             await record_account_send(account, db)
         else:
-            allowed, _, _ = await warmup_service.check_email_limit(lead.tenant_id, db)
-            if not allowed:
-                return False
-            await email_service.send(lead.email, subject, body)
-            await warmup_service.increment_email_sent(lead.tenant_id)
-            await warmup_service.mark_email_started(lead.tenant_id, db)
+            # Never from the platform's system mailbox — a client's prospects must only hear
+            # from the client's own address. Wait until the tenant connects a mailbox.
+            logger.info(f"sequence email for lead {lead.id} skipped: tenant has no email account")
+            return False
     except Exception as e:
         logger.warning(f"sequence email send failed for lead {lead.id}: {e}")
         return False
