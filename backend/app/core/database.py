@@ -1,5 +1,6 @@
 import logging
 import sys
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
@@ -48,75 +49,48 @@ async def get_db():
             await session.close()
 
 
-# Additive columns that were introduced after their tables already existed in
-# production. create_all() only creates missing TABLES, never adds columns to an
-# existing one, so these are applied idempotently on every startup (Postgres
-# ADD COLUMN IF NOT EXISTS). Keep this list append-only.
-_ENSURE_COLUMNS = [
-    ("site_factory_campaigns", "service_prices", "JSON"),
-    ("site_prospects", "score", "INTEGER"),
-    ("site_prospects", "score_reasons", "JSON"),
-    ("site_prospects", "services", "JSON"),
-    ("site_prospects", "assigned_to", "VARCHAR"),
-    ("site_prospects", "design", "JSON"),
-    ("campaigns", "sequence_id", "VARCHAR"),
-    ("campaigns", "audience_filter", "JSON"),
-    ("campaigns", "instance_ids", "JSON"),
-    ("campaigns", "auto_enroll", "BOOLEAN DEFAULT false"),
-    ("sequence_enrollments", "campaign_id", "VARCHAR"),
-    # Added mid-session to pre-existing tables; missing on the production DB (its
-    # tables predate these features), which silently broke email routing/warmup there.
-    ("conversations", "channel", "VARCHAR DEFAULT 'whatsapp'"),
-    ("conversations", "last_message_at", "TIMESTAMP"),
-    ("messages", "attachments", "JSON"),
-    ("tenants", "email_started_at", "TIMESTAMP"),
-    ("tenants", "tenant_profile", "JSON"),
-    ("tenants", "autonomy", "VARCHAR DEFAULT 'copilot'"),
-    ("tenants", "onboarding_done", "BOOLEAN DEFAULT false"),
-    ("users", "status", "VARCHAR DEFAULT 'active'"),
-    ("tenants", "status", "VARCHAR DEFAULT 'active'"),
-    ("leads", "verified_real", "BOOLEAN"),
-    ("tenants", "ai_language", "VARCHAR DEFAULT 'ar'"),
-    ("sales_docs", "payment_terms", "TEXT"),
-    ("tenants", "scraper_keys_enc", "TEXT"),
-    ("wa_instances", "wa_cap_override", "INTEGER"),
-    ("email_accounts", "sent_total", "INTEGER DEFAULT 0"),
-    ("email_accounts", "bounce_total", "INTEGER DEFAULT 0"),
-    ("email_accounts", "last_bounce_at", "TIMESTAMP"),
-]
+# ─── Schema ──────────────────────────────────────────────────
+# The schema is owned by Alembic (backend/alembic/versions). It is migrated once per deploy,
+# before uvicorn starts (`alembic upgrade head` in the backend command), never from inside
+# the running app: boot-time create_all()/ALTER TABLE queued behind live workers' locks and
+# crash-looped deploys. New columns/tables → `alembic revision --autogenerate -m "..."`.
 
-# Enum values added to native PG enums after they were first created. create_all()
-# never alters an existing enum type, so new members are applied idempotently on
-# startup (PG12+ supports ADD VALUE IF NOT EXISTS). Keep append-only.
-_ENSURE_ENUM_VALUES = [
-    ("notificationtype", "missed_followup"),
-    ("leadsource", "inbound_email"),
-]
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _alembic_config():
+    from alembic.config import Config
+    cfg = Config(str(_BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_BACKEND_DIR / "alembic"))
+    return cfg
+
+
+def migrate_to_head() -> None:
+    """Run `alembic upgrade head` (sync). For scripts and one-off setup, not app startup."""
+    from alembic import command
+    command.upgrade(_alembic_config(), "head")
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Cap lock waits so a stuck session can never hang boot indefinitely (one once did,
-        # holding locks and bricking every restart). Fail-fast → visible crash-loop instead.
-        await conn.execute(text("SET lock_timeout = '10s'"))
-        # ALTER TABLE takes an exclusive lock even when IF NOT EXISTS makes it a no-op, so on a
-        # live system every boot queued behind the workers' locks and could time out (failed
-        # deploys, rolled back). Only alter tables whose column is genuinely missing.
-        existing = {(t, c) for t, c in (await conn.execute(text(
-            "SELECT table_name, column_name FROM information_schema.columns "
-            "WHERE table_schema = current_schema()"))).all()}
-        for table, col, coltype in _ENSURE_COLUMNS:
-            if (table, col) not in existing:
-                await conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {coltype}'))
-    # Enum ADD VALUE must run OUTSIDE a transaction block (Postgres won't let a new enum
-    # label be added and used within the same tx), so use an autocommit connection.
-    # Best-effort per value: a lock/timeout here degrades one feature, it must not brick boot.
-    async with engine.connect() as conn:
-        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
-        await conn.execute(text("SET lock_timeout = '10s'"))
-        for enum_name, value in _ENSURE_ENUM_VALUES:
-            try:
-                await conn.execute(text(f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{value}'"))
-            except Exception as e:
-                logger.warning("enum ensure failed (%s += %s): %s", enum_name, value, e)
+    """Bring the database to the latest schema (for setup scripts). Runs Alembic in a
+    worker thread because its env.py drives its own sync engine."""
+    import asyncio
+    await asyncio.to_thread(migrate_to_head)
+
+
+async def check_schema() -> bool:
+    """Read-only: is the database at the Alembic head? Logged loudly if not — the app still
+    starts (it may be mid-deploy), but a behind schema means `alembic upgrade head` was skipped."""
+    from alembic.script import ScriptDirectory
+    heads = set(ScriptDirectory.from_config(_alembic_config()).get_heads())
+    try:
+        async with engine.connect() as conn:
+            current = {r[0] for r in (await conn.execute(text("SELECT version_num FROM alembic_version"))).all()}
+    except Exception as e:
+        logger.error("Database schema is not under Alembic yet (%s) — run `alembic upgrade head`", e)
+        return False
+    if current != heads:
+        logger.error("Database schema is at %s, code expects %s — run `alembic upgrade head`",
+                     sorted(current), sorted(heads))
+        return False
+    return True

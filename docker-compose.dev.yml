@@ -60,7 +60,7 @@ services:
       dockerfile: Dockerfile
     platform: linux/arm64
     container_name: qualifay_backend_dev
-    command: uvicorn app.main:app --host 0.0.0.0 --port 5001 --workers 1 --reload
+    command: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 5001 --workers 1 --reload"
     restart: unless-stopped
     network_mode: host
     env_file:

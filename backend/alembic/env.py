@@ -1,12 +1,13 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 import os
 
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep the app's loggers alive when migrations run in-process (init_db in scripts).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Import all models so Base.metadata is populated
 from app.models.models import Base  # noqa: F401 - this registers all models
@@ -40,6 +41,10 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Fail fast instead of queueing forever behind a worker's lock (a stuck boot-time
+        # ALTER once bricked every restart). A timeout fails the deploy visibly; rerun it.
+        connection.execute(text("SET lock_timeout = '10s'"))
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

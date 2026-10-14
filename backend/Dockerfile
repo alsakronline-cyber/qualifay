@@ -33,4 +33,4 @@ RUN mkdir -p /app/media /app/logs
 
 EXPOSE 5000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "2"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 5000 --workers 2"]

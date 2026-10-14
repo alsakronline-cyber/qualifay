@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.database import init_db, AsyncSessionLocal
+from app.core.database import check_schema, AsyncSessionLocal
 from app.api.router import api_router
 
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Qualifay backend...")
-    await init_db()
+    # Schema is migrated before startup (alembic upgrade head), never here — see database.py.
+    await check_schema()
     await _seed_admin()
     logger.info("Qualifay backend ready.")
     yield
