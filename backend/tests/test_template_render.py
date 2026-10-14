@@ -43,3 +43,11 @@ def test_bilingual_message_uses_neutral_english_greeting_for_arabic_names():
 
 def test_legacy_placeholders_unchanged():
     assert render_for_lead("{{name}} @ {{company}}", lead("Ali", "ABB")) == "Ali @ ABB"
+
+
+def test_first_name_or_there():
+    hi = "Hi {{first_name}}, about {{company}}"
+    assert render_for_lead(hi, lead("Sarah Miller", "RoboCo")) == "Hi Sarah, about RoboCo"
+    # Scraped businesses: the name column is the company, so no person -> "there".
+    assert render_for_lead(hi, lead("RoboCo Robotics", "RoboCo Robotics")) == "Hi there, about RoboCo Robotics"
+    assert render_for_lead(hi, lead("محمد حامد", "X")) == "Hi there, about X"

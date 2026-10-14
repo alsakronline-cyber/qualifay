@@ -61,6 +61,23 @@ class AIService:
             logger.error(f"Groq call failed: {e}")
             return ""
 
+    async def _groq_batch(self, messages: list, max_tokens: int) -> str:
+        """Background path: try each batch model in turn (each has its own free quota).
+        Never falls back to the realtime model — that quota is reserved for live replies."""
+        import re as _re
+        for model in [m.strip() for m in settings.GROQ_BATCH_MODELS.split(",") if m.strip()]:
+            try:
+                resp = await self.groq.chat.completions.create(
+                    model=model, messages=messages, max_tokens=max(max_tokens, 1024), temperature=0.3,
+                )
+                text = (resp.choices[0].message.content or "").strip()
+                text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.S).strip()
+                if text:
+                    return text
+            except Exception as e:
+                logger.warning(f"Groq batch model {model} failed: {e}")
+        return ""
+
     async def _or_reason(self, messages: list, max_tokens: int = 1024) -> str:
         """Reasoning path. OpenRouter free tier is unavailable, so Groq is primary unless
         OPENROUTER_ENABLED is set (then try OpenRouter first, Groq as fallback)."""
@@ -73,7 +90,7 @@ class AIService:
                 return resp.choices[0].message.content.strip()
             except Exception as e:
                 logger.warning(f"OR reasoning model failed: {e} — falling back to Groq")
-        return await self._groq_only(messages, max_tokens)
+        return await self._groq_batch(messages, max_tokens)
 
     async def _or_fast(self, messages: list, max_tokens: int = 512) -> str:
         """Fast/batch path. OpenRouter free tier is unavailable, so Groq is primary unless
@@ -87,7 +104,7 @@ class AIService:
                 return resp.choices[0].message.content.strip()
             except Exception as e:
                 logger.warning(f"OR fast model failed: {e} — falling back to Groq")
-        return await self._groq_only(messages, max_tokens)
+        return await self._groq_batch(messages, max_tokens)
 
     def _parse_json(self, text: str, fallback: dict) -> dict:
         """Parse JSON from LLM response, stripping markdown fences. Returns fallback on failure."""

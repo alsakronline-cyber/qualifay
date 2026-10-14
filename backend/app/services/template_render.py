@@ -64,5 +64,7 @@ def render_for_lead(text: str, lead) -> str:
         # An Arabic-script name inside an English sentence ("Dear Eng. هيثم,") reads broken
         # in bilingual messages, so the English greeting only uses Latin-script names.
         "greet_en": f"Eng. {pn}" if (pn and not _ARABIC.search(pn)) else "Engineer",
+        # "Hi {{first_name}}," -> "Hi Sarah," / "Hi there," (scraped businesses rarely have a person).
+        "first_name": pn.split()[0] if (pn and not _ARABIC.search(pn)) else "there",
     }
     return re.sub(r"\{\{(\w+)\}\}", lambda m: data.get(m.group(1), ""), text or "")

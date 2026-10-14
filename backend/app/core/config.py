@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # AIDA copy) because the OpenRouter fallback is disabled. Verified against Groq's
     # /models endpoint; keep this in sync when Groq retires a model.
     GROQ_MODEL_REALTIME: str = "openai/gpt-oss-120b"
+    # Background work (lead scoring, enrichment, copywriting) runs on these, tried in order, so
+    # bulk jobs never spend the realtime model's daily quota that WhatsApp replies depend on.
+    GROQ_BATCH_MODELS: str = "openai/gpt-oss-20b,qwen/qwen3.8-27b"
 
     # AI — OpenRouter (reasoning + batch)
     OPENROUTER_API_KEY: str
