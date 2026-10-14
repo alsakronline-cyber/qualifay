@@ -40,7 +40,7 @@ async def test_analyze_conversation_parses_valid_json(monkeypatch):
         return ('{"is_lead": true, "intent": "pricing", "score": 85, '
                 '"stage": "qualifying", "reason": "asked for price"}')
 
-    monkeypatch.setattr(svc, "_groq", fake_groq)
+    monkeypatch.setattr(svc.agent("analyze_conversation_for_pipeline"), "_groq", fake_groq)
     out = await svc.analyze_conversation_for_pipeline(
         [{"direction": "inbound", "content": "how much is it?"}], "Ali"
     )
@@ -58,7 +58,7 @@ async def test_analyze_conversation_strips_markdown_fence(monkeypatch):
     async def fake_groq(messages, max_tokens=300):
         return '```json\n{"is_lead": true, "intent": "booking", "score": 70, "stage": "meeting", "reason": "x"}\n```'
 
-    monkeypatch.setattr(svc, "_groq", fake_groq)
+    monkeypatch.setattr(svc.agent("analyze_conversation_for_pipeline"), "_groq", fake_groq)
     out = await svc.analyze_conversation_for_pipeline([{"direction": "inbound", "content": "book me"}], "")
     assert out["is_lead"] is True
     assert out["stage"] == "meeting"
@@ -72,7 +72,7 @@ async def test_analyze_conversation_falls_back_on_bad_json(monkeypatch):
     async def fake_groq(messages, max_tokens=300):
         return "sorry, I cannot help with that"
 
-    monkeypatch.setattr(svc, "_groq", fake_groq)
+    monkeypatch.setattr(svc.agent("analyze_conversation_for_pipeline"), "_groq", fake_groq)
     out = await svc.analyze_conversation_for_pipeline([{"direction": "inbound", "content": "hi"}], "")
     # Safe fallback: not a lead, defaults present.
     assert out["is_lead"] is False
@@ -90,7 +90,7 @@ async def test_analyze_then_clamp_and_normalize_end_to_end(monkeypatch):
     async def fake_groq(messages, max_tokens=300):
         return '{"is_lead": true, "intent": "x", "score": 9999, "stage": "TOTALLY_BOGUS", "reason": "y"}'
 
-    monkeypatch.setattr(svc, "_groq", fake_groq)
+    monkeypatch.setattr(svc.agent("analyze_conversation_for_pipeline"), "_groq", fake_groq)
     out = await svc.analyze_conversation_for_pipeline([{"direction": "inbound", "content": "?"}], "")
     assert clamp_score(out["score"]) == 100
     assert normalize_stage(out["stage"]) == "replied"

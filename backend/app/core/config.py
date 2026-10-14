@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # works on the free tier) is primary for the fast + reasoning paths. Re-enable by setting
     # OPENROUTER_ENABLED=true AND a valid (likely paid) model slug in the two vars above.
     OPENROUTER_ENABLED: bool = False
+    # Per-agent overrides as JSON, keyed by agent name (see backend/agents/), e.g.
+    # {"bant_scorer": {"route": "realtime"}, "proposal_writer": {"model": "qwen/qwen3.8-27b",
+    #  "max_tokens": 2000}}. route = realtime | fast | reason; model replaces the route's
+    # primary model for that agent only; fallbacks stay as they are.
+    AI_AGENT_OVERRIDES: str = ""
 
     # Scraping
     GOOGLE_MAPS_API_KEY: str = ""

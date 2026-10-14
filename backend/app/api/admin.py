@@ -75,6 +75,19 @@ def _tenant_dict(t, user_count=0, lead_count=0) -> dict:
     }
 
 
+@router.get("/ai-usage")
+async def ai_usage(day: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    """Tokens spent per AI agent and model on one UTC day (default today)."""
+    from agents.llm import agent_overrides, usage_for_day
+    day = day or datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        usage = await usage_for_day(day)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Usage store unavailable: {e}")
+    totals = {agent: sum(models.values()) for agent, models in usage.items()}
+    return {"day": day, "by_agent": usage, "totals": totals, "overrides": agent_overrides()}
+
+
 @router.get("/tenants")
 async def list_tenants(db: AsyncSession = Depends(get_db)):
     from app.models.models import Tenant, User, Lead
