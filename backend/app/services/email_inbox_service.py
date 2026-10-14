@@ -135,6 +135,17 @@ def _plain_body(msg) -> str:
     return body.strip()
 
 
+_OPT_OUT = re.compile(r"\b(unsubscribe|opt[ -]?out|remove me|stop emailing|do not (contact|email)|"
+                      r"don'?t (contact|email))\b|^\s*stop\b|إلغاء الاشتراك|إيقاف", re.I | re.M)
+
+
+def is_opt_out(subject: str, body: str) -> bool:
+    """True when a reply asks not to be contacted. Only the reply's own text counts — the
+    quoted original (which itself mentions 'unsubscribe') is cut off first."""
+    own = re.split(r"\n\s*(On .+wrote:|-{2,}\s*Original Message|From:\s)|\n>", body or "", maxsplit=1)[0]
+    return bool(_OPT_OUT.search(subject or "") or _OPT_OUT.search(own[:600]))
+
+
 def tenant_mailbox_search(business_addr: str, since: str) -> str:
     """IMAP search for a tenant's mailbox: only mail addressed to the business address the
     tenant sends from, plus delivery-failure notices — never the owner's other mail (a
@@ -330,6 +341,11 @@ async def poll_inbound_email() -> dict:
             conv.unread_count = (conv.unread_count or 0) + 1
             if not conv.lead_id:
                 conv.lead_id = lead.id
+            # "Unsubscribe" (reply or the List-Unsubscribe mailto) → never email them again.
+            if is_opt_out(m.get("subject", ""), m.get("body", "")):
+                lead.status = LeadStatus.unsubscribed
+                lead.raw_data = {**(lead.raw_data or {}), "unsubscribed_via": "email"}
+                logger.info(f"lead {lead.id} unsubscribed by email reply")
             # A reply stops the lead's active cadences (no more follow-ups).
             try:
                 from app.workers.sequence_tasks import stop_enrollments_for_lead

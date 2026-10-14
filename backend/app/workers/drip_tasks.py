@@ -6,7 +6,7 @@ A lead joins a drip when raw_data["drip"] is set (by an import), e.g.
 Once a day the scheduler sends exactly as many messages as each channel's warmup cap still
 allows — never a blast — and spaces them out:
     WhatsApp: random 60-180 s apart  (a burst of near-identical texts is the main ban trigger)
-    Email:    5 s apart              (SMTP has no such pattern detection; the cap does the work)
+    Email:    6-15 min apart, in the recipient's morning, small ramped daily cap
 
 Safety properties:
   * Idempotent: a lead stamped wa_contacted_at / email_contacted_at is never sent again on that
@@ -17,6 +17,7 @@ Safety properties:
 """
 import logging
 import random
+import re
 
 from sqlalchemy import select, text
 
@@ -26,8 +27,39 @@ from app.workers._loop import run_async as _run_async
 logger = logging.getLogger(__name__)
 
 WA_GAP = (60, 180)      # seconds between WhatsApp sends
-EMAIL_GAP = 5           # seconds between emails
+# Cold email etiquette (what mailbox providers watch): a few emails, minutes apart, in the
+# recipient's working hours — never a burst. Gaps are randomised so there is no fixed rhythm.
+EMAIL_GAP = (6 * 60, 15 * 60)   # seconds between emails
 START_DELAY = 30        # small head-start before the first send
+
+# Daily cold-email ceiling by mailbox age (days since its first send). Deliberately far below
+# provider limits: new mailboxes earn reputation slowly, and complaints matter more than volume.
+COLD_EMAIL_SCHEDULE = [(7, 5), (14, 10), (21, 15), (30, 20)]
+COLD_EMAIL_MAX = 30
+
+
+def cold_email_cap(day: int) -> int:
+    for upto, cap in COLD_EMAIL_SCHEDULE:
+        if day <= upto:
+            return cap
+    return COLD_EMAIL_MAX
+
+
+# The drip fires at 10:00 Cairo; shift each recipient's emails into their own morning.
+_AMERICAS = re.compile(r"\b(usa|united states|u\.s\.|canada|mexico|brazil)\b|, [A-Z]{2} \d{5}", re.I)
+_EUROPE = re.compile(r"united kingdom|\buk\b|england|scotland|ireland|germany|france|spain|italy|"
+                     r"netherlands|belgium|switzerland|austria|denmark|sweden|norway|finland|"
+                     r"poland|portugal|czech|europe", re.I)
+
+
+def send_window_offset(address: str) -> int:
+    """Seconds after the 10:00 Cairo run at which this recipient's morning starts."""
+    a = address or ""
+    if _AMERICAS.search(a):
+        return int(6.5 * 3600)    # 16:30 Cairo ≈ 09:30 US Eastern
+    if _EUROPE.search(a):
+        return 1 * 3600           # 11:00 Cairo ≈ 09:00-10:00 UK/CET
+    return 0                      # Gulf / Middle East: already business hours
 
 # New numbers get banned fast when they open with cold messages (masoud: linked Oct 6, 403 on
 # Oct 10). A number sends no drip messages for its first QUIET_DAYS, then NEW_CAP a day for a
@@ -164,11 +196,22 @@ async def _run_daily():
             acct = await pick_account(tid, db)
             if acct:
                 from app.core.config import settings
-                left = min(account_cap(acct), settings.DRIP_EMAIL_DAILY_MAX) - (acct.sent_today or 0)
+                from app.services.email_account_service import account_day_of_life
+                cap = min(account_cap(acct), settings.DRIP_EMAIL_DAILY_MAX,
+                          cold_email_cap(account_day_of_life(acct)))
+                left = cap - (acct.sent_today or 0)
                 ids = await _pending(db, tid, "email", "email_contacted_at", left)
-                for i, lid in enumerate(ids):
-                    send_one.apply_async(args=[lid, "email"], queue="outreach",
-                                         countdown=START_DELAY + i * EMAIL_GAP)
+                # Group by the recipient's region, then trickle each group out from its
+                # local morning with random multi-minute gaps.
+                from app.models.models import Lead
+                addr = {l.id: ((l.raw_data or {}).get("formatted_address") or l.city or "")
+                        for l in (await db.execute(select(Lead).where(Lead.id.in_(ids)))).scalars().all()} if ids else {}
+                next_at = {}
+                for lid in ids:
+                    off = send_window_offset(addr.get(lid, ""))
+                    at = next_at.get(off, START_DELAY + off)
+                    send_one.apply_async(args=[lid, "email"], queue="outreach", countdown=at)
+                    next_at[off] = at + random.randint(*EMAIL_GAP)
                 r["email"] = len(ids)
 
             report[str(tid)] = r

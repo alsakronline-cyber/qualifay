@@ -23,6 +23,24 @@ def _hdr(value: str) -> str:
     return (value or "").replace("\r", " ").replace("\n", " ").strip()
 
 
+def build_message(from_name, from_addr, to, subject, body_text):
+    """A plain, well-formed single-part text email — what mailbox providers expect from a
+    person writing one-to-one: Date, a Message-ID on the sender's own domain, Reply-To, and
+    a List-Unsubscribe header (Gmail/Yahoo sender requirements) so opting out is one click."""
+    from email.utils import formatdate, make_msgid
+    from_addr = _hdr(from_addr)
+    domain = from_addr.split("@", 1)[1] if "@" in from_addr else None
+    msg = MIMEText(body_text or "", "plain", "utf-8")
+    msg["From"] = formataddr((_hdr(from_name), from_addr))
+    msg["To"] = _hdr(to)
+    msg["Subject"] = _hdr(subject)
+    msg["Date"] = formatdate(localtime=False, usegmt=True)
+    msg["Message-ID"] = make_msgid(domain=domain)
+    msg["Reply-To"] = from_addr
+    msg["List-Unsubscribe"] = f"<mailto:{from_addr}?subject=unsubscribe>"
+    return msg
+
+
 class EmailService:
     def is_configured(self) -> bool:
         return bool(settings.SMTP_HOST and settings.SMTP_USER and self._password())
@@ -61,11 +79,7 @@ class EmailService:
 
     def _send_via_sync(self, host, port, user, pwd, from_name, from_email,
                        to, subject, body_text) -> None:
-        msg = MIMEMultipart()
-        msg["From"] = formataddr((_hdr(from_name), from_email or user))
-        msg["To"] = _hdr(to)
-        msg["Subject"] = _hdr(subject)
-        msg.attach(MIMEText(body_text, "plain", "utf-8"))
+        msg = build_message(from_name, from_email or user, to, subject, body_text)
         ctx = ssl.create_default_context()
         if int(port) == 465:
             with smtplib.SMTP_SSL(host, int(port), context=ctx, timeout=25) as s:
