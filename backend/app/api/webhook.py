@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.database import get_db
 from fastapi import Depends
+from fastapi.responses import HTMLResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -399,29 +400,34 @@ async def _update_subscription_by_provider(
 
 # ─── Email Unsubscribe ────────────────────────────────────────
 
-@router.get("/unsubscribe")
-async def email_unsubscribe(
-    token: str = Query(...),
-    db: AsyncSession = Depends(get_db),
-):
-    """Unsubscribe a lead via JWT token from email footer."""
-    import jwt
-    from jwt import PyJWTError as JWTError
-    from app.models.models import Lead, LeadStatus
+_UNSUB_PAGE = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;
+text-align:center;color:#222}}p{{color:#555}}</style></head><body><h1>{title}</h1><p>{ar}</p>
+<p dir="ltr">{en}</p></body></html>"""
 
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        lead_id = payload.get("lead_id")
-        if not lead_id:
-            raise HTTPException(status_code=400, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    result = await db.execute(select(Lead).where(Lead.id == lead_id))
-    lead = result.scalar_one_or_none()
-    if lead and lead.status != LeadStatus.unsubscribed:
-        lead.status = LeadStatus.unsubscribed
-        await db.commit()
-        logger.info(f"Lead {lead_id} unsubscribed via email link")
+@router.get("/unsubscribe", response_class=HTMLResponse)
+async def email_unsubscribe(token: str = Query(...), db: AsyncSession = Depends(get_db)):
+    """The link in every cold email's footer. Opening it unsubscribes the lead immediately."""
+    from app.services.unsubscribe import read_token, unsubscribe_lead
+    claims = read_token(token)
+    if not claims:
+        return HTMLResponse(_UNSUB_PAGE.format(
+            title="رابط غير صالح", ar="رابط إلغاء الاشتراك غير صالح.",
+            en="This unsubscribe link is invalid."), status_code=400)
+    await unsubscribe_lead(db, claims["lead_id"], claims.get("tenant_id"), via="email_link")
+    return HTMLResponse(_UNSUB_PAGE.format(
+        title="تم إلغاء الاشتراك", ar="لن نرسل إليك أي رسائل أخرى.",
+        en="You have been unsubscribed and won't hear from us again."))
 
-    return {"unsubscribed": True, "message": "You have been successfully unsubscribed."}
+
+@router.post("/unsubscribe")
+async def email_unsubscribe_one_click(token: str = Query(...), db: AsyncSession = Depends(get_db)):
+    """RFC 8058 one-click: mail clients POST to the List-Unsubscribe URL without a page view."""
+    from app.services.unsubscribe import read_token, unsubscribe_lead
+    claims = read_token(token)
+    if not claims:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    await unsubscribe_lead(db, claims["lead_id"], claims.get("tenant_id"), via="email_one_click")
+    return {"unsubscribed": True}

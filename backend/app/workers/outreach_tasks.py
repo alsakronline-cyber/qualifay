@@ -467,11 +467,14 @@ async def _send_email_outreach(db, lead, template=None, override_text=None):
         }, context=_brand, language=_ai_lang)
         subject = "بخصوص التعاون معكم" if _ai_lang in ("ar", "masri") else f"Quick note for {lead.company or lead.name or 'you'}"
 
+    from app.services.unsubscribe import with_unsubscribe
+    body, unsub_url = with_unsubscribe(body or "", lead)
     try:
         if account:
-            await email_service.send_via_account(account, lead.email, subject, body or "")
+            await email_service.send_via_account(account, lead.email, subject, body,
+                                                 unsubscribe_url=unsub_url)
         else:
-            await email_service.send(lead.email, subject, body or "")
+            await email_service.send(lead.email, subject, body)
     except Exception as e:
         logger.error(f"Email send failed for lead {lead.id}: {e}")
         return {"error": "email_send_failed", "detail": str(e)}

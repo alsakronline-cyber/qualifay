@@ -23,7 +23,7 @@ def _hdr(value: str) -> str:
     return (value or "").replace("\r", " ").replace("\n", " ").strip()
 
 
-def build_message(from_name, from_addr, to, subject, body_text):
+def build_message(from_name, from_addr, to, subject, body_text, unsubscribe_url=None):
     """A plain, well-formed single-part text email — what mailbox providers expect from a
     person writing one-to-one: Date, a Message-ID on the sender's own domain, Reply-To, and
     a List-Unsubscribe header (Gmail/Yahoo sender requirements) so opting out is one click."""
@@ -37,7 +37,13 @@ def build_message(from_name, from_addr, to, subject, body_text):
     msg["Date"] = formatdate(localtime=False, usegmt=True)
     msg["Message-ID"] = make_msgid(domain=domain)
     msg["Reply-To"] = from_addr
-    msg["List-Unsubscribe"] = f"<mailto:{from_addr}?subject=unsubscribe>"
+    mailto = f"<mailto:{from_addr}?subject=unsubscribe>"
+    if unsubscribe_url:
+        # https first + List-Unsubscribe-Post = RFC 8058 one-click (Gmail/Yahoo bulk rules).
+        msg["List-Unsubscribe"] = f"<{_hdr(unsubscribe_url)}>, {mailto}"
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    else:
+        msg["List-Unsubscribe"] = mailto
     return msg
 
 
@@ -78,8 +84,8 @@ class EmailService:
         await asyncio.to_thread(self._send_sync, to, subject, body_text)
 
     def _send_via_sync(self, host, port, user, pwd, from_name, from_email,
-                       to, subject, body_text) -> None:
-        msg = build_message(from_name, from_email or user, to, subject, body_text)
+                       to, subject, body_text, unsubscribe_url=None) -> None:
+        msg = build_message(from_name, from_email or user, to, subject, body_text, unsubscribe_url)
         ctx = ssl.create_default_context()
         if int(port) == 465:
             with smtplib.SMTP_SSL(host, int(port), context=ctx, timeout=25) as s:
@@ -92,14 +98,16 @@ class EmailService:
                 s.login(user, pwd)
                 s.send_message(msg)
 
-    async def send_via_account(self, account, to: str, subject: str, body_text: str) -> None:
-        """Send using a specific EmailAccount's SMTP credentials."""
+    async def send_via_account(self, account, to: str, subject: str, body_text: str,
+                               unsubscribe_url: str = None) -> None:
+        """Send using a specific EmailAccount's SMTP credentials. Mail to a lead passes
+        `unsubscribe_url` (see app.services.unsubscribe) for the one-click header."""
         from app.core.crypto import decrypt
         pwd = decrypt(account.smtp_password_enc)
         await asyncio.to_thread(
             self._send_via_sync,
             account.smtp_host, account.smtp_port, account.smtp_user, pwd,
-            account.from_name, account.from_email, to, subject, body_text,
+            account.from_name, account.from_email, to, subject, body_text, unsubscribe_url,
         )
 
 

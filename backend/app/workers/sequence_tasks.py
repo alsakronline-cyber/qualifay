@@ -79,10 +79,13 @@ async def _send_email(db, lead, subject, body) -> bool:
     from app.services.email_service import email_service
     from app.services.warmup_service import warmup_service
     subject = subject or ("متابعة" if lead.language == "ar" else "Following up")
+    from app.services.unsubscribe import with_unsubscribe
     account = await pick_account(lead.tenant_id, db)
+    body, unsub_url = with_unsubscribe(body, lead)
     try:
         if account:
-            await email_service.send_via_account(account, lead.email, subject, body)
+            await email_service.send_via_account(account, lead.email, subject, body,
+                                                 unsubscribe_url=unsub_url)
             await record_account_send(account, db)
         else:
             # Never from the platform's system mailbox — a client's prospects must only hear
