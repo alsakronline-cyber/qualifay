@@ -38,6 +38,18 @@ COLD_EMAIL_SCHEDULE = [(7, 5), (14, 10), (21, 15), (30, 20)]
 COLD_EMAIL_MAX = 30
 
 
+def daily_email_cap(profile: dict, provider_cap: int, drip_max: int, day: int) -> int:
+    """Emails per day for a tenant: its own fixed number when set
+    (tenant_profile["email_daily_max"]), otherwise the slow ramp. Never above the
+    mailbox provider's cap or the global drip ceiling."""
+    try:
+        fixed = int((profile or {}).get("email_daily_max") or 0)
+    except (TypeError, ValueError):
+        fixed = 0
+    target = fixed if fixed > 0 else cold_email_cap(day)
+    return min(provider_cap, drip_max, target)
+
+
 def cold_email_cap(day: int) -> int:
     for upto, cap in COLD_EMAIL_SCHEDULE:
         if day <= upto:
@@ -197,8 +209,10 @@ async def _run_daily():
             if acct:
                 from app.core.config import settings
                 from app.services.email_account_service import account_day_of_life
-                cap = min(account_cap(acct), settings.DRIP_EMAIL_DAILY_MAX,
-                          cold_email_cap(account_day_of_life(acct)))
+                from app.models.models import Tenant
+                prof = (await db.execute(select(Tenant.tenant_profile).where(Tenant.id == tid))).scalar()
+                cap = daily_email_cap(prof, account_cap(acct), settings.DRIP_EMAIL_DAILY_MAX,
+                                      account_day_of_life(acct))
                 left = cap - (acct.sent_today or 0)
                 ids = await _pending(db, tid, "email", "email_contacted_at", left)
                 # Group by the recipient's region, then trickle each group out from its

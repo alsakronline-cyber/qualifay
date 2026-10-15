@@ -51,7 +51,7 @@ async def _daily_outreach_report():
     from app.models.models import Tenant
     from app.services.email_account_service import pick_account, account_cap, account_day_of_life
     from app.services.email_service import email_service
-    from app.workers.drip_tasks import cold_email_cap
+    from app.workers.drip_tasks import daily_email_cap
     from app.core.config import settings
 
     since = datetime.utcnow() - timedelta(hours=24)
@@ -88,8 +88,8 @@ async def _daily_outreach_report():
                 SELECT count(*) FROM leads WHERE tenant_id=:t AND raw_data->'drip'->>'email_tpl' IS NOT NULL
                   AND email IS NOT NULL AND status='active' AND COALESCE(raw_data->>'email_contacted_at','')=''"""),
                 p)).scalar() or 0
-            cap = min(account_cap(acct), settings.DRIP_EMAIL_DAILY_MAX,
-                      cold_email_cap(account_day_of_life(acct) + 1))
+            cap = daily_email_cap(t.tenant_profile, account_cap(acct), settings.DRIP_EMAIL_DAILY_MAX,
+                                  account_day_of_life(acct) + 1)
             subject, body = build_report(t.name, sent, replies, opted, bounced, queued, cap, day)
             try:
                 await email_service.send_via_account(acct, to, subject, body)

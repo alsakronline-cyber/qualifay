@@ -32,3 +32,10 @@ def test_opt_out_detection():
     # The quoted original mentions "unsubscribe" — that alone is not an opt-out.
     assert not is_opt_out("Re: 3D animation", "Sounds interesting, call me.\n\nOn Mon, Walaa wrote:\n> reply unsubscribe")
     assert not is_opt_out("Re: hi", "Can you share your prices?")
+
+
+def test_tenant_fixed_daily_cap():
+    from app.workers.drip_tasks import daily_email_cap
+    assert daily_email_cap({"email_daily_max": 10}, provider_cap=20, drip_max=30, day=1) == 10
+    assert daily_email_cap({}, provider_cap=20, drip_max=30, day=1) == 5          # ramp
+    assert daily_email_cap({"email_daily_max": 50}, provider_cap=20, drip_max=30, day=1) == 20  # provider bound
